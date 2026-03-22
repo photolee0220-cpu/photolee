@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>화이트 라구 파스타 — 파우치 디자인</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Gaegu:wght@300;400;700&family=Single+Day&family=Hi+Melody&family=Gamja+Flower&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Pretendard', 'system-ui', 'sans-serif'],
+            handwritten: ['"Nanum Pen Script"', 'cursive'],
+            sketch: ['"Gaegu"', 'cursive'],
+            playful: ['"Gamja Flower"', 'cursive'],
+            melody: ['"Hi Melody"', 'cursive'],
+          },
+          colors: {
+            cream: {
+              50: '#FEFCF8',
+              100: '#FDF8EE',
+              200: '#FAF0DC',
+              300: '#F5E4C3',
+              400: '#EBCF9A',
+              500: '#D4A85A',
+            },
+            warmgray: {
+              700: '#4A4540',
+              800: '#3A3530',
+              900: '#2A2520',
+            },
+            olive: {
+              100: '#F0EDE4',
+              200: '#E2DBCD',
+              500: '#8B8167',
+              600: '#6E6550',
+              700: '#55503E',
+            },
+            terracotta: {
+              400: '#C4785A',
+              500: '#B0654A',
+              600: '#9A5540',
+            },
+          }
+        },
+      },
+    }
+  </script>
+  <style>
+    @keyframes floatSlow {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-6px) rotate(0.5deg); }
+    }
+
+    @keyframes steamRise {
+      0% { opacity: 0; transform: translateY(0) scaleX(1); }
+      30% { opacity: 0.6; }
+      70% { opacity: 0.3; transform: translateY(-30px) scaleX(1.3); }
+      100% { opacity: 0; transform: translateY(-50px) scaleX(0.8); }
+    }
+
+    @keyframes brushStroke {
+      from { stroke-dashoffset: 1000; }
+      to { stroke-dashoffset: 0; }
+    }
+
+    .steam-line {
+      animation: steamRise 3s ease-out infinite;
+    }
+
+    .steam-line:nth-child(2) { animation-delay: 0.8s; }
+    .steam-line:nth-child(3) { animation-delay: 1.6s; }
+
+    .pouch-shadow {
+      filter: drop-shadow(0 25px 50px rgba(42, 37, 32, 0.15))
+              drop-shadow(0 8px 20px rgba(42, 37, 32, 0.08));
+    }
+
+    .paper-texture {
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    }
+
+    .hand-drawn-border {
+      border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect x='2' y='2' width='96' height='96' fill='none' stroke='%238B8167' stroke-width='1.5' rx='3' style='stroke-dasharray: 4 2; stroke-linecap: round;'/%3E%3C/svg%3E");
+      border-image-slice: 10;
+      border-image-width: 10px;
+    }
+
+    .brush-title {
+      position: relative;
+      display: inline-block;
+    }
+
+    .brush-title::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: -5%;
+      width: 110%;
+      height: 8px;
+      background: linear-gradient(90deg, transparent, rgba(176, 101, 74, 0.2) 10%, rgba(176, 101, 74, 0.35) 50%, rgba(176, 101, 74, 0.2) 90%, transparent);
+      border-radius: 50%;
+      transform: rotate(-0.5deg);
+    }
+
+    .ink-splatter {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background: rgba(139, 129, 103, 0.15);
+      border-radius: 50%;
+    }
+
+    .seal-stamp {
+      border: 2px solid rgba(176, 101, 74, 0.6);
+      border-radius: 50%;
+      padding: 8px 12px;
+      transform: rotate(-8deg);
+      position: relative;
+    }
+
+    .seal-stamp::before {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border: 1px solid rgba(176, 101, 74, 0.3);
+      border-radius: 50%;
+    }
+
+    /* Hand-drawn underline effect */
+    .hand-underline {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 8'%3E%3Cpath d='M0 5 Q 25 2, 50 5 T 100 4 T 150 5 T 200 4' fill='none' stroke='%23B0654A' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-position: bottom;
+      background-repeat: repeat-x;
+      background-size: 200px 8px;
+      padding-bottom: 6px;
+    }
+
+    /* Rough circle decoration */
+    .rough-circle {
+      position: relative;
+    }
+    .rough-circle::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border: 2px solid rgba(139, 129, 103, 0.2);
+      border-radius: 50% 48% 52% 49% / 48% 52% 49% 51%;
+      transform: rotate(3deg);
+    }
+
+    .pouch-clip-top {
+      clip-path: polygon(
+        8% 0%, 92% 0%,
+        95% 2%, 96% 5%,
+        96% 100%, 4% 100%,
+        4% 5%, 5% 2%
+      );
+    }
+
+    .zigzag-top {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 12'%3E%3Cpath d='M0 12 L10 0 L20 12 L30 0 L40 12 L50 0 L60 12 L70 0 L80 12 L90 0 L100 12 L110 0 L120 12 L130 0 L140 12 L150 0 L160 12 L170 0 L180 12 L190 0 L200 12 L210 0 L220 12 L230 0 L240 12 L250 0 L260 12 L270 0 L280 12 L290 0 L300 12 L310 0 L320 12 L330 0 L340 12 L350 0 L360 12 L370 0 L380 12 L390 0 L400 12' fill='%23FEFCF8'/%3E%3C/svg%3E");
+      background-repeat: repeat-x;
+      background-position: top;
+      background-size: 400px 12px;
+    }
+  </style>
+</head>
+<body class="bg-olive-100 min-h-[100dvh] flex items-center justify-center p-8 md:p-16" style="word-break: keep-all;">
+
+  <!-- Background decorative elements -->
+  <div class="fixed inset-0 pointer-events-none z-0">
+    <div class="absolute top-[10%] left-[5%] w-32 h-32 rounded-full bg-cream-400/10 blur-3xl"></div>
+    <div class="absolute bottom-[15%] right-[10%] w-40 h-40 rounded-full bg-terracotta-400/8 blur-3xl"></div>
+  </div>
+
+  <!-- Main Pouch Container -->
+  <div class="relative z-10 flex flex-col items-center gap-12">
+
+    <!-- Title -->
+    <div class="text-center">
+      <p class="font-sketch text-olive-500 text-lg tracking-widest mb-2">POUCH PACKAGING DESIGN</p>
+      <h1 class="font-sans text-warmgray-800 text-2xl font-semibold tracking-tight">화이트 라구 파스타 파우치</h1>
+    </div>
+
+    <!-- Pouch Design -->
+    <div class="pouch-shadow relative" style="animation: floatSlow 6s ease-in-out infinite;">
+
+      <!-- Pouch Shape -->
+      <div class="relative w-[380px] md:w-[420px] bg-cream-50 rounded-[4px] overflow-hidden paper-texture"
+           style="aspect-ratio: 7/10;">
+
+        <!-- Top seal / tear line -->
+        <div class="absolute top-0 left-0 right-0 h-[52px] bg-cream-200/60 border-b border-dashed border-olive-500/20 flex items-center justify-center z-20">
+          <div class="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 7 L6 2 L7 6 L13 1 L8 7 L13 13 L7 8 L1 13 Z" fill="none" stroke="#8B8167" stroke-width="0.8" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-[10px] text-olive-500 tracking-[0.2em] font-sans">여기를 뜯어 주세요</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 7 L6 2 L7 6 L13 1 L8 7 L13 13 L7 8 L1 13 Z" fill="none" stroke="#8B8167" stroke-width="0.8" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="relative pt-[64px] px-8 pb-6 h-full flex flex-col">
+
+          <!-- Brand Area -->
+          <div class="text-center mb-1">
+            <div class="inline-flex flex-col items-center">
+              <span class="text-[11px] tracking-[0.35em] text-olive-600 font-sans font-medium uppercase">Portella</span>
+              <span class="font-sketch text-[22px] text-warmgray-800 -mt-1 leading-tight" style="letter-spacing: 0.05em;">Kitchen</span>
+              <div class="w-16 h-[1px] bg-olive-500/30 mt-1"></div>
+            </div>
+          </div>
+
+          <!-- Sub Category -->
+          <div class="text-center mt-3 mb-2">
+            <span class="text-[11px] text-olive-500 tracking-[0.15em] font-sans">더 이탈리안 클럽</span>
+          </div>
+
+          <!-- Main Title - Hand-drawn style -->
+          <div class="text-center my-3 relative">
+            <!-- Decorative ink splatters -->
+            <div class="ink-splatter" style="top: -5px; left: 15%;"></div>
+            <div class="ink-splatter" style="bottom: 10px; right: 12%; width: 4px; height: 4px;"></div>
+            <div class="ink-splatter" style="top: 40%; left: 8%; width: 3px; height: 3px;"></div>
+
+            <!-- 화이트 라구 -->
+            <div class="relative">
+              <h2 class="font-handwritten text-warmgray-800 text-[28px] leading-tight tracking-wide">
+                화이트 라구
+              </h2>
+            </div>
+
+            <!-- 파스타 - Large hand-drawn main title -->
+            <div class="relative -mt-1">
+              <h2 class="font-playful text-warmgray-900 leading-none brush-title" style="font-size: 72px; letter-spacing: 0.08em;">
+                파스타
+              </h2>
+            </div>
+
+            <!-- Hand-drawn decorative line -->
+            <svg class="mx-auto mt-2" width="180" height="12" viewBox="0 0 180 12" fill="none">
+              <path d="M5 6 Q 20 2, 40 7 T 80 5 T 120 7 T 160 5 L 175 6"
+                    stroke="#B0654A" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+              <path d="M15 9 Q 35 5, 55 8 T 95 7 T 135 9 T 165 7"
+                    stroke="#8B8167" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.25"/>
+            </svg>
+          </div>
+
+          <!-- Sub description -->
+          <div class="text-center mt-1 mb-4">
+            <p class="text-[12px] text-olive-600 font-sans leading-relaxed">
+              부드럽고 깊은 맛의
+            </p>
+            <p class="text-[12px] text-olive-600 font-sans leading-relaxed">
+              라구 소스와 쫄깃한 생면
+            </p>
+          </div>
+
+          <!-- Product Image Area -->
+          <div class="flex-1 flex items-center justify-center relative my-2">
+            <!-- Fork with pasta illustration (SVG) -->
+            <div class="relative">
+              <!-- Steam effects -->
+              <div class="absolute -top-4 left-1/2 -translate-x-1/2 flex gap-3">
+                <svg class="steam-line" width="8" height="30" viewBox="0 0 8 30" fill="none">
+                  <path d="M4 30 Q 1 20, 5 15 Q 8 10, 3 0" stroke="#8B8167" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.3"/>
+                </svg>
+                <svg class="steam-line" width="8" height="35" viewBox="0 0 8 35" fill="none">
+                  <path d="M4 35 Q 7 25, 3 18 Q 0 12, 5 0" stroke="#8B8167" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.25"/>
+                </svg>
+                <svg class="steam-line" width="8" height="28" viewBox="0 0 8 28" fill="none">
+                  <path d="M3 28 Q 6 20, 2 14 Q -1 8, 4 0" stroke="#8B8167" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.3"/>
+                </svg>
+              </div>
+
+              <!-- Pasta on fork illustration -->
+              <svg width="160" height="200" viewBox="0 0 160 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Fork handle -->
+                <line x1="80" y1="200" x2="80" y2="95" stroke="#A0978A" stroke-width="3" stroke-linecap="round"/>
+                <!-- Fork tines -->
+                <line x1="65" y1="95" x2="65" y2="60" stroke="#A0978A" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="75" y1="95" x2="75" y2="55" stroke="#A0978A" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="85" y1="95" x2="85" y2="55" stroke="#A0978A" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="95" y1="95" x2="95" y2="60" stroke="#A0978A" stroke-width="2.5" stroke-linecap="round"/>
+                <!-- Fork bridge -->
+                <path d="M63 95 Q 80 100, 97 95" stroke="#A0978A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+                <!-- Pasta mass on fork -->
+                <ellipse cx="80" cy="62" rx="38" ry="22" fill="#F5E4C3" stroke="#EBCF9A" stroke-width="1"/>
+                <!-- Pasta texture - creamy white ragu -->
+                <ellipse cx="80" cy="60" rx="32" ry="18" fill="#FAF0DC"/>
+                <!-- Ragu sauce chunks -->
+                <circle cx="70" cy="56" r="5" fill="#E8D5B8" opacity="0.8"/>
+                <circle cx="88" cy="63" r="4" fill="#E2CBAB" opacity="0.7"/>
+                <circle cx="76" cy="66" r="3.5" fill="#E8D5B8" opacity="0.6"/>
+                <circle cx="92" cy="55" r="3" fill="#DFC4A0" opacity="0.7"/>
+                <circle cx="65" cy="64" r="3" fill="#E5D0B5" opacity="0.5"/>
+                <!-- Pasta noodle strands -->
+                <path d="M55 55 Q 65 50, 75 58 Q 85 66, 100 60" stroke="#EBCF9A" stroke-width="2" fill="none" stroke-linecap="round"/>
+                <path d="M60 62 Q 72 56, 82 64 Q 92 72, 105 62" stroke="#E8D5B8" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                <path d="M58 58 Q 68 65, 80 57 Q 92 50, 100 58" stroke="#F0E0CC" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                <!-- Herb flecks -->
+                <circle cx="73" cy="54" r="1.5" fill="#7A8B5A" opacity="0.6"/>
+                <circle cx="86" cy="59" r="1" fill="#7A8B5A" opacity="0.5"/>
+                <circle cx="78" cy="68" r="1.2" fill="#7A8B5A" opacity="0.4"/>
+                <circle cx="66" cy="58" r="0.8" fill="#7A8B5A" opacity="0.5"/>
+                <!-- White sauce highlight -->
+                <ellipse cx="78" cy="55" rx="8" ry="4" fill="white" opacity="0.15"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Handwritten accent - recipe suggestion -->
+          <div class="text-center mb-3 relative">
+            <div class="seal-stamp inline-flex items-center justify-center" style="padding: 6px 14px;">
+              <span class="font-sketch text-terracotta-500 text-[11px] tracking-wide">Collab with MYCHEF</span>
+            </div>
+          </div>
+
+          <!-- Bottom Info Bar -->
+          <div class="mt-auto border-t border-olive-500/15 pt-4 pb-2">
+            <!-- Storage info -->
+            <div class="flex items-center justify-between text-[10px] text-olive-500 mb-3">
+              <div class="flex items-center gap-1">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 1 L6 6 L9 8" stroke="#8B8167" stroke-width="1" stroke-linecap="round"/>
+                  <circle cx="6" cy="6" r="5" stroke="#8B8167" stroke-width="0.8" fill="none"/>
+                </svg>
+                <span class="font-sans">조리예</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="font-sans">※ -18°C 이하 냉동보관</span>
+              </div>
+            </div>
+
+            <!-- Ingredients brief -->
+            <div class="flex items-center justify-between text-[9px] text-olive-500/70 font-sans mb-3">
+              <span>화이트라구소스 61.97%</span>
+              <span class="w-[1px] h-2 bg-olive-500/20"></span>
+              <span>생면 33.80%</span>
+            </div>
+
+            <!-- Weight and servings -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-4">
+                <div class="text-center">
+                  <span class="block text-[18px] font-sans font-semibold text-warmgray-800 leading-none">355g</span>
+                  <span class="text-[9px] text-olive-500 font-sans">(950 kcal)</span>
+                </div>
+              </div>
+              <div class="bg-olive-500/10 rounded-full px-3 py-1">
+                <span class="text-[11px] text-olive-600 font-sans font-medium">1인분</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Side fold lines -->
+        <div class="absolute top-[52px] bottom-0 left-0 w-[1px] bg-gradient-to-b from-transparent via-olive-500/8 to-transparent"></div>
+        <div class="absolute top-[52px] bottom-0 right-0 w-[1px] bg-gradient-to-b from-transparent via-olive-500/8 to-transparent"></div>
+
+        <!-- Corner folds -->
+        <div class="absolute bottom-0 left-0 w-4 h-4">
+          <div class="absolute bottom-0 left-0 w-full h-full bg-gradient-to-tr from-olive-200/20 to-transparent"></div>
+        </div>
+        <div class="absolute bottom-0 right-0 w-4 h-4">
+          <div class="absolute bottom-0 right-0 w-full h-full bg-gradient-to-tl from-olive-200/20 to-transparent"></div>
+        </div>
+      </div>
+
+      <!-- Pouch bottom seal -->
+      <div class="w-[380px] md:w-[420px] h-3 bg-cream-200/80 rounded-b-sm mx-auto"
+           style="box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);"></div>
+    </div>
+
+    <!-- Design specs note -->
+    <div class="text-center max-w-md">
+      <p class="font-sketch text-olive-500 text-sm leading-relaxed">
+        파우치 사이즈: 200mm x 280mm | 소재: 나일론+PE 복합필름
+      </p>
+      <p class="font-sketch text-olive-500/60 text-xs mt-1">
+        인쇄: 그라비아 4도 | 배면 실링 타입
+      </p>
+    </div>
+
+  </div>
+
+  <!-- Scroll animation observer (Supanova standard) -->
+  <script>
+    document.querySelectorAll('[data-animate]').forEach((el, i) => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(2rem)';
+      el.style.transition = `all 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${i * 80}ms`;
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+  </script>
+
+</body>
+</html>
