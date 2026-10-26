@@ -1,7 +1,9 @@
 import seed from '@seed';
 import { canEditEntry, canViewDept, canViewDirective } from './access';
 import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } from './api';
-import type { Comment, Directive, Entry, Member, Seed, Snapshot, WeekId } from './types';
+import { blobToDataUrl } from './image';
+import { askClaudeForSummary } from './summary';
+import type { AiSummary, Comment, Directive, Entry, Member, Photo, Seed, Snapshot, WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -11,18 +13,20 @@ const DEMO_PASSWORD = '1234';
 
 interface DemoState extends Seed {
   passwords: Record<string, string>;
+  photos: Photo[];
+  summaries: Record<WeekId, AiSummary>;
 }
 
 function safeGet(k: string): string | null {
   try { return localStorage.getItem(k); } catch { return null; }
 }
-function safeSet(k: string, v: string | null) {
-  try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* 저장소 차단 시 메모리로만 동작 */ }
+function safeSet(k: string, v: string | null): boolean {
+  try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); return true; } catch { return false; }
 }
 
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return { ...s, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
+  return { ...s, photos: s.photos ?? [], summaries: {}, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
 }
 
 let state: DemoState = (() => {
@@ -30,7 +34,7 @@ let state: DemoState = (() => {
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as DemoState;
-      if (parsed.reportDate === seed.reportDate) return parsed;
+      if (parsed.reportDate === seed.reportDate) return { ...parsed, photos: parsed.photos ?? [], summaries: parsed.summaries ?? {} };
     } catch { /* 손상된 데이터는 초기화 */ }
   }
   return fresh();
@@ -47,9 +51,10 @@ try {
   };
 } catch { channel = null; }
 
-function persist() {
-  safeSet(KEY, JSON.stringify(state));
+function persist(): boolean {
+  const ok = safeSet(KEY, JSON.stringify(state));
   channel?.postMessage('changed');
+  return ok;
 }
 
 const delay = <T,>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 60));
@@ -77,6 +82,7 @@ function weeksWithData(): WeekId[] {
   const set = new Set<WeekId>([state.reportDate]);
   state.entries.forEach((e) => set.add(e.weekId));
   state.directives.forEach((d) => set.add(d.weekId));
+  state.photos.forEach((p) => set.add(p.weekId));
   return [...set].sort();
 }
 
@@ -113,6 +119,7 @@ export const demoApi: Api = {
       entries: visibleEntries(m, state.entries.filter((e) => e.weekId === weekId)),
       directives: visibleDirectives(m, state.directives.filter((d) => d.weekId === weekId)),
       comments: [],
+      photos: state.photos.filter((p) => p.weekId === weekId && canViewDept(m, p.departmentId, state.grants)),
       prevWeekId,
       prevEntries: prevWeekId ? visibleEntries(m, state.entries.filter((e) => e.weekId === prevWeekId)) : [],
       prevDirectives: prevWeekId ? visibleDirectives(m, state.directives.filter((d) => d.weekId === prevWeekId)) : [],
@@ -137,8 +144,9 @@ export const demoApi: Api = {
       weekId: w,
       directive: visibleDirectives(m, state.directives.filter((d) => d.weekId === w && d.siteId === siteId))[0] ?? null,
       entries: visibleEntries(m, state.entries.filter((e) => e.weekId === w && e.siteId === siteId && e.content.trim())),
+      photos: state.photos.filter((p) => p.weekId === w && p.siteId === siteId && canViewDept(m, p.departmentId, state.grants)),
     }));
-    return delay(items.filter((i) => i.directive?.content || i.entries.length));
+    return delay(items.filter((i) => i.directive?.content || i.entries.length || i.photos.length));
   },
 
   async saveEntry(input) {
@@ -201,6 +209,47 @@ export const demoApi: Api = {
     if (!c || c.authorId !== m.id) throw new ApiError('본인이 쓴 글만 지울 수 있습니다.');
     state.comments = state.comments.filter((x) => x.id !== id);
     persist();
+  },
+
+  async uploadPhoto(input) {
+    const m = me();
+    if (!canEditEntry(m, { kind: 'site', departmentId: input.departmentId, authorId: null })) throw new ApiError('이 현장 칸에 사진을 올릴 권한이 없습니다.');
+    const photo: Photo = {
+      id: newId('p'), weekId: input.weekId, siteId: input.siteId, departmentId: input.departmentId, uploadedBy: m.id,
+      caption: input.caption, createdAt: new Date().toISOString(), width: input.width, height: input.height,
+      url: await blobToDataUrl(input.blob),
+    };
+    state.photos.push(photo);
+    if (!persist()) {
+      state.photos = state.photos.filter((p) => p.id !== photo.id);
+      persist();
+      throw new ApiError('체험판은 브라우저 저장 공간이 작아 사진을 더 올릴 수 없습니다. 실제 서버에서는 제한이 없습니다.');
+    }
+    return structuredClone(photo);
+  },
+
+  async deletePhoto(id) {
+    const m = me();
+    const p = state.photos.find((x) => x.id === id);
+    if (!p || (p.uploadedBy !== m.id && !m.isAdmin)) throw new ApiError('올린 사람이나 관리자만 지울 수 있습니다.');
+    state.photos = state.photos.filter((x) => x.id !== id);
+    persist();
+  },
+
+  async getAiSummary(weekId) {
+    const m = me();
+    if (!m.isCeo) return null;
+    return delay(state.summaries[weekId] ?? null);
+  },
+
+  async generateAiSummary(weekId, prompt, sourceUpdatedAt) {
+    const m = me();
+    if (!m.isCeo) throw new ApiError('AI 요약은 대표님 화면에서만 만들 수 있습니다.');
+    const result = await askClaudeForSummary(prompt);
+    const summary: AiSummary = { weekId, ...result, generatedAt: new Date().toISOString(), sourceUpdatedAt };
+    state.summaries[weekId] = summary;
+    persist();
+    return structuredClone(summary);
   },
 
   subscribe(fn) {

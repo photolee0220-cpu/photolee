@@ -3,6 +3,7 @@ import { api } from '../lib/client';
 import type { Comment, Directive, Entry, Member, SaveDirectiveInput, SaveEntryInput, Snapshot, WeekId } from '../lib/types';
 import { currentWeekId } from '../lib/week';
 
+export type DiffMode = 'off' | 'highlight' | 'only';
 export type View = 'dashboard' | 'table' | 'people' | 'mine' | 'shared' | 'history' | 'admin';
 export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'misc' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
@@ -19,6 +20,8 @@ interface Store {
   drawer: Drawer;
   openDrawer(d: Drawer): void;
   searchOpen: boolean;
+  diffMode: DiffMode;
+  setDiffMode(m: DiffMode): void;
   setSearchOpen(v: boolean): void;
   toast(text: string, tone?: 'ok' | 'error'): void;
   toasts: Toast[];
@@ -54,6 +57,13 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
   const [view, setView] = useState<View>(defaultView(me));
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [diffMode, setDiffModeState] = useState<DiffMode>(() => {
+    try { return (localStorage.getItem('report-diff-mode') as DiffMode | null) ?? 'highlight'; } catch { return 'highlight'; }
+  });
+  const setDiffMode = useCallback((m: DiffMode) => {
+    setDiffModeState(m);
+    try { localStorage.setItem('report-diff-mode', m); } catch { /* 저장 못 해도 화면은 바뀐다 */ }
+  }, []);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const weekRef = useRef(weekId);
   weekRef.current = weekId;
@@ -110,7 +120,7 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
   const value = useMemo<Store>(() => ({
     me, snap, weekId, setWeekId, loading, reload: () => load(weekRef.current, true),
     view, setView: (v) => { setView(v); setDrawer(null); },
-    drawer, openDrawer: setDrawer, searchOpen, setSearchOpen, toast, toasts,
+    drawer, openDrawer: setDrawer, searchOpen, setSearchOpen, diffMode, setDiffMode, toast, toasts,
     async saveEntry(i) { const e = await api.saveEntry(i); merge('entries', e); return e; },
     async saveDirective(i) { const d = await api.saveDirective(i); merge('directives', d); return d; },
     async addComment(entryId, content) { const c = await api.addComment(entryId, content); merge('comments', c); return c; },
@@ -124,7 +134,7 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
     },
     async signOut() { await api.signOut(); onSignOut(); },
     switchAccount: onSwitch,
-  }), [me, snap, weekId, setWeekId, loading, load, view, drawer, searchOpen, toast, toasts, merge, onSignOut, onSwitch]);
+  }), [me, snap, weekId, setWeekId, loading, load, view, drawer, searchOpen, diffMode, setDiffMode, toast, toasts, merge, onSignOut, onSwitch]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

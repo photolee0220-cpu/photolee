@@ -10,6 +10,7 @@ import { MISC_SLOTS, type Department, type Entry, type Member } from '../lib/typ
 import { formatDate, relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { DirectiveBox, EntryEditor, Feedback, TextBlock } from './editors';
+import { PhotoStrip } from './Photos';
 import { dueInfo, isImminent } from './SiteCard';
 import { Avatar, Badge, cx, Progress, Sheet, Spinner, StageChip } from './ui';
 
@@ -113,6 +114,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
                 meta={entryMeta(e, members)}
                 onSave={(content) => saveEntry({ weekId, kind: 'site', siteId: site.id, departmentId: d.id, authorId: null, content })}
               />
+              <PhotoStrip siteId={site.id} departmentId={d.id} editable={editable} />
               <Feedback entry={e} />
             </Block>
           );
@@ -138,6 +140,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
                           <p className="whitespace-pre-wrap text-[13px] leading-[1.6]">{e.content}</p>
                         </div>
                       ))}
+                      {h.photos.length > 0 && <PhotoStrip siteId={site.id} departmentId="" editable={false} photos={h.photos} />}
                     </li>
                   ))}
                 </ol>

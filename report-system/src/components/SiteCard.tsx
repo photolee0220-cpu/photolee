@@ -4,6 +4,8 @@ import type { Site, Snapshot } from '../lib/types';
 import { dday, formatDate } from '../lib/week';
 import { canViewDept } from '../lib/access';
 import { useStore } from '../state/store';
+import { changeCount } from './DiffText';
+import { PhotoCount } from './Photos';
 import { Badge, Card, cx, Progress, StageChip } from './ui';
 
 export function dueInfo(site: Site): { label: string; tone: 'neutral' | 'ok' | 'warn' | 'danger' } {
@@ -22,6 +24,14 @@ export function isImminent(site: Site): boolean {
   return d != null && d >= 0 && d <= 90;
 }
 
+/** 지난주 대비 이 현장에서 새로 생긴 줄 수 (볼 수 있는 부서 + 대표 지시). 지난주 기록이 없으면 null */
+export function siteChanges(snap: Snapshot, siteId: string, deptIds: string[]): number | null {
+  if (!snap.prevWeekId) return null;
+  let n = changeCount(siteDirective(snap.directives, siteId)?.content, siteDirective(snap.prevDirectives, siteId)?.content);
+  for (const d of deptIds) n += changeCount(siteEntry(snap.entries, siteId, d)?.content, siteEntry(snap.prevEntries, siteId, d)?.content);
+  return n;
+}
+
 export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; onOpen(): void }) {
   const { me } = useStore();
   const depts = siteDepartments(snap).filter((d) => canViewDept(me, d.id, snap.grants));
@@ -29,6 +39,7 @@ export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; o
   const due = dueInfo(site);
   const feedback = depts.reduce((n, d) => n + commentsFor(snap.comments, siteEntry(snap.entries, site.id, d.id)?.id).length, 0);
   const completed = site.stage === 'construction' && isCompleted(site);
+  const changes = siteChanges(snap, site.id, depts.map((d) => d.id));
 
   return (
     <Card onClick={onOpen} className="flex h-full flex-col p-4">
@@ -78,9 +89,13 @@ export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; o
             </span>
           );
         })}
-        {feedback > 0 && (
-          <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-semibold text-brand-ink"><MessageSquareText size={13} />{feedback}</span>
-        )}
+        <span className="ml-auto flex items-center gap-2.5">
+          <PhotoCount count={snap.photos.filter((p) => p.siteId === site.id).length} />
+          {feedback > 0 && <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-ink"><MessageSquareText size={13} />{feedback}</span>}
+          {changes != null && (
+            <span className={cx('text-[11.5px] font-semibold', changes ? 'text-brand-ink' : 'text-ink-3')}>{changes ? `변경 ${changes}줄` : '변동 없음'}</span>
+          )}
+        </span>
       </div>
     </Card>
   );

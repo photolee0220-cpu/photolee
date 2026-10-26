@@ -80,7 +80,10 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
         s.process,
         s.progress != null ? s.progress / 100 : s.scale,
         siteDirective(snap.directives, s.id)?.content ?? '',
-        ...depts.map((dp) => siteEntry(snap.entries, s.id, dp.id)?.content ?? ''),
+        ...depts.map((dp) => {
+          const n = snap.photos.filter((p) => p.siteId === s.id && p.departmentId === dp.id).length;
+          return [siteEntry(snap.entries, s.id, dp.id)?.content ?? '', n ? `(현장 사진 ${n}장 · 시스템에서 확인)` : ''].filter(Boolean).join('\n');
+        }),
       ];
       styleRow(r);
       ws.getCell(r, 2).font = { name: '맑은 고딕', size: 9, bold: true };

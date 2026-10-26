@@ -13,15 +13,17 @@ npm run build:artifact   # 체험판 단일 HTML (Claude 아티팩트용)
 
 ## 운영 서버 연결 (Supabase + Vercel)
 
-1. Supabase 프로젝트 생성 → SQL Editor에서 `supabase/migrations/0001_init.sql` 실행
+1. Supabase 프로젝트 생성 → SQL Editor에서 `supabase/migrations/0001_init.sql`, `0002_photos_ai_summary.sql` 순서로 실행
 2. Authentication > Providers > Email 에서 "Confirm email" 끄기
-3. `supabase functions deploy admin-users` (함수 환경변수 `LOGIN_EMAIL_DOMAIN`)
+3. 함수 배포
+   - `supabase functions deploy admin-users` (환경변수 `LOGIN_EMAIL_DOMAIN`)
+   - `supabase secrets set ANTHROPIC_API_KEY=...` 후 `supabase functions deploy weekly-summary` (AI 주간 요약, Claude Opus 5.5)
 4. `.env.example`을 `.env`로 복사해 URL·키 입력, Vercel에도 같은 값으로 배포
 
 ## 기존 엑셀 가져오기
 
 ```bash
-node scripts/import-excel.mjs <주간보고.xlsx>
+node scripts/import-excel.mjs <주간보고1.xlsx> <주간보고2.xlsx> ...   # 여러 주차를 한 번에 (보고일 순으로 쌓임)
 ```
 
 조직도는 `seed/private/org.json`(형식: `seed/org.example.json`)에서 읽고, 결과는 `seed/private/seed.json`에 저장됩니다.

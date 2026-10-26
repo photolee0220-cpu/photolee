@@ -6,6 +6,7 @@ import { activeDepartments, commentsFor, firstLines, has, hasWritten, memberDire
 import type { Member } from '../lib/types';
 import { relativeTime } from '../lib/week';
 import { useStore } from '../state/store';
+import { DiffModeSwitch, DiffText } from '../components/DiffText';
 
 /** 부서별, 사람별 보고 카드 */
 export function PeopleGrid({ compact, onlyDepartments }: { compact?: boolean; onlyDepartments?: string[] }) {
@@ -38,7 +39,7 @@ function PersonCard({ member, deptName, siteWriter, compact, onOpen }: { member:
   const siteCount = siteWriter ? snap.entries.filter((x) => x.kind === 'site' && x.departmentId === member.departmentId && has(x.content)).length : 0;
 
   const body = has(e?.content)
-    ? <p className={cx('whitespace-pre-line text-[13px] leading-[1.6] text-ink-2', compact ? 'line-clamp-3' : 'line-clamp-6')}>{firstLines(e!.content, compact ? 3 : 6)}</p>
+    ? <DiffText text={e!.content} prev={personEntry(snap.prevEntries, member.id)?.content} clamp={compact ? 4 : 7} className="text-ink-2 [&_p]:text-[13px] [&_p]:leading-[1.6]" />
     : siteWriter
       ? <p className="text-[13px] text-ink-2">현장별 보고 <b className="text-ink">{siteCount}건</b> 작성{(me.isCeo || me.isAdmin) && <> · <span role="link" tabIndex={0} onClick={(ev) => { ev.stopPropagation(); setView('table'); openDrawer(null); }} className="font-semibold text-brand-ink hover:underline">표에서 보기</span></>}</p>
       : <p className="text-[13px] text-ink-3">아직 작성하지 않았습니다</p>;
@@ -72,7 +73,7 @@ export function People() {
   if (!snap) return <div className="flex justify-center py-20"><Spinner /></div>;
   return (
     <div className="mx-auto max-w-[1400px]">
-      <PageHeader title="부서 보고" right={<WeekSwitcher />}><DeadlineBadge /></PageHeader>
+      <PageHeader title="부서 보고" right={<WeekSwitcher />}><DeadlineBadge /><DiffModeSwitch /></PageHeader>
       <PeopleGrid />
     </div>
   );

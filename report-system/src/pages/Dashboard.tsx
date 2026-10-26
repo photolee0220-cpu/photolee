@@ -10,6 +10,8 @@ import { STAGES, type Site, type Stage } from '../lib/types';
 import { dday } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
+import { DiffModeSwitch } from '../components/DiffText';
+import { SummaryPanel } from '../components/SummaryPanel';
 import { PeopleGrid } from './People';
 
 type SortKey = 'order' | 'progress' | 'due';
@@ -53,8 +55,11 @@ export function Dashboard() {
         </>}
       >
         <DeadlineBadge />
+        <DiffModeSwitch />
         {loading && <Spinner className="h-3.5 w-3.5" />}
       </PageHeader>
+
+      {me.isCeo && <SummaryPanel />}
 
       {/* 요약 */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

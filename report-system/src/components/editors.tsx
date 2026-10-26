@@ -5,6 +5,7 @@ import { byId, commentsFor, has } from '../lib/derive';
 import type { Entry } from '../lib/types';
 import { relativeTime } from '../lib/week';
 import { useStore } from '../state/store';
+import { DiffText } from './DiffText';
 import { Button, cx, Spinner } from './ui';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -90,7 +91,7 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
   if (!editable) {
     return (
       <div>
-        <TextBlock text={value} />
+        <DiffText text={value} prev={prevContent} />
         {meta && <div className="mt-2 text-[12px] text-ink-3">{meta}</div>}
       </div>
     );

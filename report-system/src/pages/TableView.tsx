@@ -9,6 +9,7 @@ import { STAGES } from '../lib/types';
 import { formatDate, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
+import { DiffModeSwitch, DiffText } from '../components/DiffText';
 
 /** 기존 엑셀과 같은 배치의 표 */
 export function TableView() {
@@ -21,9 +22,10 @@ export function TableView() {
 
   const th = 'sticky top-0 z-10 border-b border-r border-line bg-sunken px-3 py-2.5 text-left text-[12px] font-bold text-ink-2 whitespace-nowrap';
   const td = 'border-b border-r border-line px-3 py-2.5 align-top text-[13px] leading-[1.55]';
-  const Clip = ({ text }: { text?: string }) => has(text)
-    ? <div className="line-clamp-5 whitespace-pre-line">{text}</div>
-    : <span className="text-ink-3/60">—</span>;
+  const Clip = ({ text, prev, diff }: { text?: string; prev?: string; diff?: boolean }) => !has(text)
+    ? <span className="text-ink-3/60">—</span>
+    : diff ? <DiffText text={text} prev={prev} clamp={6} className="text-[13px] [&_p]:text-[13px] [&_p]:leading-[1.55]" />
+      : <div className="line-clamp-5 whitespace-pre-line">{text}</div>;
 
   return (
     <div className="mx-auto max-w-[1800px]">
@@ -33,6 +35,7 @@ export function TableView() {
       </>}>
         <DeadlineBadge />
         <span className="text-[12.5px] text-ink-3">행을 누르면 현장 상세가 열립니다</span>
+        <DiffModeSwitch />
       </PageHeader>
 
       <div className="space-y-6">
@@ -68,7 +71,7 @@ export function TableView() {
                         <td className={cx(td, 'min-w-[96px]')}>{s.process || '—'}</td>
                         <td className={cx(td, 'whitespace-nowrap text-right font-semibold tabular')}>{s.progress != null ? `${s.progress}%` : s.scale || '—'}</td>
                         <td className={cx(td, 'bg-note/50 max-w-[320px]')}><Clip text={siteDirective(snap.directives, s.id)?.content} /></td>
-                        {depts.map((d) => <td key={d.id} className={cx(td, 'max-w-[360px]')}><Clip text={siteEntry(snap.entries, s.id, d.id)?.content} /></td>)}
+                        {depts.map((d) => <td key={d.id} className={cx(td, 'max-w-[360px]')}><Clip diff text={siteEntry(snap.entries, s.id, d.id)?.content} prev={siteEntry(snap.prevEntries, s.id, d.id)?.content} /></td>)}
                       </tr>
                     ))}
                   </tbody>
@@ -95,7 +98,7 @@ export function TableView() {
                   {(me.isCeo || me.isAdmin) && <td className={td}><Clip text={miscDirective(snap.directives, 'ceo_progress')?.content} /></td>}
                   {(me.isCeo || me.isAdmin) && <td className={td}><Clip text={miscDirective(snap.directives, 'requests')?.content} /></td>}
                   <td className={td}><Clip text={miscDirective(snap.directives, 'special')?.content} /></td>
-                  {depts.map((d) => <td key={d.id} className={cx(td, 'max-w-[360px]')}><Clip text={miscEntry(snap.entries, d.id)?.content} /></td>)}
+                  {depts.map((d) => <td key={d.id} className={cx(td, 'max-w-[360px]')}><Clip diff text={miscEntry(snap.entries, d.id)?.content} prev={miscEntry(snap.prevEntries, d.id)?.content} /></td>)}
                 </tr>
               </tbody>
             </table>
@@ -120,7 +123,7 @@ export function TableView() {
                     <td className={cx(td, 'font-semibold')}>{snap.departments.find((d) => d.id === m.departmentId)?.name}</td>
                     <td className={td}>{m.name} {m.title}</td>
                     <td className={cx(td, 'bg-note/50')}><Clip text={memberDirective(snap.directives, m.id)?.content} /></td>
-                    <td className={td}><Clip text={personEntry(snap.entries, m.id)?.content} /></td>
+                    <td className={td}><Clip diff text={personEntry(snap.entries, m.id)?.content} prev={personEntry(snap.prevEntries, m.id)?.content} /></td>
                   </tr>
                 ))}
               </tbody>

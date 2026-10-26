@@ -1,18 +1,21 @@
 // 기존 주간보고 엑셀(현장×부서 양식)을 초기 데이터(JSON)로 변환합니다.
-// 사용법: node scripts/import-excel.mjs <엑셀 경로> [출력 경로]
+// 사용법: node scripts/import-excel.mjs <엑셀 경로...> [--out=출력 경로]
+// 여러 주차 파일을 함께 주면 현장명으로 묶어 주차별 기록으로 쌓는다 (마지막 주차의 현장 정보가 기준)
 import ExcelJS from 'exceljs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-const [, , input, output = 'seed/private/seed.json'] = process.argv;
-if (!input) {
-  console.error('사용법: node scripts/import-excel.mjs <엑셀 경로> [출력 경로]');
+const args = process.argv.slice(2);
+const output = args.find((a) => a.startsWith('--out='))?.slice(6) ?? 'seed/private/seed.json';
+const inputs = args.filter((a) => !a.startsWith('--'));
+if (!inputs.length) {
+  console.error('사용법: node scripts/import-excel.mjs <엑셀 경로...> [--out=출력 경로]');
   process.exit(1);
 }
 
-const wb = new ExcelJS.Workbook();
-await wb.xlsx.readFile(input);
-const ws = wb.worksheets[0];
+let ws;
+let reportDate;
+let now;
 
 const text = (v) => {
   if (v == null) return '';
@@ -33,9 +36,6 @@ const raw = (addr) => ws.getCell(addr).value;
 let n = 0;
 const id = (p) => `${p}_${(++n).toString(36).padStart(3, '0')}`;
 
-const reportDateMatch = cell('J2').match(/(\d{4}-\d{2}-\d{2})/);
-const reportDate = reportDateMatch ? reportDateMatch[1] : new Date().toISOString().slice(0, 10);
-const now = new Date(`${reportDate}T08:00:00+09:00`).toISOString();
 
 // 부서와 보고자
 // 조직도(부서·보고자)는 회사 정보라 저장소 밖 파일에서 읽는다. 형식은 seed/org.example.json 참고
@@ -87,6 +87,10 @@ const tagRules = [
   [/협력업체 선정/, '협력업체 선정'], [/착공/, '착공준비'],
 ];
 
+const siteByName = new Map();
+let latestSeen = new Set();
+const siteKey = (name) => name.replace(/\s/g, '');
+
 function readSites(from, to, stage) {
   for (let r = from; r <= to; r++) {
     const nameCell = cell(`B${r}`);
@@ -100,17 +104,30 @@ function readSites(from, to, stage) {
     const e = raw(`E${r}`);
     const progress = typeof e === 'number' && stage === 'construction' ? Math.round(e * 100) : null;
     const scale = progress == null ? cell(`E${r}`).replace(/\s*\n\s*/g, '') : '';
-    const site = {
-      id: id('s'), name, note, stage, dueDate, dueText, process: cell(`D${r}`).replace(/\s*\n\s*/g, ' '),
-      progress, scale, tags: [], sort: sites.length + 1, archived: false, completedAt: null,
-    };
+    let site = siteByName.get(siteKey(name));
+    if (!site) {
+      site = { id: id('s'), name, tags: [], archived: false, completedAt: null };
+      siteByName.set(siteKey(name), site);
+      sites.push(site);
+    }
+    Object.assign(site, { note, stage, dueDate, dueText, process: cell(`D${r}`).replace(/\s*\n\s*/g, ' '), progress, scale, sort: latestSeen.size + 1 });
+    latestSeen.add(site.id);
     const all = [cell(`F${r}`), ...Object.keys(siteCols).map((c) => cell(`${c}${r}`))].join('\n');
     site.tags = [...new Set(tagRules.filter(([re]) => re.test(all)).map(([, t]) => t))].slice(0, 3);
-    sites.push(site);
     addDirective('site', cell(`F${r}`), { siteId: site.id });
     for (const [col, dept] of Object.entries(siteCols)) addEntry('site', dept, cell(`${col}${r}`), { siteId: site.id });
   }
 }
+
+async function importWeek(path) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(path);
+  ws = wb.worksheets[0];
+  const reportDateMatch = cell('J2').match(/(\d{4}-\d{2}-\d{2})/);
+  if (!reportDateMatch) throw new Error(`${path}: J2 칸에서 보고일을 찾지 못했습니다.`);
+  reportDate = reportDateMatch[1];
+  now = new Date(`${reportDate}T08:00:00+09:00`).toISOString();
+  latestSeen = new Set();
 
 // 구간 위치는 제목 행으로 찾는다
 const rowOf = (label) => {
@@ -170,10 +187,23 @@ for (let r = rDept + 2; r <= ws.rowCount; r++) {
   addDirective('member', cell(`F${r}`), { memberId: m.id });
   addEntry('dept', deptName, joinCols(r, ['G', 'H', 'I', 'J']), { authorId: m.id });
 }
+  console.log(`  ${path}: 보고일 ${reportDate}`);
+}
+
+// 보고일 순서대로 읽는다 (파일 이름 순서와 무관)
+const dated = [];
+for (const path of inputs) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(path);
+  dated.push({ path, date: text(wb.worksheets[0].getCell('J2').value).match(/(\d{4}-\d{2}-\d{2})/)?.[1] ?? '' });
+}
+dated.sort((a, b) => a.date.localeCompare(b.date));
+for (const { path } of dated) await importWeek(path);
+for (const s of sites) if (!latestSeen.has(s.id)) s.archived = true;
 
 const grants = (org.grants ?? []).map(([v, t]) => ({ viewerDepartmentId: deptByName[v].id, targetDepartmentId: deptByName[t].id }));
 
 const seed = { reportDate, departments, members, sites, grants, entries, directives, comments: [] };
 mkdirSync(dirname(output), { recursive: true });
 writeFileSync(output, JSON.stringify(seed, null, 2));
-console.log(`보고일 ${reportDate}: 부서 ${departments.length}, 인원 ${members.length}, 현장 ${sites.length}, 보고 ${entries.length}, 지시 ${directives.length} → ${output}`);
+console.log(`최신 보고일 ${reportDate} (${dated.length}주): 부서 ${departments.length}, 인원 ${members.length}, 현장 ${sites.length}, 보고 ${entries.length}, 지시 ${directives.length} → ${output}`);

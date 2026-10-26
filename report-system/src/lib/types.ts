@@ -103,6 +103,39 @@ export interface Comment {
   acknowledgedBy: string | null;
 }
 
+export interface Photo {
+  id: string;
+  weekId: WeekId;
+  siteId: string;
+  departmentId: string;
+  uploadedBy: string;
+  caption: string;
+  createdAt: string;
+  width: number;
+  height: number;
+  /** 화면에 바로 쓸 수 있는 주소 (서버는 잠깐 쓰는 서명 주소) */
+  url: string;
+}
+
+export interface NewPhotoInput {
+  weekId: WeekId;
+  siteId: string;
+  departmentId: string;
+  blob: Blob;
+  width: number;
+  height: number;
+  caption: string;
+}
+
+export interface AiSummary {
+  weekId: WeekId;
+  highlights: string[];
+  siteChanges: { siteId: string; change: string }[];
+  generatedAt: string;
+  /** 요약할 때 반영된 가장 늦은 수정 시각 */
+  sourceUpdatedAt: string;
+}
+
 export interface Seed {
   reportDate: WeekId;
   departments: Department[];
@@ -112,6 +145,7 @@ export interface Seed {
   entries: Entry[];
   directives: Directive[];
   comments: Comment[];
+  photos?: Photo[];
 }
 
 /** 화면 하나를 그리는 데 필요한 데이터. 권한에 따라 이미 걸러진 상태 */
@@ -124,6 +158,7 @@ export interface Snapshot {
   entries: Entry[];
   directives: Directive[];
   comments: Comment[];
+  photos: Photo[];
   /** 같은 범위의 직전 주차 기록 (참고용) */
   prevWeekId: WeekId | null;
   prevEntries: Entry[];

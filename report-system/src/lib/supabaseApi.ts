@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, type Api, type SiteHistoryItem } from './api';
-import type { Comment, Department, Directive, Entry, Grant, Member, Site, Snapshot } from './types';
+import { parseSummary } from './summary';
+import type { AiSummary, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot } from './types';
+
+const BUCKET = 'site-photos';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -29,6 +32,11 @@ const toComment = (r: Row): Comment => ({
   acknowledgedAt: r.acknowledged_at, acknowledgedBy: r.acknowledged_by,
 });
 
+const toSummary = (r: Row): AiSummary => ({
+  weekId: r.week_id, highlights: r.highlights ?? [], siteChanges: r.site_changes ?? [],
+  generatedAt: r.generated_at, sourceUpdatedAt: r.source_updated_at ?? '',
+});
+
 function check(res: { data: any; error: { message: string } | null }): any {
   if (res.error) throw new ApiError(res.error.message);
   return res.data;
@@ -44,6 +52,17 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     if (!uid) return null;
     const r = await sb.from('members').select('*').eq('id', uid).maybeSingle();
     return r.data && r.data.active ? toMember(r.data) : null;
+  }
+
+  /** 비공개 저장소의 사진은 잠깐 쓰는 서명 주소로 보여준다 */
+  async function withUrls(rows: Row[]): Promise<Photo[]> {
+    if (!rows.length) return [];
+    const signed = await sb.storage.from(BUCKET).createSignedUrls(rows.map((r) => r.storage_path), 60 * 60 * 6);
+    const urls = new Map((signed.data ?? []).map((x) => [x.path, x.signedUrl]));
+    return rows.map((r) => ({
+      id: r.id, weekId: r.week_id, siteId: r.site_id, departmentId: r.department_id, uploadedBy: r.uploaded_by,
+      caption: r.caption ?? '', createdAt: r.created_at, width: r.width ?? 0, height: r.height ?? 0, url: urls.get(r.storage_path) ?? '',
+    }));
   }
 
   async function adminCall(body: Row) {
@@ -85,13 +104,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       const prev = await sb.from('weeks').select('id').lt('id', weekId).order('id', { ascending: false }).limit(1);
       const prevWeekId: string | null = prev.data?.[0]?.id ?? null;
       const weekIds = prevWeekId ? [weekId, prevWeekId] : [weekId];
-      const [d, m, s, g, e, dv] = await Promise.all([
+      const [d, m, s, g, e, dv, ph] = await Promise.all([
         sb.from('departments').select('*').order('sort'),
         sb.from('members').select('*').order('name'),
         sb.from('sites').select('*').order('sort'),
         sb.from('dept_view_grants').select('*'),
         sb.from('entries').select('*').in('week_id', weekIds),
         sb.from('directives').select('*').in('week_id', weekIds),
+        sb.from('photos').select('*').eq('week_id', weekId).order('created_at'),
       ]);
       const entries = (check(e) as Row[]).map(toEntry);
       const directives = (check(dv) as Row[]).map(toDirective);
@@ -108,6 +128,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         entries: current,
         directives: directives.filter((x) => x.weekId === weekId),
         comments: c.map(toComment),
+        photos: await withUrls(check(ph) as Row[]),
         prevWeekId,
         prevEntries: entries.filter((x) => x.weekId === prevWeekId),
         prevDirectives: directives.filter((x) => x.weekId === prevWeekId),
@@ -121,17 +142,20 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     },
 
     async siteHistory(siteId) {
-      const [e, d] = await Promise.all([
+      const [e, d, ph] = await Promise.all([
         sb.from('entries').select('*').eq('site_id', siteId).neq('content', ''),
         sb.from('directives').select('*').eq('site_id', siteId).neq('content', ''),
+        sb.from('photos').select('*').eq('site_id', siteId).order('created_at'),
       ]);
+      const photos = await withUrls(check(ph) as Row[]);
       const entries = (check(e) as Row[]).map(toEntry);
       const directives = (check(d) as Row[]).map(toDirective);
-      const weeks = [...new Set([...entries.map((x) => x.weekId), ...directives.map((x) => x.weekId)])].sort().reverse();
+      const weeks = [...new Set([...entries.map((x) => x.weekId), ...directives.map((x) => x.weekId), ...photos.map((x) => x.weekId)])].sort().reverse();
       return weeks.map((w): SiteHistoryItem => ({
         weekId: w,
         directive: directives.find((x) => x.weekId === w) ?? null,
         entries: entries.filter((x) => x.weekId === w),
+        photos: photos.filter((x) => x.weekId === w),
       }));
     },
 
@@ -161,11 +185,49 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       check(await sb.from('comments').delete().eq('id', id));
     },
 
+    async uploadPhoto(i) {
+      const path = `${i.departmentId}/${i.weekId}/${crypto.randomUUID()}.jpg`;
+      const up = await sb.storage.from(BUCKET).upload(path, i.blob, { contentType: 'image/jpeg', upsert: false });
+      if (up.error) throw new ApiError('사진을 올리지 못했습니다. 이 현장 칸에 쓸 권한이 있는지 확인해 주세요.');
+      const r = await sb.from('photos').insert({
+        week_id: i.weekId, site_id: i.siteId, department_id: i.departmentId, storage_path: path,
+        caption: i.caption, width: i.width, height: i.height,
+      }).select().single();
+      if (r.error) {
+        await sb.storage.from(BUCKET).remove([path]);
+        throw new ApiError(r.error.message);
+      }
+      return (await withUrls([r.data]))[0];
+    },
+
+    async deletePhoto(id) {
+      const r = check(await sb.from('photos').delete().eq('id', id).select().maybeSingle());
+      if (!r) throw new ApiError('올린 사람이나 관리자만 지울 수 있습니다.');
+      await sb.storage.from(BUCKET).remove([r.storage_path]);
+    },
+
+    async getAiSummary(weekId) {
+      const r = check(await sb.from('ai_summaries').select('*').eq('week_id', weekId).maybeSingle());
+      return r ? toSummary(r) : null;
+    },
+
+    async generateAiSummary(weekId, prompt, sourceUpdatedAt) {
+      const { data, error } = await sb.functions.invoke('weekly-summary', { body: { weekId, prompt, sourceUpdatedAt } });
+      if (error) {
+        let msg = '요약을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        try { msg = (await (error as any).context.json()).error ?? msg; } catch { /* 기본 메시지 사용 */ }
+        throw new ApiError(msg);
+      }
+      const row = toSummary(data.summary);
+      parseSummary(row);
+      return row;
+    },
+
     subscribe(fn) {
       let t: ReturnType<typeof setTimeout> | undefined;
       const debounced = () => { clearTimeout(t); t = setTimeout(fn, 400); };
       const ch = sb.channel('report-changes');
-      for (const table of ['entries', 'directives', 'comments', 'sites']) {
+      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, debounced);
       }
       ch.subscribe();

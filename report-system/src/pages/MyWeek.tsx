@@ -11,6 +11,7 @@ import { STAGES, type Site } from '../lib/types';
 import { relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
+import { PhotoCount, PhotoStrip } from '../components/Photos';
 
 type Filter = 'all' | 'directive' | 'todo';
 
@@ -152,6 +153,7 @@ function SiteWriteCard({ site, deptId }: { site: Site; deptId: string }) {
             <StageChip stage={site.stage} />
             {has(directive?.content) && <Badge tone="note">지시</Badge>}
             {unacked > 0 && <Badge tone="brand"><MessageSquareText size={11} />피드백 {unacked}</Badge>}
+            <PhotoCount count={snap.photos.filter((p) => p.siteId === site.id && p.departmentId === deptId).length} />
           </div>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-ink-3">
             <span>{site.process || site.note}</span>
@@ -179,6 +181,7 @@ function SiteWriteCard({ site, deptId }: { site: Site; deptId: string }) {
               <TextBlock text={prev!.content} className="mt-1.5 !text-[13px] text-ink-2" />
             </details>
           )}
+          <PhotoStrip siteId={site.id} departmentId={deptId} editable />
           <Feedback entry={e} />
         </div>
       )}

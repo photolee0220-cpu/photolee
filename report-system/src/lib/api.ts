@@ -1,5 +1,5 @@
 import type {
-  Comment, Department, Directive, Entry, Grant, Member, NewMemberInput, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, WeekId,
+  AiSummary, Comment, Department, Directive, Entry, Grant, Member, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, WeekId,
 } from './types';
 
 export interface WeekSummary {
@@ -12,6 +12,7 @@ export interface SiteHistoryItem {
   weekId: WeekId;
   directive: Directive | null;
   entries: Entry[];
+  photos: Photo[];
 }
 
 export interface Api {
@@ -29,6 +30,11 @@ export interface Api {
   addComment(entryId: string, content: string): Promise<Comment>;
   acknowledgeComment(id: string): Promise<void>;
   deleteComment(id: string): Promise<void>;
+  uploadPhoto(input: NewPhotoInput): Promise<Photo>;
+  deletePhoto(id: string): Promise<void>;
+  /** 대표 전용 AI 주간 요약 */
+  getAiSummary(weekId: WeekId): Promise<AiSummary | null>;
+  generateAiSummary(weekId: WeekId, prompt: string, sourceUpdatedAt: string): Promise<AiSummary>;
   /** 다른 사람이 바꾼 내용이 생기면 호출된다 */
   subscribe(onChange: () => void): () => void;
 
