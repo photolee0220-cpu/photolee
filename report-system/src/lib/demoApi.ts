@@ -1,0 +1,291 @@
+import seed from '@seed';
+import { canEditEntry, canViewDept, canViewDirective } from './access';
+import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } from './api';
+import type { Comment, Directive, Entry, Member, Seed, Snapshot, WeekId } from './types';
+
+/** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
+
+const KEY = 'sadakdari-report-demo-v1';
+const SESSION = 'sadakdari-report-demo-session';
+const DEMO_PASSWORD = '1234';
+
+interface DemoState extends Seed {
+  passwords: Record<string, string>;
+}
+
+function safeGet(k: string): string | null {
+  try { return localStorage.getItem(k); } catch { return null; }
+}
+function safeSet(k: string, v: string | null) {
+  try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* 저장소 차단 시 메모리로만 동작 */ }
+}
+
+function fresh(): DemoState {
+  const s = structuredClone(seed) as Seed;
+  return { ...s, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
+}
+
+let state: DemoState = (() => {
+  const raw = safeGet(KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as DemoState;
+      if (parsed.reportDate === seed.reportDate) return parsed;
+    } catch { /* 손상된 데이터는 초기화 */ }
+  }
+  return fresh();
+})();
+
+const listeners = new Set<() => void>();
+let channel: BroadcastChannel | null = null;
+try {
+  channel = new BroadcastChannel(KEY);
+  channel.onmessage = () => {
+    const raw = safeGet(KEY);
+    if (raw) state = JSON.parse(raw);
+    listeners.forEach((l) => l());
+  };
+} catch { channel = null; }
+
+function persist() {
+  safeSet(KEY, JSON.stringify(state));
+  channel?.postMessage('changed');
+}
+
+const delay = <T,>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 60));
+
+function me(): Member {
+  const id = safeGet(SESSION) ?? memSession;
+  const m = state.members.find((x) => x.id === id && x.active);
+  if (!m) throw new ApiError('로그인이 필요합니다.');
+  return m;
+}
+let memSession: string | null = null;
+function setSession(id: string | null) {
+  memSession = id;
+  safeSet(SESSION, id);
+}
+
+function visibleEntries(m: Member, list: Entry[]) {
+  return list.filter((e) => canViewDept(m, e.departmentId, state.grants));
+}
+function visibleDirectives(m: Member, list: Directive[]) {
+  return list.filter((d) => canViewDirective(m, d, state.members, state.grants));
+}
+
+function weeksWithData(): WeekId[] {
+  const set = new Set<WeekId>([state.reportDate]);
+  state.entries.forEach((e) => set.add(e.weekId));
+  state.directives.forEach((d) => set.add(d.weekId));
+  return [...set].sort();
+}
+
+export const demoApi: Api = {
+  mode: 'demo',
+
+  async getSession() {
+    try { return await delay(me()); } catch { return null; }
+  },
+  async signIn(username, password) {
+    const m = state.members.find((x) => x.username === username.trim());
+    if (!m || state.passwords[m.username] !== password) throw new ApiError('아이디 또는 비밀번호가 맞지 않습니다.');
+    if (!m.active) throw new ApiError('사용이 중지된 계정입니다. 관리자에게 문의하세요.');
+    setSession(m.id);
+    return delay(m);
+  },
+  async signOut() { setSession(null); },
+  async changePassword(pw) {
+    const m = me();
+    state.passwords[m.username] = pw;
+    m.mustChangePassword = false;
+    persist();
+  },
+
+  async loadWeek(weekId) {
+    const m = me();
+    const prevWeekId = weeksWithData().filter((w) => w < weekId).pop() ?? null;
+    const snap: Snapshot = {
+      weekId,
+      departments: state.departments,
+      members: state.members,
+      sites: state.sites,
+      grants: state.grants,
+      entries: visibleEntries(m, state.entries.filter((e) => e.weekId === weekId)),
+      directives: visibleDirectives(m, state.directives.filter((d) => d.weekId === weekId)),
+      comments: [],
+      prevWeekId,
+      prevEntries: prevWeekId ? visibleEntries(m, state.entries.filter((e) => e.weekId === prevWeekId)) : [],
+      prevDirectives: prevWeekId ? visibleDirectives(m, state.directives.filter((d) => d.weekId === prevWeekId)) : [],
+    };
+    const ids = new Set(snap.entries.map((e) => e.id));
+    snap.comments = state.comments.filter((c) => ids.has(c.entryId));
+    return delay(structuredClone(snap));
+  },
+
+  async listWeeks() {
+    const m = me();
+    const out: WeekSummary[] = weeksWithData().map((w) => {
+      const es = visibleEntries(m, state.entries.filter((e) => e.weekId === w && e.content.trim()));
+      return { weekId: w, entryCount: es.length, writers: new Set(es.map((e) => e.updatedBy)).size };
+    });
+    return delay(out.reverse());
+  },
+
+  async siteHistory(siteId) {
+    const m = me();
+    const items: SiteHistoryItem[] = weeksWithData().reverse().map((w) => ({
+      weekId: w,
+      directive: visibleDirectives(m, state.directives.filter((d) => d.weekId === w && d.siteId === siteId))[0] ?? null,
+      entries: visibleEntries(m, state.entries.filter((e) => e.weekId === w && e.siteId === siteId && e.content.trim())),
+    }));
+    return delay(items.filter((i) => i.directive?.content || i.entries.length));
+  },
+
+  async saveEntry(input) {
+    const m = me();
+    if (!canEditEntry(m, input)) throw new ApiError('이 칸을 수정할 권한이 없습니다.');
+    let e = state.entries.find((x) => x.weekId === input.weekId && x.kind === input.kind && (
+      input.kind === 'site' ? x.siteId === input.siteId && x.departmentId === input.departmentId
+        : input.kind === 'dept' ? x.authorId === input.authorId
+          : x.departmentId === input.departmentId));
+    if (!e) {
+      e = { id: newId('e'), ...input, updatedAt: '', updatedBy: null };
+      state.entries.push(e);
+    }
+    e.content = input.content;
+    e.updatedAt = new Date().toISOString();
+    e.updatedBy = m.id;
+    persist();
+    return structuredClone(e);
+  },
+
+  async saveDirective(input) {
+    const m = me();
+    if (!m.isCeo) throw new ApiError('대표님 지시사항은 대표님만 입력할 수 있습니다.');
+    let d = state.directives.find((x) => x.weekId === input.weekId && x.targetKind === input.targetKind
+      && x.siteId === input.siteId && x.memberId === input.memberId && x.slot === input.slot);
+    if (!d) {
+      d = { id: newId('dv'), ...input, updatedAt: '' };
+      state.directives.push(d);
+    }
+    d.content = input.content;
+    d.updatedAt = new Date().toISOString();
+    persist();
+    return structuredClone(d);
+  },
+
+  async addComment(entryId, content) {
+    const m = me();
+    const e = state.entries.find((x) => x.id === entryId);
+    if (!e) throw new ApiError('보고 내용을 찾을 수 없습니다.');
+    if (!m.isCeo && !canEditEntry(m, e)) throw new ApiError('피드백을 남길 권한이 없습니다.');
+    const c: Comment = { id: newId('c'), entryId, authorId: m.id, content, createdAt: new Date().toISOString(), acknowledgedAt: null, acknowledgedBy: null };
+    state.comments.push(c);
+    persist();
+    return structuredClone(c);
+  },
+
+  async acknowledgeComment(id) {
+    const m = me();
+    const c = state.comments.find((x) => x.id === id);
+    const e = c && state.entries.find((x) => x.id === c.entryId);
+    if (!c || !e || !canEditEntry(m, e)) throw new ApiError('확인 처리할 권한이 없습니다.');
+    c.acknowledgedAt = new Date().toISOString();
+    c.acknowledgedBy = m.id;
+    persist();
+  },
+
+  async deleteComment(id) {
+    const m = me();
+    const c = state.comments.find((x) => x.id === id);
+    if (!c || c.authorId !== m.id) throw new ApiError('본인이 쓴 글만 지울 수 있습니다.');
+    state.comments = state.comments.filter((x) => x.id !== id);
+    persist();
+  },
+
+  subscribe(fn) {
+    listeners.add(fn);
+    return () => { listeners.delete(fn); };
+  },
+
+  admin: {
+    async saveSite(site) {
+      requireAdmin();
+      const i = state.sites.findIndex((s) => s.id === site.id);
+      if (i >= 0) state.sites[i] = site; else state.sites.push(site);
+      persist();
+      return structuredClone(site);
+    },
+    async saveDepartment(d) {
+      requireAdmin();
+      const i = state.departments.findIndex((x) => x.id === d.id);
+      if (i >= 0) state.departments[i] = d; else state.departments.push(d);
+      persist();
+      return structuredClone(d);
+    },
+    async deleteDepartment(id) {
+      requireAdmin();
+      if (state.members.some((m) => m.departmentId === id && m.active)) throw new ApiError('소속 인원이 있는 부서는 삭제할 수 없습니다. 먼저 인원을 다른 부서로 옮겨주세요.');
+      if (state.entries.some((e) => e.departmentId === id)) throw new ApiError('보고 기록이 있는 부서는 삭제 대신 사용 중지로 바꿔주세요.');
+      state.departments = state.departments.filter((d) => d.id !== id);
+      state.grants = state.grants.filter((g) => g.viewerDepartmentId !== id && g.targetDepartmentId !== id);
+      persist();
+    },
+    async setGrants(viewer, targets) {
+      requireAdmin();
+      state.grants = state.grants.filter((g) => g.viewerDepartmentId !== viewer)
+        .concat(targets.filter((t) => t !== viewer).map((t) => ({ viewerDepartmentId: viewer, targetDepartmentId: t })));
+      persist();
+      return structuredClone(state.grants);
+    },
+    async createMember(input) {
+      requireAdmin();
+      if (state.members.some((m) => m.username === input.username)) throw new ApiError('이미 사용 중인 아이디입니다.');
+      const m: Member = {
+        id: newId('m'), username: input.username, name: input.name, title: input.title, departmentId: input.departmentId,
+        isCeo: input.isCeo, isAdmin: input.isAdmin, active: true, mustChangePassword: true,
+      };
+      state.members.push(m);
+      state.passwords[m.username] = input.password;
+      persist();
+      return structuredClone(m);
+    },
+    async updateMember(m) {
+      const actor = requireAdmin();
+      if (actor.id === m.id && !m.isAdmin) throw new ApiError('본인의 관리자 권한은 해제할 수 없습니다.');
+      const i = state.members.findIndex((x) => x.id === m.id);
+      if (i < 0) throw new ApiError('인원을 찾을 수 없습니다.');
+      state.members[i] = m;
+      persist();
+      return structuredClone(m);
+    },
+    async resetPassword(memberId, pw) {
+      requireAdmin();
+      const m = state.members.find((x) => x.id === memberId);
+      if (!m) throw new ApiError('인원을 찾을 수 없습니다.');
+      state.passwords[m.username] = pw;
+      m.mustChangePassword = true;
+      persist();
+    },
+  },
+
+  demo: {
+    accounts: () => state.members.filter((m) => m.active),
+    async signInAs(id) {
+      setSession(id);
+      return me();
+    },
+    reset() {
+      state = fresh();
+      persist();
+    },
+  },
+};
+
+function requireAdmin(): Member {
+  const m = me();
+  if (!m.isAdmin) throw new ApiError('관리자만 할 수 있습니다.');
+  return m;
+}
+
+export const DEMO_DEFAULT_PASSWORD = DEMO_PASSWORD;

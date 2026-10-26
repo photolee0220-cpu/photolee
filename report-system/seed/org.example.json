@@ -1,0 +1,10 @@
+{
+  "departments": [
+    { "name": "공무", "writesSites": true, "people": [{ "name": "홍길동", "title": "이사", "username": "hong.gildong" }] },
+    { "name": "견적부", "writesSites": true, "people": [{ "name": "김예시", "title": "부장", "username": "kim.yesi" }] },
+    { "name": "회계", "writesSites": false, "people": [{ "name": "이샘플", "title": "차장", "username": "lee.sample" }] }
+  ],
+  "siteColumns": { "G": "공무", "J": "견적부" },
+  "splitRows": {},
+  "grants": [["공무", "견적부"]]
+}

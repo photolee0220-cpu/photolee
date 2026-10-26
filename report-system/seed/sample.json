@@ -1,0 +1,237 @@
+{
+  "reportDate": "2026-10-26",
+  "departments": [
+    {
+      "id": "d_1",
+      "name": "공무",
+      "sort": 1,
+      "writesSites": true,
+      "active": true
+    },
+    {
+      "id": "d_2",
+      "name": "인테리어/디자인",
+      "sort": 2,
+      "writesSites": true,
+      "active": true
+    },
+    {
+      "id": "d_3",
+      "name": "CM사업부",
+      "sort": 3,
+      "writesSites": true,
+      "active": true
+    },
+    {
+      "id": "d_4",
+      "name": "견적부",
+      "sort": 4,
+      "writesSites": true,
+      "active": true
+    },
+    {
+      "id": "d_5",
+      "name": "안전관리",
+      "sort": 5,
+      "writesSites": false,
+      "active": true
+    },
+    {
+      "id": "d_6",
+      "name": "회계",
+      "sort": 6,
+      "writesSites": false,
+      "active": true
+    }
+  ],
+  "members": [
+    {
+      "id": "m_ceo",
+      "username": "ceo",
+      "name": "대표이사",
+      "title": "대표",
+      "departmentId": null,
+      "isCeo": true,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_admin",
+      "username": "admin",
+      "name": "취합 담당자",
+      "title": "관리자",
+      "departmentId": null,
+      "isCeo": false,
+      "isAdmin": true,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_a",
+      "username": "sample.a",
+      "name": "홍길동",
+      "title": "이사",
+      "departmentId": "d_1",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_b",
+      "username": "sample.b",
+      "name": "김예시",
+      "title": "이사",
+      "departmentId": "d_2",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_c",
+      "username": "sample.c",
+      "name": "이샘플",
+      "title": "부장",
+      "departmentId": "d_3",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_d",
+      "username": "sample.d",
+      "name": "박견본",
+      "title": "부장",
+      "departmentId": "d_4",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_e",
+      "username": "sample.e",
+      "name": "최안전",
+      "title": "부장",
+      "departmentId": "d_5",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    },
+    {
+      "id": "m_f",
+      "username": "sample.f",
+      "name": "정회계",
+      "title": "차장",
+      "departmentId": "d_6",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false
+    }
+  ],
+  "sites": [
+    {
+      "id": "s_1",
+      "name": "가나다교회 신축공사",
+      "note": "",
+      "stage": "construction",
+      "dueDate": "2027-05-31",
+      "dueText": "",
+      "process": "철콘공사",
+      "progress": 62,
+      "scale": "",
+      "tags": [
+        "설계변경"
+      ],
+      "sort": 0,
+      "archived": false,
+      "completedAt": null
+    },
+    {
+      "id": "s_2",
+      "name": "라마바 공공주택",
+      "note": "",
+      "stage": "construction",
+      "dueDate": "2027-06-30",
+      "dueText": "",
+      "process": "골조공사",
+      "progress": 35,
+      "scale": "",
+      "tags": [],
+      "sort": 0,
+      "archived": false,
+      "completedAt": null
+    },
+    {
+      "id": "s_3",
+      "name": "사아자교회",
+      "note": "",
+      "stage": "cm",
+      "dueDate": null,
+      "dueText": "미정",
+      "process": "설계협의",
+      "progress": null,
+      "scale": "",
+      "tags": [
+        "금융진행"
+      ],
+      "sort": 0,
+      "archived": false,
+      "completedAt": null
+    }
+  ],
+  "grants": [],
+  "entries": [
+    {
+      "id": "e1",
+      "weekId": "2026-10-26",
+      "kind": "site",
+      "siteId": "s_1",
+      "departmentId": "d_1",
+      "authorId": null,
+      "content": "- 협력업체 선정 진행\n- 설계변경 실정보고 준비",
+      "updatedAt": "2026-10-26T00:00:00.000Z",
+      "updatedBy": "m_a"
+    },
+    {
+      "id": "e2",
+      "weekId": "2026-10-26",
+      "kind": "site",
+      "siteId": "s_1",
+      "departmentId": "d_4",
+      "authorId": null,
+      "content": "설계변경 물량 검토",
+      "updatedAt": "2026-10-26T00:00:00.000Z",
+      "updatedBy": "m_a"
+    },
+    {
+      "id": "e3",
+      "weekId": "2026-10-26",
+      "kind": "dept",
+      "siteId": null,
+      "departmentId": "d_5",
+      "authorId": "m_e",
+      "content": "1. 현장 정기 안전교육 실시\n2. 동절기 안전관리계획서 작성",
+      "updatedAt": "2026-10-26T00:00:00.000Z",
+      "updatedBy": "m_e"
+    }
+  ],
+  "directives": [
+    {
+      "id": "dv1",
+      "weekId": "2026-10-26",
+      "targetKind": "site",
+      "siteId": "s_1",
+      "memberId": null,
+      "slot": null,
+      "content": "설계변경 협의 결과 공유",
+      "updatedAt": "2026-10-26T00:00:00.000Z"
+    }
+  ],
+  "comments": []
+}

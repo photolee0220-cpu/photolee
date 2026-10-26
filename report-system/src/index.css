@@ -1,0 +1,100 @@
+@import '@font';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 공사 현장 문서의 차분한 회색 위에 청록 한 가지 강조색, 대표 지시는 메모지 노랑 */
+:root {
+  --bg: 244 245 243;
+  --surface: 255 255 255;
+  --sunken: 238 240 237;
+  --line: 226 229 225;
+  --line-strong: 205 210 204;
+  --ink: 24 28 26;
+  --ink-2: 74 81 77;
+  --ink-3: 128 135 131;
+  --brand: 14 124 102;
+  --brand-ink: 10 92 76;
+  --on-brand: 255 255 255;
+  --brand-soft: 226 242 237;
+  --note: 255 247 219;
+  --note-ink: 112 78 6;
+  --note-line: 240 222 160;
+  --ok: 22 135 76;
+  --ok-soft: 224 244 232;
+  --warn: 196 120 6;
+  --warn-soft: 253 242 218;
+  --danger: 205 50 50;
+  --danger-soft: 252 230 230;
+  --shadow: 20 28 24;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: 16 19 18;
+    --surface: 24 28 27;
+    --sunken: 19 23 22;
+    --line: 40 46 44;
+    --line-strong: 58 66 63;
+    --ink: 233 237 235;
+    --ink-2: 178 186 182;
+    --ink-3: 124 133 129;
+    --brand: 52 196 164;
+    --brand-ink: 120 222 198;
+    --on-brand: 8 32 27;
+    --brand-soft: 20 52 45;
+    --note: 48 40 18;
+    --note-ink: 240 208 120;
+    --note-line: 84 70 30;
+    --ok: 74 200 130;
+    --ok-soft: 20 48 33;
+    --warn: 236 170 60;
+    --warn-soft: 56 40 14;
+    --danger: 240 110 110;
+    --danger-soft: 60 24 24;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: 16 19 18;
+  --surface: 24 28 27;
+  --sunken: 19 23 22;
+  --line: 40 46 44;
+  --line-strong: 58 66 63;
+  --ink: 233 237 235;
+  --ink-2: 178 186 182;
+  --ink-3: 124 133 129;
+  --brand: 52 196 164;
+  --brand-ink: 120 222 198;
+  --on-brand: 8 32 27;
+  --brand-soft: 20 52 45;
+  --note: 48 40 18;
+  --note-ink: 240 208 120;
+  --note-line: 84 70 30;
+  --ok: 74 200 130;
+  --ok-soft: 20 48 33;
+  --warn: 236 170 60;
+  --warn-soft: 56 40 14;
+  --danger: 240 110 110;
+  --danger-soft: 60 24 24;
+  --shadow: 0 0 0;
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-bg text-ink font-sans antialiased;
+  font-size: 14px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  font-feature-settings: 'ss06';
+}
+h1, h2, h3 { text-wrap: balance; }
+:focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.scrollbar-thin { scrollbar-width: thin; }
+textarea { field-sizing: content; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
