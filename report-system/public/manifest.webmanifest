@@ -1,10 +1,10 @@
 {
   "name": "사닥다리 주간보고",
   "short_name": "주간보고",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#F4F5F3",
   "theme_color": "#0E7C66",
   "lang": "ko",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

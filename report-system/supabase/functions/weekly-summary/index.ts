@@ -51,7 +51,9 @@ Deno.serve(async (req) => {
   const { data: setting } = await service.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle();
   const model = MODELS.includes(setting?.value) ? (setting!.value as string) : MODELS[0];
 
-  const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!apiKey) return json({ error: 'AI 요약용 API 키가 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.' }, 503);
+  const client = new Anthropic({ apiKey });
   const request = {
     model,
     max_tokens: 16000,

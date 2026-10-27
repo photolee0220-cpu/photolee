@@ -27,6 +27,8 @@ export function isImminent(site: Site): boolean {
 /** 지난주 대비 이 현장에서 새로 생긴 줄 수 (볼 수 있는 부서 + 대표 지시). 지난주 기록이 없으면 null */
 export function siteChanges(snap: Snapshot, siteId: string, deptIds: string[]): number | null {
   if (!snap.prevWeekId) return null;
+  const written = has(siteDirective(snap.directives, siteId)?.content) || deptIds.some((d) => has(siteEntry(snap.entries, siteId, d)?.content));
+  if (!written) return null;
   let n = changeCount(siteDirective(snap.directives, siteId)?.content, siteDirective(snap.prevDirectives, siteId)?.content);
   for (const d of deptIds) n += changeCount(siteEntry(snap.entries, siteId, d)?.content, siteEntry(snap.prevEntries, siteId, d)?.content);
   return n;

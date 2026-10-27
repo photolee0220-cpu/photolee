@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
   const privateSeed = r('./seed/private/seed.json');
   const seed = (artifact || mode === 'demo') && existsSync(privateSeed) ? privateSeed : r('./seed/sample.json');
   return {
+    base: process.env.VITE_BASE || '/',
     plugins: [react(), ...(artifact ? [viteSingleFile()] : [])],
     resolve: {
       alias: {
