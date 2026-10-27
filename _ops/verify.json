@@ -1,0 +1,65 @@
+{
+  "at": "2026-10-27T07:01:50Z",
+  "checks": [
+    {
+      "check": "웹사이트 연결 정보",
+      "ok": true,
+      "detail": "https://hwpkxybtglkbxpaihfzl.supabase.co"
+    },
+    {
+      "check": "웹사이트 열림",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "관리자 로그인",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "인원 목록",
+      "ok": true,
+      "detail": "16명"
+    },
+    {
+      "check": "10/26 보고",
+      "ok": true,
+      "detail": "41칸"
+    },
+    {
+      "check": "현장",
+      "ok": true,
+      "detail": "22곳"
+    },
+    {
+      "check": "로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "주차 목록",
+      "ok": true,
+      "detail": "[\"2026-10-26\"]"
+    },
+    {
+      "check": "서버 기능: 계정 관리",
+      "ok": true,
+      "detail": "관리자 확인 통과"
+    },
+    {
+      "check": "서버 기능: AI 요약",
+      "ok": true,
+      "detail": "응답 정상(관리자는 대표 전용이라 거절)"
+    },
+    {
+      "check": "사진 저장소 올리기",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "사진 저장소 지우기",
+      "ok": true,
+      "detail": "ok"
+    }
+  ]
+}
