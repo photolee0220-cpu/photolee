@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserPlus, Users,
+  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, KeyRound, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
@@ -8,12 +8,13 @@ import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal
 import { newId, type WeekSummary } from '../../lib/api';
 import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
+import { SUMMARY_MODELS } from '../../lib/models';
 import { SITE_TAGS, STAGES, type Department, type Member, type Site, type Stage } from '../../lib/types';
 import { currentWeekId, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
 
-type Tab = 'sites' | 'members' | 'depts' | 'weeks';
+type Tab = 'sites' | 'members' | 'depts' | 'weeks' | 'ai';
 
 export function AdminPage() {
   const { me, setView } = useStore();
@@ -23,6 +24,7 @@ export function AdminPage() {
     { id: 'members', label: '인원·관리자', icon: <Users size={16} /> },
     { id: 'depts', label: '부서·열람 권한', icon: <ShieldCheck size={16} /> },
     { id: 'weeks', label: '주차·내려받기', icon: <Download size={16} /> },
+    { id: 'ai', label: 'AI 설정', icon: <Sparkles size={16} /> },
   ];
   return (
     <div className="min-h-full bg-bg">
@@ -47,6 +49,7 @@ export function AdminPage() {
         {tab === 'members' && <MembersAdmin />}
         {tab === 'depts' && <DeptsAdmin />}
         {tab === 'weeks' && <WeeksAdmin />}
+        {tab === 'ai' && <AiSettings />}
       </main>
     </div>
   );
@@ -532,6 +535,56 @@ function WeeksAdmin() {
               }}><Download size={14} />전체 엑셀</Button>
             </Card>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────── AI 설정 ───────────── */
+
+function AiSettings() {
+  const { toast } = useStore();
+  const [model, setModel] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { api.getSettings().then((s) => setModel(s.summaryModel)).catch(() => setModel(SUMMARY_MODELS[0].id)); }, []);
+
+  const choose = async (id: string) => {
+    if (id === model) return;
+    setSaving(true);
+    try {
+      const s = await api.admin.saveSettings({ summaryModel: id });
+      setModel(s.summaryModel);
+      toast('AI 요약 모델을 바꿨습니다. 다음 요약부터 적용됩니다');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '저장하지 못했습니다.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-[720px]">
+      <h1 className="text-[20px] font-extrabold">AI 설정</h1>
+      <p className="mb-4 text-[13px] text-ink-3">대표님 대시보드의 AI 주간 요약에 쓰는 모델입니다. 비용은 보고 한 주(약 1만 6천 자)를 요약할 때의 어림값이며, 요약은 대표님이 버튼을 누를 때만 만들어집니다.</p>
+      {model == null ? <Spinner /> : (
+        <div className="space-y-2" role="radiogroup" aria-label="AI 요약 모델">
+          {SUMMARY_MODELS.map((m) => {
+            const on = m.id === model;
+            return (
+              <button key={m.id} role="radio" aria-checked={on} disabled={saving} onClick={() => choose(m.id)}
+                className={cx('flex w-full items-center gap-3 rounded-xl border bg-surface p-4 text-left shadow-card transition-colors',
+                  on ? 'border-brand ring-2 ring-brand/20' : 'border-line hover:border-line-strong')}>
+                <span className={cx('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2', on ? 'border-brand' : 'border-line-strong')}>
+                  {on && <span className="h-2.5 w-2.5 rounded-full bg-brand" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2 font-bold">{m.name}{m.id === SUMMARY_MODELS[0].id && <Badge tone="brand">기본</Badge>}</span>
+                  <span className="block text-[13px] text-ink-3">{m.note} · {m.cost}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, type Api, type SiteHistoryItem } from './api';
+import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
 import type { AiSummary, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot } from './types';
 
@@ -34,7 +35,7 @@ const toComment = (r: Row): Comment => ({
 
 const toSummary = (r: Row): AiSummary => ({
   weekId: r.week_id, highlights: r.highlights ?? [], siteChanges: r.site_changes ?? [],
-  generatedAt: r.generated_at, sourceUpdatedAt: r.source_updated_at ?? '',
+  generatedAt: r.generated_at, model: r.model ?? '', sourceUpdatedAt: r.source_updated_at ?? '',
 });
 
 function check(res: { data: any; error: { message: string } | null }): any {
@@ -223,6 +224,11 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       return row;
     },
 
+    async getSettings() {
+      const r = check(await sb.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle());
+      return { summaryModel: (r?.value as string) || DEFAULT_SUMMARY_MODEL };
+    },
+
     subscribe(fn) {
       let t: ReturnType<typeof setTimeout> | undefined;
       const debounced = () => { clearTimeout(t); t = setTimeout(fn, 400); };
@@ -275,6 +281,10 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           name: m.name, title: m.title, department_id: m.departmentId, is_admin: m.isAdmin, is_ceo: m.isCeo,
         }).eq('id', m.id).select().single());
         return toMember(r);
+      },
+      async saveSettings(next) {
+        check(await sb.from('app_settings').upsert({ key: 'summary_model', value: next.summaryModel, updated_at: new Date().toISOString() }));
+        return next;
       },
       async resetPassword(memberId, password) {
         await adminCall({ action: 'reset_password', memberId, password });

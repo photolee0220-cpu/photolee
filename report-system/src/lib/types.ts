@@ -132,8 +132,14 @@ export interface AiSummary {
   highlights: string[];
   siteChanges: { siteId: string; change: string }[];
   generatedAt: string;
+  /** 요약을 만든 모델 */
+  model: string;
   /** 요약할 때 반영된 가장 늦은 수정 시각 */
   sourceUpdatedAt: string;
+}
+
+export interface AppSettings {
+  summaryModel: string;
 }
 
 export interface Seed {

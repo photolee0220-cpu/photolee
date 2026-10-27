@@ -1,4 +1,4 @@
-// 대표 전용: 이번 주 보고를 Claude로 요약해 저장한다
+// 대표 전용: 이번 주 보고를 Claude로 요약해 저장한다 (모델은 app_settings.summary_model)
 // 배포: supabase functions deploy weekly-summary
 // 비밀값: supabase secrets set ANTHROPIC_API_KEY=...
 import Anthropic from 'npm:@anthropic-ai/sdk@0.133.0';
@@ -10,6 +10,8 @@ const cors = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+
+const MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'];
 
 const SCHEMA = {
   type: 'object',
@@ -45,17 +47,23 @@ Deno.serve(async (req) => {
   const { weekId, prompt, sourceUpdatedAt } = await req.json();
   if (typeof prompt !== 'string' || !prompt.trim() || typeof weekId !== 'string') return json({ error: '요청 형식이 맞지 않습니다.' }, 400);
 
+  // 관리자 페이지 > 설정에서 고른 모델 (기본 Haiku 5.5)
+  const { data: setting } = await service.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle();
+  const model = MODELS.includes(setting?.value) ? (setting!.value as string) : MODELS[0];
+
   const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+  const request = {
+    model,
+    max_tokens: 16000,
+    output_config: { effort: 'medium' as const, format: { type: 'json_schema' as const, schema: SCHEMA } },
+    messages: [{ role: 'user' as const, content: prompt }],
+  };
   let response;
   try {
-    response = await client.beta.messages.create({
-      model: 'claude-opus-5-5',
-      max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Haiku 5.5는 서버 쪽 거절 대체 모델이 없어 일반 요청으로 보낸다
+    response = model === 'claude-haiku-5-5'
+      ? await client.messages.create(request)
+      : await client.beta.messages.create({ ...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
   } catch (e) {
     if (e instanceof Anthropic.RateLimitError) return json({ error: 'AI 사용량이 많아 잠시 후 다시 시도해 주세요.' }, 429);
     if (e instanceof Anthropic.APIError) return json({ error: `AI 요청이 실패했습니다 (${e.status ?? '연결 오류'}).` }, 502);
@@ -78,6 +86,7 @@ Deno.serve(async (req) => {
     site_changes: parsed.siteChanges,
     generated_at: new Date().toISOString(),
     generated_by: auth.user.id,
+    model: response.model,
     source_updated_at: sourceUpdatedAt ?? null,
   }).select().single();
   if (error) return json({ error: error.message }, 500);

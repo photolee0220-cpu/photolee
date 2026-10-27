@@ -2,8 +2,9 @@ import seed from '@seed';
 import { canEditEntry, canViewDept, canViewDirective } from './access';
 import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } from './api';
 import { blobToDataUrl } from './image';
+import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { askClaudeForSummary } from './summary';
-import type { AiSummary, Comment, Directive, Entry, Member, Photo, Seed, Snapshot, WeekId } from './types';
+import type { AiSummary, AppSettings, Comment, Directive, Entry, Member, Photo, Seed, Snapshot, WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -15,6 +16,7 @@ interface DemoState extends Seed {
   passwords: Record<string, string>;
   photos: Photo[];
   summaries: Record<WeekId, AiSummary>;
+  settings: AppSettings;
 }
 
 function safeGet(k: string): string | null {
@@ -26,7 +28,7 @@ function safeSet(k: string, v: string | null): boolean {
 
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return { ...s, photos: s.photos ?? [], summaries: {}, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
+  return { ...s, photos: s.photos ?? [], summaries: {}, settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
 }
 
 let state: DemoState = (() => {
@@ -34,7 +36,7 @@ let state: DemoState = (() => {
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as DemoState;
-      if (parsed.reportDate === seed.reportDate) return { ...parsed, photos: parsed.photos ?? [], summaries: parsed.summaries ?? {} };
+      if (parsed.reportDate === seed.reportDate) return { ...parsed, photos: parsed.photos ?? [], summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } };
     } catch { /* 손상된 데이터는 초기화 */ }
   }
   return fresh();
@@ -245,11 +247,17 @@ export const demoApi: Api = {
   async generateAiSummary(weekId, prompt, sourceUpdatedAt) {
     const m = me();
     if (!m.isCeo) throw new ApiError('AI 요약은 대표님 화면에서만 만들 수 있습니다.');
-    const result = await askClaudeForSummary(prompt);
-    const summary: AiSummary = { weekId, ...result, generatedAt: new Date().toISOString(), sourceUpdatedAt };
+    const model = summaryModel(state.settings.summaryModel);
+    const result = await askClaudeForSummary(prompt, model);
+    const summary: AiSummary = { weekId, ...result, model: model.id, generatedAt: new Date().toISOString(), sourceUpdatedAt };
     state.summaries[weekId] = summary;
     persist();
     return structuredClone(summary);
+  },
+
+  async getSettings() {
+    me();
+    return delay(structuredClone(state.settings));
   },
 
   subscribe(fn) {
@@ -307,6 +315,12 @@ export const demoApi: Api = {
       state.members[i] = m;
       persist();
       return structuredClone(m);
+    },
+    async saveSettings(next) {
+      requireAdmin();
+      state.settings = { summaryModel: summaryModel(next.summaryModel).id };
+      persist();
+      return structuredClone(state.settings);
     },
     async resetPassword(memberId, pw) {
       requireAdmin();

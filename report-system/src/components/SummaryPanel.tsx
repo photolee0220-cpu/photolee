@@ -2,6 +2,7 @@ import { RefreshCw, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/client';
 import { has } from '../lib/derive';
+import { summaryModel } from '../lib/models';
 import { buildSummaryPrompt, changedSites } from '../lib/summary';
 import type { AiSummary } from '../lib/types';
 import { relativeTime } from '../lib/week';
@@ -55,7 +56,7 @@ export function SummaryPanel() {
         <div className="ml-auto flex items-center gap-2.5">
           {summary && !busy && (
             <span className="text-[12px] text-ink-3">
-              {relativeTime(summary.generatedAt)} 작성{staleCount > 0 && <b className="ml-1 text-warn">· 이후 {staleCount}칸 수정됨</b>}
+              {summary.model && `${summaryModel(summary.model).name} · `}{relativeTime(summary.generatedAt)} 작성{staleCount > 0 && <b className="ml-1 text-warn">· 이후 {staleCount}칸 수정됨</b>}
             </span>
           )}
           {summary !== undefined && (

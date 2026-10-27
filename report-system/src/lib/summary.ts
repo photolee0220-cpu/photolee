@@ -118,12 +118,12 @@ export function parseSummary(value: unknown): SummaryResult {
 type SampleFn = { json(input: string, opts?: Record<string, unknown>): Promise<unknown> };
 
 /** 체험판(Claude 아티팩트)에서는 보는 사람의 Claude로 요약한다 */
-export async function askClaudeForSummary(prompt: string): Promise<SummaryResult> {
+export async function askClaudeForSummary(prompt: string, model: { id: string; tier: string }): Promise<SummaryResult> {
   const host = (window as unknown as { claude?: { use?(n: string): Promise<unknown> } }).claude;
   const sample = host?.use ? ((await host.use('sample').catch(() => null)) as SampleFn | null) : null;
   if (!sample) throw new ApiError('체험판에서는 Claude 안에서 열었을 때만 AI 요약을 만들 수 있습니다. 실제 서버에서는 대표님 화면에서 바로 됩니다.');
   try {
-    return parseSummary(await sample.json(prompt, { modelTier: 'default', cache: false }));
+    return parseSummary(await sample.json(prompt, { model: model.id, modelTier: model.tier, cache: false }));
   } catch (e) {
     const code = (e as { code?: string })?.code;
     if (code === 'not_granted' || code === 'sampling_disabled') throw new ApiError('Claude 사용이 허용되지 않아 요약을 만들 수 없습니다.');

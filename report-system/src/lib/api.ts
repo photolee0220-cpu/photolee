@@ -1,5 +1,5 @@
 import type {
-  AiSummary, Comment, Department, Directive, Entry, Grant, Member, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, WeekId,
+  AiSummary, AppSettings, Comment, Department, Directive, Entry, Grant, Member, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, WeekId,
 } from './types';
 
 export interface WeekSummary {
@@ -35,6 +35,7 @@ export interface Api {
   /** 대표 전용 AI 주간 요약 */
   getAiSummary(weekId: WeekId): Promise<AiSummary | null>;
   generateAiSummary(weekId: WeekId, prompt: string, sourceUpdatedAt: string): Promise<AiSummary>;
+  getSettings(): Promise<AppSettings>;
   /** 다른 사람이 바꾼 내용이 생기면 호출된다 */
   subscribe(onChange: () => void): () => void;
 
@@ -46,6 +47,7 @@ export interface Api {
     createMember(input: NewMemberInput): Promise<Member>;
     updateMember(m: Member): Promise<Member>;
     resetPassword(memberId: string, password: string): Promise<void>;
+    saveSettings(s: AppSettings): Promise<AppSettings>;
   };
 
   /** 데모 전용: 계정 전환 */
