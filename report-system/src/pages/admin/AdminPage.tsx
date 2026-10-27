@@ -328,7 +328,11 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
 
   const save = async () => {
     if (member) {
-      const ok = await run(() => api.admin.updateMember({ ...member, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, active: m.active }), '저장했습니다');
+      const renamed = m.username !== member.username;
+      const ok = await run(async () => {
+        if (renamed) await api.admin.changeUsername(member.id, m.username);
+        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, active: m.active });
+      }, renamed ? `저장했습니다. 이제 아이디 ${m.username}(으)로 로그인합니다` : '저장했습니다');
       if (ok) onClose();
     } else {
       const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo }), `${m.name}님 계정을 만들었습니다`);
@@ -337,7 +341,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
   };
 
   if (created) {
-    const text = `[사닥다리 주간보고]\n접속 주소: ${location.origin}\n아이디: ${created.username}\n임시 비밀번호: ${created.password}\n처음 로그인하면 비밀번호를 바꿔주세요.`;
+    const text = `[사닥다리 주간보고]\n접속 주소: ${location.origin}${location.pathname}\n아이디: ${created.username}\n임시 비밀번호: ${created.password}\n처음 로그인하면 비밀번호를 바꿔주세요.`;
     return (
       <Modal open onClose={onClose} title="계정을 만들었습니다" footer={<>
         <Button onClick={() => navigator.clipboard?.writeText(text).catch(() => undefined)}>안내문 복사</Button>
@@ -352,17 +356,16 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
   return (
     <Modal open onClose={onClose} title={member ? `${member.name} 정보 수정` : '인원 추가'} footer={<>
       <Button onClick={onClose}>취소</Button>
-      <Button tone="primary" onClick={save} disabled={busy || !m.name.trim() || (!member && (!validUser || m.password.length < 6))}>{member ? '저장' : '계정 만들기'}</Button>
+      <Button tone="primary" onClick={save} disabled={busy || !m.name.trim() || !validUser || (!member && m.password.length < 6)}>{member ? '저장' : '계정 만들기'}</Button>
     </>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="이름"><Input id="member-name" value={m.name} onChange={(e) => up('name', e.target.value)} autoFocus /></Field>
         <Field label="직급"><Input id="member-title" value={m.title} onChange={(e) => up('title', e.target.value)} placeholder="예: 부장" /></Field>
-        {!member && (
-          <>
-            <Field label="아이디" hint="영문 소문자·숫자·점, 3~30자"><Input id="member-username" value={m.username} onChange={(e) => up('username', e.target.value.toLowerCase())} placeholder="예: hong.gildong" /></Field>
-            <Field label="임시 비밀번호" hint="6자 이상"><Input id="member-password" value={m.password} onChange={(e) => up('password', e.target.value)} /></Field>
-          </>
-        )}
+        <Field label="아이디" hint={member ? '바꾸면 새 아이디로 로그인합니다. 비밀번호는 그대로입니다' : '영문 소문자·숫자·점, 3~30자'}>
+          <Input id="member-username" value={m.username} onChange={(e) => up('username', e.target.value.toLowerCase().replace(/\s/g, ''))} placeholder="예: hong.gildong" />
+        </Field>
+        {!member && <Field label="임시 비밀번호" hint="6자 이상"><Input id="member-password" value={m.password} onChange={(e) => up('password', e.target.value)} /></Field>}
+        {m.username && !validUser && <p className="text-[12.5px] text-danger sm:col-span-2">아이디는 영문 소문자, 숫자, 점(.), 밑줄, 하이픈으로 3~30자여야 합니다.</p>}
         <div className="sm:col-span-2">
           <Field label="부서">
             <Select id="member-dept" value={m.departmentId} onChange={(e) => up('departmentId', e.target.value)}>
@@ -443,7 +446,7 @@ function DeptsAdmin() {
               <Toggle checked={d.writesSites} onChange={(v) => run(() => api.admin.saveDepartment({ ...d, writesSites: v }))} label="현장 칸" />
               <Toggle checked={d.active} onChange={(v) => run(() => api.admin.saveDepartment({ ...d, active: v }))} label="사용" />
               <div className="flex">
-                <IconButton label="이름 바꾸기" onClick={() => setRenaming({ id: d.id, name: d.name })}><Pencil size={15} /></IconButton>
+                <Button size="sm" tone="ghost" onClick={() => setRenaming({ id: d.id, name: d.name })}><Pencil size={14} />이름 변경</Button>
                 <IconButton label="삭제" onClick={() => run(() => api.admin.deleteDepartment(d.id), `${d.name} 부서를 삭제했습니다`)}><Trash2 size={15} /></IconButton>
               </div>
             </div>

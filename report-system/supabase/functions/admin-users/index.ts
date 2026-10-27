@@ -1,4 +1,4 @@
-// 관리자 전용: 직원 계정 생성, 비밀번호 초기화, 사용 중지
+// 관리자 전용: 직원 계정 생성, 아이디 변경, 비밀번호 초기화, 사용 중지
 // 배포: supabase functions deploy admin-users
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 
@@ -41,6 +41,24 @@ Deno.serve(async (req) => {
     }).select().single();
     if (e2) {
       await service.auth.admin.deleteUser(created.user.id);
+      return json({ error: e2.message }, 400);
+    }
+    return json({ member });
+  }
+
+  if (body.action === 'set_username') {
+    const username = String(body.username ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,30}$/.test(username)) return json({ error: '아이디는 영문 소문자, 숫자, 점(.)으로 3~30자여야 합니다.' }, 400);
+    const { data: taken } = await service.from('members').select('id').eq('username', username).neq('id', body.memberId).maybeSingle();
+    if (taken) return json({ error: '이미 사용 중인 아이디입니다.' }, 400);
+    const { data: before } = await service.from('members').select('username').eq('id', body.memberId).single();
+    if (!before) return json({ error: '인원을 찾을 수 없습니다.' }, 404);
+    const { error } = await service.auth.admin.updateUserById(body.memberId, { email: `${username}@${domain}`, email_confirm: true });
+    if (error) return json({ error: error.message.includes('already') ? '이미 사용 중인 아이디입니다.' : error.message }, 400);
+    const { data: member, error: e2 } = await service.from('members').update({ username }).eq('id', body.memberId).select().single();
+    if (e2) {
+      // 로그인 정보와 인원 정보가 어긋나지 않도록 되돌린다
+      await service.auth.admin.updateUserById(body.memberId, { email: `${before.username}@${domain}`, email_confirm: true });
       return json({ error: e2.message }, 400);
     }
     return json({ member });

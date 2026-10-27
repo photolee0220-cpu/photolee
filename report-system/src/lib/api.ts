@@ -46,6 +46,8 @@ export interface Api {
     setGrants(viewerDepartmentId: string, targetIds: string[]): Promise<Grant[]>;
     createMember(input: NewMemberInput): Promise<Member>;
     updateMember(m: Member): Promise<Member>;
+    /** 로그인 아이디 변경 (비밀번호는 그대로) */
+    changeUsername(memberId: string, username: string): Promise<Member>;
     resetPassword(memberId: string, password: string): Promise<void>;
     saveSettings(s: AppSettings): Promise<AppSettings>;
   };

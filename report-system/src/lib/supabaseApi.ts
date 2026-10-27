@@ -286,6 +286,10 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         check(await sb.from('app_settings').upsert({ key: 'summary_model', value: next.summaryModel, updated_at: new Date().toISOString() }));
         return next;
       },
+      async changeUsername(memberId, username) {
+        const r = await adminCall({ action: 'set_username', memberId, username: username.trim().toLowerCase() });
+        return toMember(r.member);
+      },
       async resetPassword(memberId, password) {
         await adminCall({ action: 'reset_password', memberId, password });
       },

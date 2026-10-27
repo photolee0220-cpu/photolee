@@ -322,6 +322,19 @@ export const demoApi: Api = {
       persist();
       return structuredClone(state.settings);
     },
+    async changeUsername(memberId, username) {
+      requireAdmin();
+      const next = username.trim().toLowerCase();
+      if (!/^[a-z0-9._-]{3,30}$/.test(next)) throw new ApiError('아이디는 영문 소문자, 숫자, 점(.)으로 3~30자여야 합니다.');
+      if (state.members.some((m) => m.username === next && m.id !== memberId)) throw new ApiError('이미 사용 중인 아이디입니다.');
+      const m = state.members.find((x) => x.id === memberId);
+      if (!m) throw new ApiError('인원을 찾을 수 없습니다.');
+      state.passwords[next] = state.passwords[m.username];
+      if (next !== m.username) delete state.passwords[m.username];
+      m.username = next;
+      persist();
+      return structuredClone(m);
+    },
     async resetPassword(memberId, pw) {
       requireAdmin();
       const m = state.members.find((x) => x.id === memberId);
