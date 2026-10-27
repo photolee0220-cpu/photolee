@@ -1,0 +1,12 @@
+name: connectivity-check
+on:
+  push:
+    branches: [claude/pouch-design-handdrawn-CSzwC]
+    paths: [.github/workflows/connectivity-check.yml]
+permissions: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supabase API reachable
+        run: curl -sS -o /dev/null -w "%{http_code}\n" https://api.supabase.com/v1/projects | grep -E "401|200"
