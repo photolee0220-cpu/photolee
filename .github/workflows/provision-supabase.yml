@@ -1,0 +1,159 @@
+# 사닥다리 주간보고 서버를 Supabase에 자동으로 만든다.
+# 필요한 저장소 비밀값: SUPABASE_ACCESS_TOKEN (Supabase 계정 토큰), SETUP_KEY (초기 데이터 복호화 키)
+# 선택: ANTHROPIC_API_KEY (AI 주간 요약)
+# 진행 상황은 gh-pages 브랜치의 _ops/status.json에 남긴다 (비밀값·회사 데이터는 쓰지 않음).
+name: provision-supabase
+on:
+  push:
+    branches: [claude/pouch-design-handdrawn-CSzwC]
+    paths: [report-system/supabase/provision-request.txt]
+permissions:
+  contents: write
+concurrency: provision-supabase
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SETUP_KEY: ${{ secrets.SETUP_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      API: https://api.supabase.com/v1
+      PROJECT_NAME: sadakdari-report
+      ORG_NAME: 사닥다리종합건설
+      REGION: ap-northeast-2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start status log
+        run: |
+          mkdir -p "$RUNNER_TEMP/ops"
+          echo '[]' > "$RUNNER_TEMP/ops/steps.json"
+          cat > "$RUNNER_TEMP/note.sh" <<'EOF'
+          note() { jq --arg s "$1" --arg m "$2" --arg t "$(date -u +%FT%TZ)" '. + [{step:$s,message:$m,at:$t}]' "$RUNNER_TEMP/ops/steps.json" > "$RUNNER_TEMP/ops/s.tmp" && mv "$RUNNER_TEMP/ops/s.tmp" "$RUNNER_TEMP/ops/steps.json"; }
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" "$@"; }
+          EOF
+
+      - name: Check secrets
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          missing=""
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || missing="$missing SUPABASE_ACCESS_TOKEN"
+          [ -n "$SETUP_KEY" ] || missing="$missing SETUP_KEY"
+          if [ -n "$missing" ]; then note secrets "missing:$missing"; exit 1; fi
+          note secrets ok
+
+      - name: Organization
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          orgs=$(api "$API/organizations") || { note organization "list failed: $orgs"; exit 1; }
+          slug=$(echo "$orgs" | jq -r '.[0].slug // empty')
+          if [ -z "$slug" ]; then
+            created=$(api -X POST "$API/organizations" -d "$(jq -n --arg n "$ORG_NAME" '{name:$n}')") || { note organization "create failed: $created"; exit 1; }
+            slug=$(echo "$created" | jq -r '.slug')
+            note organization "created $slug"
+          else
+            note organization "using $slug ($(echo "$orgs" | jq -r '.[0].name'))"
+          fi
+          echo "ORG_SLUG=$slug" >> "$GITHUB_ENV"
+
+      - name: Project
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          projects=$(api "$API/projects") || { note project "list failed: $projects"; exit 1; }
+          ref=$(echo "$projects" | jq -r --arg n "$PROJECT_NAME" '[.[] | select(.name == $n)][0].ref // empty')
+          if [ -z "$ref" ]; then
+            dbpass=$(openssl rand -base64 30 | tr -dc 'A-Za-z0-9' | head -c 32)
+            echo "::add-mask::$dbpass"
+            body=$(jq -n --arg n "$PROJECT_NAME" --arg o "$ORG_SLUG" --arg p "$dbpass" --arg r "$REGION" '{name:$n, organization_slug:$o, db_pass:$p, region:$r}')
+            created=$(api -X POST "$API/projects" -d "$body") || { note project "create failed: $created"; exit 1; }
+            ref=$(echo "$created" | jq -r '.ref // .id')
+            note project "created $ref"
+          else
+            note project "using existing $ref"
+          fi
+          echo "PROJECT_REF=$ref" >> "$GITHUB_ENV"
+          for i in $(seq 1 60); do
+            status=$(api "$API/projects/$ref" | jq -r '.status' || echo UNKNOWN)
+            [ "$status" = "ACTIVE_HEALTHY" ] && break
+            sleep 15
+          done
+          note project "status $status"
+          [ "$status" = "ACTIVE_HEALTHY" ] || exit 1
+          # 데이터베이스가 막 켜진 직후 연결이 불안정할 수 있어 잠시 기다린다
+          sleep 20
+
+      - name: Database setup
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          check=$(api -X POST "$API/projects/$PROJECT_REF/database/query" -d '{"query":"select to_regclass('"'"'public.members'"'"') is not null as ready"}') || { note database "check failed: $check"; exit 1; }
+          if [ "$(echo "$check" | jq -r '.[0].ready')" = "true" ]; then
+            note database "already set up, skipped"
+          else
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in report-system/supabase/setup.sql.enc -out "$RUNNER_TEMP/setup.sql" -pass env:SETUP_KEY || { note database "decrypt failed (SETUP_KEY 확인)"; exit 1; }
+            jq -n --rawfile q "$RUNNER_TEMP/setup.sql" '{query:$q}' > "$RUNNER_TEMP/body.json"
+            for attempt in 1 2 3; do
+              if res=$(api -X POST "$API/projects/$PROJECT_REF/database/query" --data-binary @"$RUNNER_TEMP/body.json"); then break; fi
+              note database "attempt $attempt failed: $(echo "$res" | head -c 400)"
+              sleep 20
+            done
+            rm -f "$RUNNER_TEMP/setup.sql" "$RUNNER_TEMP/body.json"
+            done_msg=$(echo "$res" | jq -r 'if type=="array" then (.[-1] | tostring) else tostring end' 2>/dev/null | head -c 300)
+            echo "$done_msg" | grep -q "설정 완료" || { note database "unexpected result: $done_msg"; exit 1; }
+            note database "$done_msg"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+
+      - name: Server functions
+        working-directory: report-system
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          [ -f supabase/config.toml ] || printf 'project_id = "sadakdari-report"\n' > supabase/config.toml
+          for fn in admin-users weekly-summary; do
+            if out=$(supabase functions deploy "$fn" --project-ref "$PROJECT_REF" 2>&1); then note "function:$fn" deployed; else note "function:$fn" "deploy failed: $(echo "$out" | tail -c 400)"; exit 1; fi
+          done
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            supabase secrets set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" --project-ref "$PROJECT_REF" >/dev/null && note secrets:anthropic set
+          else
+            note secrets:anthropic "not provided (AI 요약은 키를 넣은 뒤 사용)"
+          fi
+
+      - name: Public key
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          keys=$(api "$API/projects/$PROJECT_REF/api-keys?reveal=true") || { note keys "failed"; exit 1; }
+          anon=$(echo "$keys" | jq -r '[.[] | select(.name == "anon")][0].api_key // empty')
+          [ -n "$anon" ] || anon=$(echo "$keys" | jq -r '[.[] | select(.type == "publishable")][0].api_key // empty')
+          [ -n "$anon" ] || { note keys "no public key found"; exit 1; }
+          echo "ANON_KEY=$anon" >> "$GITHUB_ENV"
+          note keys "public key ready"
+
+      - name: Connect website
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          git fetch origin gh-pages
+          git worktree add "$RUNNER_TEMP/site" origin/gh-pages
+          cat > "$RUNNER_TEMP/site/config.js" <<EOF
+          // 서버 연결 정보 (자동 설정). 공개용 값입니다.
+          window.__SADAK_CONFIG__ = {
+            supabaseUrl: 'https://$PROJECT_REF.supabase.co',
+            supabaseAnonKey: '$ANON_KEY',
+          };
+          EOF
+          note website "connected to https://$PROJECT_REF.supabase.co"
+
+      - name: Publish status
+        if: always()
+        run: |
+          [ -d "$RUNNER_TEMP/site" ] || { git fetch origin gh-pages && git worktree add "$RUNNER_TEMP/site" origin/gh-pages; }
+          mkdir -p "$RUNNER_TEMP/site/_ops"
+          jq -n --arg result "${{ job.status }}" --arg ref "${PROJECT_REF:-}" --slurpfile steps "$RUNNER_TEMP/ops/steps.json" --arg run "$GITHUB_RUN_ID" \
+            '{result:$result, project_ref:$ref, run:$run, steps:$steps[0]}' > "$RUNNER_TEMP/site/_ops/status.json"
+          cd "$RUNNER_TEMP/site"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "provision: status ${{ job.status }}" || exit 0
+          git push origin HEAD:gh-pages
