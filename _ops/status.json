@@ -1,0 +1,12 @@
+{
+  "result": "failure",
+  "project_ref": "",
+  "run": "40453331633",
+  "steps": [
+    {
+      "step": "secrets",
+      "message": "missing: SUPABASE_ACCESS_TOKEN SETUP_KEY",
+      "at": "2026-10-27T05:05:34Z"
+    }
+  ]
+}
