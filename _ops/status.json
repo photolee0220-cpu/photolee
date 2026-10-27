@@ -1,57 +1,57 @@
 {
   "result": "success",
   "project_ref": "hwpkxybtglkbxpaihfzl",
-  "run": "40464334990",
+  "run": "40481209252",
   "steps": [
     {
       "step": "secrets",
       "message": "ok",
-      "at": "2026-10-27T06:59:05Z"
+      "at": "2026-10-27T09:29:55Z"
     },
     {
       "step": "organization",
-      "message": "created keugwxbvqwqbihrskrfi",
-      "at": "2026-10-27T06:59:12Z"
+      "message": "using keugwxbvqwqbihrskrfi (사닥다리종합건설)",
+      "at": "2026-10-27T09:29:55Z"
     },
     {
       "step": "project",
-      "message": "created hwpkxybtglkbxpaihfzl",
-      "at": "2026-10-27T06:59:19Z"
+      "message": "using existing hwpkxybtglkbxpaihfzl",
+      "at": "2026-10-27T09:29:56Z"
     },
     {
       "step": "project",
       "message": "status ACTIVE_HEALTHY",
-      "at": "2026-10-27T06:59:20Z"
+      "at": "2026-10-27T09:29:56Z"
     },
     {
       "step": "database",
-      "message": "{\"결과\":\"설정 완료: 부서 12, 계정 16, 현장 22, 보고 41\"}",
-      "at": "2026-10-27T06:59:44Z"
+      "message": "already set up, skipped",
+      "at": "2026-10-27T09:30:17Z"
     },
     {
       "step": "function:admin-users",
       "message": "deployed",
-      "at": "2026-10-27T07:00:23Z"
+      "at": "2026-10-27T09:30:49Z"
     },
     {
       "step": "function:weekly-summary",
       "message": "deployed",
-      "at": "2026-10-27T07:00:27Z"
+      "at": "2026-10-27T09:30:52Z"
     },
     {
       "step": "secrets:anthropic",
       "message": "not provided (AI 요약은 키를 넣은 뒤 사용)",
-      "at": "2026-10-27T07:00:27Z"
+      "at": "2026-10-27T09:30:52Z"
     },
     {
       "step": "keys",
       "message": "public key ready",
-      "at": "2026-10-27T07:00:28Z"
+      "at": "2026-10-27T09:30:53Z"
     },
     {
       "step": "website",
       "message": "connected to https://hwpkxybtglkbxpaihfzl.supabase.co",
-      "at": "2026-10-27T07:00:29Z"
+      "at": "2026-10-27T09:30:54Z"
     }
   ]
 }
