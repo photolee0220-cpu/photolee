@@ -1,5 +1,5 @@
-// 서버 연결 정보 (Supabase 프로젝트 설정 > API). 둘 다 공개되어도 되는 값입니다.
+// 서버 연결 정보 (자동 설정). 공개용 값입니다.
 window.__SADAK_CONFIG__ = {
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://hwpkxybtglkbxpaihfzl.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3cGt4eWJ0Z2xrYnhwYWloZnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwNzYxODMsImV4cCI6MjEwODY1MjE4M30.Eug3dKUqKSnYUcmxP491ZNoofA_AuRlg5IImGDaNIAA',
 };
