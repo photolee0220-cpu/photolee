@@ -20,6 +20,12 @@ npm run build:artifact   # 체험판 단일 HTML (Claude 아티팩트용)
    - `supabase secrets set ANTHROPIC_API_KEY=...` 후 `supabase functions deploy weekly-summary` (AI 주간 요약. 기본 모델 Claude Haiku 5.5, 관리자 페이지 > AI 설정에서 변경)
 4. `.env.example`을 `.env`로 복사해 URL·키 입력, Vercel에도 같은 값으로 배포
 
+## 화면 수정 배포
+
+```bash
+report-system/scripts/deploy-pages.sh "변경 내용"   # gh-pages에 올림, 서버 연결 정보(config.js)는 유지
+```
+
 ## 기존 엑셀 가져오기
 
 ```bash
