@@ -18,7 +18,7 @@ type SortKey = 'order' | 'progress' | 'due';
 
 export function Dashboard() {
   const { snap, loading, me, weekId, openDrawer, saveDirective, setView } = useStore();
-  const [stage, setStage] = useState<Stage | 'all'>('all');
+  const [stage, setStage] = useState<Stage | 'all'>('construction');
   const [sort, setSort] = useState<SortKey>('order');
   const [tag, setTag] = useState<string | null>(null);
   const exportWeek = useExport();
