@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
 import { dueInfo } from '../../components/SiteCard';
 import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal, Segmented, Select, Spinner, StageChip, Toggle } from '../../components/ui';
-import { newId, type WeekSummary } from '../../lib/api';
+import { newId, type SiteHistoryItem, type WeekSummary } from '../../lib/api';
 import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes } from '../../lib/fileTypes';
@@ -89,6 +89,7 @@ function SitesAdmin() {
   const [filter, setFilter] = useState<Stage | 'archived'>('construction');
   const [editing, setEditing] = useState<Site | null>(null);
   const [managing, setManaging] = useState(false);
+  const [deleting, setDeleting] = useState<Site | null>(null);
   if (!snap) return <Spinner />;
   const all = [...snap.sites].sort((a, b) => a.sort - b.sort);
   const list = all.filter((s) => (filter === 'archived' ? s.archived : !s.archived && s.stage === filter));
@@ -141,7 +142,10 @@ function SitesAdmin() {
               </div>
               <div className="flex gap-1.5">
                 {s.archived ? (
-                  <Button size="sm" onClick={() => run(() => api.admin.saveSite({ ...s, archived: false }), '현장을 다시 꺼냈습니다')}><ArchiveRestore size={14} />다시 꺼내기</Button>
+                  <>
+                    <Button size="sm" onClick={() => run(() => api.admin.saveSite({ ...s, archived: false }), '현장을 다시 꺼냈습니다')}><ArchiveRestore size={14} />다시 꺼내기</Button>
+                    <IconButton label="현장 삭제" onClick={() => setDeleting(s)} className="hover:text-danger"><Trash2 size={15} /></IconButton>
+                  </>
                 ) : (
                   <>
                     {isBuildStage(s.stage) && !isCompleted(s) && (
@@ -150,6 +154,7 @@ function SitesAdmin() {
                       </Button>
                     )}
                     <Button size="sm" onClick={() => setEditing(s)}><Pencil size={14} />수정</Button>
+                    <IconButton label="현장 삭제" onClick={() => setDeleting(s)} className="hover:text-danger"><Trash2 size={15} /></IconButton>
                   </>
                 )}
               </div>
@@ -159,7 +164,42 @@ function SitesAdmin() {
       )}
       {editing && <SiteForm site={editing} onClose={() => setEditing(null)} />}
       {managing && <StagesModal onClose={() => setManaging(false)} />}
+      {deleting && <DeleteSiteModal site={deleting} onClose={() => setDeleting(null)} />}
     </div>
+  );
+}
+
+/** 현장 영구 삭제. 기록이 모두 지워지므로 현장 이름을 입력해야 지울 수 있다 */
+function DeleteSiteModal({ site, onClose }: { site: Site; onClose(): void }) {
+  const { run, busy } = useRun();
+  const [typed, setTyped] = useState('');
+  const [history, setHistory] = useState<SiteHistoryItem[] | null>(null);
+  useEffect(() => { api.siteHistory(site.id).then(setHistory).catch(() => setHistory([])); }, [site.id]);
+  const entries = history?.reduce((n, h) => n + h.entries.length, 0) ?? 0;
+  const photos = history?.reduce((n, h) => n + h.photos.length, 0) ?? 0;
+  const ok = typed.trim() === site.name.trim();
+
+  return (
+    <Modal open onClose={() => !busy && onClose()} title="현장 삭제" width={500}
+      footer={<>
+        <Button onClick={onClose} disabled={busy}>취소</Button>
+        <Button tone="danger" disabled={!ok || busy} onClick={async () => { if (await run(() => api.admin.deleteSite(site.id), `${site.name} 현장을 삭제했습니다`)) onClose(); }}>
+          {busy ? <Spinner /> : <Trash2 size={15} />}영구 삭제
+        </Button>
+      </>}>
+      <div className="space-y-3 text-[14px] leading-[1.7]">
+        <p><b>{site.name}</b> 현장과 이 현장의 <b className="text-danger">모든 주차 기록</b>을 지웁니다. 지운 뒤에는 되살릴 수 없습니다.</p>
+        <div className="rounded-xl bg-sunken px-3.5 py-2.5 text-[13px] text-ink-2">
+          {history == null ? <Spinner /> : history.length === 0 ? '남아 있는 보고 기록이 없습니다.' : (
+            <>함께 지워지는 것: {history.length}주치 기록 · 부서 보고 {entries}칸 · 사진 {photos}장 · 대표님 지시·피드백·첨부파일</>
+          )}
+        </div>
+        <p className="text-[13px] text-ink-3">기록을 남겨두고 목록에서만 빼려면 삭제 대신 <b className="text-ink-2">수정 → 보관함으로</b>를 쓰세요.</p>
+        <Field label={`확인을 위해 현장 이름 "${site.name}"을 입력하세요`}>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={site.name} autoFocus />
+        </Field>
+      </div>
+    </Modal>
   );
 }
 

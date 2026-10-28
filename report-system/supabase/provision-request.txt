@@ -1,1 +1,1 @@
-apply migration 0005 2026-10-28T08:00:00Z
+apply migration 0006 2026-10-28T08:49:37Z

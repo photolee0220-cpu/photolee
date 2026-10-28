@@ -45,6 +45,8 @@ export interface Api {
 
   admin: {
     saveSite(site: Site): Promise<Site>;
+    /** 현장과 그 현장의 모든 주차 기록(보고·지시·피드백·사진·첨부)을 영구 삭제 */
+    deleteSite(id: string): Promise<void>;
     saveStage(stage: StageDef): Promise<StageDef>;
     /** 현장이 남아 있는 단계는 지울 수 없다 */
     deleteStage(id: string): Promise<void>;

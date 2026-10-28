@@ -301,6 +301,20 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           : check(await sb.from('sites').update(row).eq('id', site.id).select().single());
         return toSite(r);
       },
+      async deleteSite(id) {
+        // 저장소 파일을 먼저 지우고 기록을 지운다 (반대로 하면 주인 없는 파일이 남는다)
+        const [ph, at] = await Promise.all([
+          sb.from('photos').select('storage_path').eq('site_id', id),
+          sb.from('attachments').select('storage_path').eq('site_id', id),
+        ]);
+        for (const [bucket, rows] of [[BUCKET, check(ph) as Row[]], [FILES, check(at) as Row[]]] as const) {
+          for (let i = 0; i < rows.length; i += 100) {
+            const rm = await sb.storage.from(bucket).remove(rows.slice(i, i + 100).map((r) => r.storage_path));
+            if (rm.error) throw new ApiError(`파일을 지우는 중 멈췄습니다: ${rm.error.message}`);
+          }
+        }
+        check(await sb.rpc('delete_site', { p_site: id }));
+      },
       async saveStage(st) {
         const row = { id: st.id, short: st.short.trim(), label: st.label.trim() || st.short.trim(), sort: st.sort };
         const r = await sb.from('stages').upsert(row).select().single();

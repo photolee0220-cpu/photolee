@@ -339,6 +339,17 @@ export const demoApi: Api = {
       persist();
       return structuredClone(site);
     },
+    async deleteSite(id) {
+      requireAdmin();
+      const gone = new Set(state.entries.filter((e) => e.siteId === id).map((e) => e.id));
+      state.comments = state.comments.filter((c) => !gone.has(c.entryId));
+      state.entries = state.entries.filter((e) => e.siteId !== id);
+      state.directives = state.directives.filter((d) => d.siteId !== id);
+      state.photos = state.photos.filter((p) => p.siteId !== id);
+      state.attachments = state.attachments.filter((a) => a.siteId !== id);
+      state.sites = state.sites.filter((s) => s.id !== id);
+      persist();
+    },
     async saveStage(st) {
       requireAdmin();
       if (!st.short.trim()) throw new ApiError('단계 이름을 입력해 주세요.');

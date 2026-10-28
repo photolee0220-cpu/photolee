@@ -99,6 +99,13 @@ jobs:
           ins=$(curl -sS -X POST "$URL/rest/v1/stages" "${H[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" -d "{\"id\":\"$sid\",\"label\":\"점검용\",\"short\":\"점검용\",\"sort\":99}")
           del=$(curl -sS -X DELETE "$URL/rest/v1/stages?id=eq.$sid" "${H[@]}" -H "Prefer: return=representation")
           echo "$ins" | jq -e 'length == 1' >/dev/null && echo "$del" | jq -e 'length == 1' >/dev/null && rec "관리자: 단계 추가·삭제" 1 "ok (점검용 단계 지움)" || rec "관리자: 단계 추가·삭제" 0 "ins=$(echo "$ins" | head -c 100) del=$(echo "$del" | head -c 100)"
+          # 0006: 관리자 현장 삭제 (점검용 현장을 만들고 바로 지운다)
+          site=$(curl -sS -X POST "$URL/rest/v1/sites" "${H[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" \
+            -d '{"name":"점검용 임시 현장","note":"","stage":"sales","due_text":"미정","process":"","scale":"","tags":[],"sort":9999,"archived":true}')
+          TSID=$(echo "$site" | jq -r '.[0].id // empty')
+          dr=$(curl -sS -X POST "$URL/rest/v1/rpc/delete_site" "${H[@]}" -H "Content-Type: application/json" -d "{\"p_site\":\"$TSID\"}")
+          left=$(curl -sS "$URL/rest/v1/sites?select=id&id=eq.$TSID" "${H[@]}" | jq 'length')
+          [ -n "$TSID" ] && [ "$left" = 0 ] && rec "관리자: 현장 삭제" 1 "점검용 현장 만들고 삭제 $(echo "$dr" | jq -c .)" || rec "관리자: 현장 삭제" 0 "id=$TSID dr=$(echo "$dr" | head -c 120) left=$left"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()
