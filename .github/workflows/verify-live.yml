@@ -11,7 +11,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      SETUP_KEY: ${{ secrets.SETUP_KEY }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SITE: https://photolee0220-cpu.github.io/photolee
     steps:
       - uses: actions/checkout@v4
@@ -27,13 +27,18 @@ jobs:
           [ -n "$URL" ] && [ -n "$ANON" ] && rec "웹사이트 연결 정보" 1 "$URL" || rec "웹사이트 연결 정보" 0 "config.js에 서버 정보 없음"
           code=$(curl -s -o /dev/null -w "%{http_code}" "$SITE/")
           [ "$code" = 200 ] && rec "웹사이트 열림" 1 "HTTP $code" || rec "웹사이트 열림" 0 "HTTP $code"
-          PW=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in report-system/supabase/smoke.enc -pass env:SETUP_KEY)
-          echo "::add-mask::$PW"
-          tok=$(curl -sS "$URL/auth/v1/token?grant_type=password" -H "apikey: $ANON" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg p "$PW" '{email:"admin@sadakdari-report.app", password:$p}')")
+          # 비밀번호 없이 관리자 일회용 로그인: 서버 관리 키로 로그인 코드를 만들어 바로 사용한다 (비밀번호는 바뀌지 않음)
+          REF=$(echo "$URL" | sed -E 's#https://([a-z0-9]+)\.supabase\.co#\1#')
+          SRV=$(curl -sS "https://api.supabase.com/v1/projects/$REF/api-keys" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq -r '.[] | select(.name == "service_role") | .api_key')
+          echo "::add-mask::$SRV"
+          link=$(curl -sS -X POST "$URL/auth/v1/admin/generate_link" -H "apikey: $SRV" -H "Authorization: Bearer $SRV" -H "Content-Type: application/json" \
+            -d '{"type":"magiclink","email":"admin@sadakdari-report.app"}')
+          TH=$(echo "$link" | jq -r '.hashed_token // .properties.hashed_token // empty')
+          echo "::add-mask::$TH"
+          tok=$(curl -sS -X POST "$URL/auth/v1/verify" -H "apikey: $ANON" -H "Content-Type: application/json" -d "$(jq -n --arg t "$TH" '{type:"magiclink", token_hash:$t}')")
           AT=$(echo "$tok" | jq -r '.access_token // empty')
           echo "::add-mask::$AT"
-          [ -n "$AT" ] && rec "관리자 로그인" 1 "ok" || rec "관리자 로그인" 0 "$(echo "$tok" | jq -c '{code,error_code,msg}' 2>/dev/null | head -c 200)"
+          [ -n "$AT" ] && rec "관리자 로그인" 1 "ok" || rec "관리자 로그인" 0 "link=$(echo "$link" | jq -c '{code,error_code,msg}' 2>/dev/null | head -c 120) verify=$(echo "$tok" | jq -c '{code,error_code,msg}' 2>/dev/null | head -c 120)"
           H=(-H "apikey: $ANON" -H "Authorization: Bearer $AT")
           n=$(curl -sS "$URL/rest/v1/members?select=id" "${H[@]}" | jq 'length')
           [ "$n" -ge 16 ] && rec "인원 목록" 1 "$n명" || rec "인원 목록" 0 "$n"
