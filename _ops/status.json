@@ -1,57 +1,67 @@
 {
   "result": "success",
   "project_ref": "hwpkxybtglkbxpaihfzl",
-  "run": "40481209252",
+  "run": "40623565900",
   "steps": [
     {
       "step": "secrets",
       "message": "ok",
-      "at": "2026-10-27T09:29:55Z"
+      "at": "2026-10-28T02:53:44Z"
     },
     {
       "step": "organization",
       "message": "using keugwxbvqwqbihrskrfi (사닥다리종합건설)",
-      "at": "2026-10-27T09:29:55Z"
+      "at": "2026-10-28T02:53:44Z"
     },
     {
       "step": "project",
       "message": "using existing hwpkxybtglkbxpaihfzl",
-      "at": "2026-10-27T09:29:56Z"
+      "at": "2026-10-28T02:53:44Z"
     },
     {
       "step": "project",
       "message": "status ACTIVE_HEALTHY",
-      "at": "2026-10-27T09:29:56Z"
+      "at": "2026-10-28T02:53:44Z"
     },
     {
       "step": "database",
       "message": "already set up, skipped",
-      "at": "2026-10-27T09:30:17Z"
+      "at": "2026-10-28T02:54:06Z"
+    },
+    {
+      "step": "migration:0004_attachments.sql",
+      "message": "applied",
+      "at": "2026-10-28T02:54:09Z"
+    },
+    {
+      "step": "migrations",
+      "message": "1 applied",
+      "at": "2026-10-28T02:54:09Z"
     },
     {
       "step": "function:admin-users",
       "message": "deployed",
-      "at": "2026-10-27T09:30:49Z"
+      "at": "2026-10-28T02:54:33Z"
     },
     {
       "step": "function:weekly-summary",
       "message": "deployed",
-      "at": "2026-10-27T09:30:52Z"
+      "at": "2026-10-28T02:54:36Z"
     },
     {
       "step": "secrets:anthropic",
       "message": "not provided (AI 요약은 키를 넣은 뒤 사용)",
-      "at": "2026-10-27T09:30:52Z"
+      "at": "2026-10-28T02:54:36Z"
     },
     {
       "step": "keys",
       "message": "public key ready",
-      "at": "2026-10-27T09:30:53Z"
+      "at": "2026-10-28T02:54:37Z"
     },
     {
       "step": "website",
       "message": "connected to https://hwpkxybtglkbxpaihfzl.supabase.co",
-      "at": "2026-10-27T09:30:54Z"
+      "at": "2026-10-28T02:54:37Z"
     }
   ]
 }
