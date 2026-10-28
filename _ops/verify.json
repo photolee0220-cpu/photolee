@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-28T02:57:10Z",
+  "at": "2026-10-28T08:02:44Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -24,12 +24,12 @@
     {
       "check": "보고 칸",
       "ok": true,
-      "detail": "45칸"
+      "detail": "48칸"
     },
     {
       "check": "현장",
-      "ok": true,
-      "detail": "22곳"
+      "ok": false,
+      "detail": "23"
     },
     {
       "check": "로그인 안 한 사람 차단",
@@ -89,12 +89,42 @@
     {
       "check": "저장 공간 사용량",
       "ok": true,
-      "detail": "{\"report-files\":29,\"site-photos\":127043}"
+      "detail": "{\"report-files\":100891,\"site-photos\":127043}"
     },
     {
       "check": "첨부파일 지우기(점검 흔적 정리)",
       "ok": true,
       "detail": "ok"
+    },
+    {
+      "check": "현장 단계 목록",
+      "ok": true,
+      "detail": "[\"공사진행\",\"CM\",\"영업\"]"
+    },
+    {
+      "check": "기타사항 → 부서 업무보고로 이동",
+      "ok": true,
+      "detail": "남은 기타사항 0건"
+    },
+    {
+      "check": "옮겨진 기타사항",
+      "ok": true,
+      "detail": "부서 업무보고 4건에 '■ 기타사항'"
+    },
+    {
+      "check": "현장 작성 여부(내용 없이)",
+      "ok": true,
+      "detail": "28칸, 내용 필드 없음: true"
+    },
+    {
+      "check": "작성 여부: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "거절됨"
+    },
+    {
+      "check": "관리자: 단계 추가·삭제",
+      "ok": true,
+      "detail": "ok (점검용 단계 지움)"
     }
   ]
 }
