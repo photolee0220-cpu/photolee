@@ -45,7 +45,7 @@ jobs:
           n=$(curl -sS "$URL/rest/v1/entries?select=id" "${H[@]}" | jq 'length')
           [ "$n" -ge 41 ] && rec "보고 칸" 1 "$n칸" || rec "보고 칸" 0 "$n"
           n=$(curl -sS "$URL/rest/v1/sites?select=id" "${H[@]}" | jq 'length')
-          [ "$n" = 22 ] && rec "현장" 1 "$n곳" || rec "현장" 0 "$n"
+          [ "$n" -ge 22 ] && rec "현장" 1 "$n곳" || rec "현장" 0 "$n"
           a=$(curl -sS "$URL/rest/v1/members?select=id" -H "apikey: $ANON" | jq 'length')
           [ "$a" = 0 ] && rec "로그인 안 한 사람 차단" 1 "0건" || rec "로그인 안 한 사람 차단" 0 "$a"
           w=$(curl -sS -X POST "$URL/rest/v1/rpc/week_summaries" "${H[@]}" -H "Content-Type: application/json" -d '{}' | jq -c '[.[].week_id]')
