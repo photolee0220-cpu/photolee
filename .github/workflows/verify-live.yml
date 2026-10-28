@@ -84,6 +84,21 @@ jobs:
           del=$(curl -sS -X DELETE "$URL/storage/v1/object/report-files" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg p "$FP" '{prefixes:[$p]}')")
           left=$(curl -sS "$URL/rest/v1/attachments?select=id&week_id=eq.2026-11-02&file_name=eq.%EC%A0%90%EA%B2%80%EC%9A%A9.pdf" "${H[@]}" | jq 'length')
           echo "$del" | jq -e 'length == 1' >/dev/null && [ "$left" = 0 ] && rec "첨부파일 지우기(점검 흔적 정리)" 1 "ok" || rec "첨부파일 지우기(점검 흔적 정리)" 0 "$(echo "$del" | head -c 150) left=$left"
+          # 0005: 단계, 기타사항 통합, 현장 작성 여부
+          st=$(curl -sS "$URL/rest/v1/stages?select=short&order=sort" "${H[@]}")
+          echo "$st" | jq -e 'length >= 3' >/dev/null && rec "현장 단계 목록" 1 "$(echo "$st" | jq -c 'map(.short)')" || rec "현장 단계 목록" 0 "$(echo "$st" | head -c 200)"
+          m=$(curl -sS "$URL/rest/v1/entries?select=id&kind=eq.misc" "${H[@]}" | jq 'length')
+          [ "$m" = 0 ] && rec "기타사항 → 부서 업무보고로 이동" 1 "남은 기타사항 0건" || rec "기타사항 → 부서 업무보고로 이동" 0 "$m건 남음"
+          f=$(curl -sS "$URL/rest/v1/entries?select=id&kind=eq.dept&content=like.*%E2%96%A0%20%EA%B8%B0%ED%83%80%EC%82%AC%ED%95%AD*" "${H[@]}" | jq 'length')
+          rec "옮겨진 기타사항" 1 "부서 업무보고 ${f}건에 '■ 기타사항'"
+          ss=$(curl -sS -X POST "$URL/rest/v1/rpc/site_report_status" "${H[@]}" -H "Content-Type: application/json" -d '{"p_week":"2026-10-26"}')
+          echo "$ss" | jq -e 'type == "array" and length > 0' >/dev/null && rec "현장 작성 여부(내용 없이)" 1 "$(echo "$ss" | jq 'length')칸, 내용 필드 없음: $(echo "$ss" | jq '.[0] | has("content") | not')" || rec "현장 작성 여부(내용 없이)" 0 "$(echo "$ss" | head -c 200)"
+          a=$(curl -sS -X POST "$URL/rest/v1/rpc/site_report_status" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"p_week":"2026-10-26"}')
+          echo "$a" | jq -e 'type == "array"' >/dev/null && rec "작성 여부: 로그인 안 한 사람 차단" 0 "$(echo "$a" | head -c 120)" || rec "작성 여부: 로그인 안 한 사람 차단" 1 "거절됨"
+          sid="st_verify_$(date +%s)"
+          ins=$(curl -sS -X POST "$URL/rest/v1/stages" "${H[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" -d "{\"id\":\"$sid\",\"label\":\"점검용\",\"short\":\"점검용\",\"sort\":99}")
+          del=$(curl -sS -X DELETE "$URL/rest/v1/stages?id=eq.$sid" "${H[@]}" -H "Prefer: return=representation")
+          echo "$ins" | jq -e 'length == 1' >/dev/null && echo "$del" | jq -e 'length == 1' >/dev/null && rec "관리자: 단계 추가·삭제" 1 "ok (점검용 단계 지움)" || rec "관리자: 단계 추가·삭제" 0 "ins=$(echo "$ins" | head -c 100) del=$(echo "$del" | head -c 100)"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()
