@@ -31,10 +31,11 @@ export default {
         'danger-soft': v('danger-soft'),
       },
       boxShadow: {
-        card: '0 1px 2px rgb(var(--shadow) / 0.06), 0 1px 1px rgb(var(--shadow) / 0.03)',
-        pop: '0 12px 32px -8px rgb(var(--shadow) / 0.22), 0 2px 6px rgb(var(--shadow) / 0.08)',
+        card: '0 1px 2px rgb(var(--shadow) / 0.04), 0 2px 8px -4px rgb(var(--shadow) / 0.06)',
+        pop: '0 16px 40px -12px rgb(var(--shadow) / 0.2), 0 2px 8px rgb(var(--shadow) / 0.06)',
       },
       borderRadius: { xl: '14px', '2xl': '18px' },
+      fontSize: { base: ['14.5px', '1.6'] },
       keyframes: {
         'slide-in': { from: { transform: 'translateX(24px)', opacity: '0' }, to: { transform: 'none', opacity: '1' } },
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },

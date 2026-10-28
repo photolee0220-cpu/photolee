@@ -46,7 +46,7 @@ export function TableView() {
           return (
             <section key={stage.id}>
               <h2 className="mb-2 text-[15px] font-bold">{stage.label} <span className="text-ink-3">{list.length}</span></h2>
-              <div className="max-h-[75vh] overflow-auto rounded-xl border border-line bg-surface shadow-card scrollbar-thin">
+              <div className="max-h-[75vh] overflow-auto rounded-2xl border border-line bg-surface shadow-card scrollbar-thin">
                 <table className="w-max min-w-full border-separate border-spacing-0">
                   <thead>
                     <tr>
@@ -83,7 +83,7 @@ export function TableView() {
 
         <section>
           <h2 className="mb-2 text-[15px] font-bold">기타사항</h2>
-          <div role="button" tabIndex={0} onClick={() => openDrawer({ type: 'misc' })} onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'misc' })} className="w-full cursor-pointer overflow-x-auto rounded-xl border border-line bg-surface text-left shadow-card hover:border-line-strong">
+          <div role="button" tabIndex={0} onClick={() => openDrawer({ type: 'misc' })} onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'misc' })} className="w-full cursor-pointer overflow-x-auto rounded-2xl border border-line bg-surface text-left shadow-card hover:border-line-strong">
             <table className="w-max min-w-full border-separate border-spacing-0">
               <thead>
                 <tr>
@@ -107,7 +107,7 @@ export function TableView() {
 
         <section>
           <h2 className="mb-2 text-[15px] font-bold">현장 외 부서별 보고</h2>
-          <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-card">
+          <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-card">
             <table className="w-full min-w-[760px] border-separate border-spacing-0">
               <thead>
                 <tr>

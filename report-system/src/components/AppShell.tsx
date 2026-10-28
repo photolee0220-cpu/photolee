@@ -2,6 +2,8 @@ import {
   CalendarRange, ChevronLeft, ChevronRight, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Table2, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import logoDiscUrl from '../assets/logo-disc.png';
+import logoUrl from '../assets/logo.png';
 import { api } from '../lib/client';
 import { byId, has, personEntry } from '../lib/derive';
 import { STAGES } from '../lib/types';
@@ -180,57 +182,60 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-full flex-col">
       {api.mode === 'demo' && <DemoBar />}
       <div className="flex min-h-0 flex-1">
-        <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-surface px-3 py-4 lg:flex">
-          <div className="flex items-center gap-2.5 px-2 pb-4">
-            <Logo />
-            <div className="leading-tight">
-              <p className="text-[15px] font-extrabold tracking-[-0.02em]">사닥다리</p>
-              <p className="text-[12px] text-ink-3">주간보고</p>
+        <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line bg-surface lg:flex">
+          <div className="flex items-center gap-3 px-5 pb-5 pt-6">
+            <Logo size={44} />
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[15px] font-bold tracking-[-0.02em]">사닥다리종합건설</p>
+              <p className="mt-0.5 text-[12.5px] font-medium text-ink-3">주간보고</p>
             </div>
           </div>
-          <button onClick={() => setSearchOpen(true)} className="mb-3 flex h-9 items-center gap-2 rounded-lg border border-line bg-sunken px-2.5 text-[13px] text-ink-3 hover:border-line-strong">
-            <Search size={15} />검색<kbd className="ml-auto text-[11px]">Ctrl K</kbd>
-          </button>
-          <nav className="flex flex-col gap-0.5">
+          <div className="px-3">
+            <button onClick={() => setSearchOpen(true)} className="flex h-9 w-full items-center gap-2 rounded-lg bg-sunken px-3 text-[13px] text-ink-3 transition-colors hover:text-ink-2">
+              <Search size={15} />현장·사람 검색<kbd className="ml-auto font-sans text-[11px]">Ctrl K</kbd>
+            </button>
+          </div>
+          <nav className="mt-4 flex flex-col gap-0.5 px-3">
             {items.map((it) => (
               <button key={it.id} onClick={() => setView(it.id)}
-                className={cx('flex h-10 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-semibold transition-colors',
-                  view === it.id ? 'bg-brand-soft text-brand-ink' : 'text-ink-2 hover:bg-sunken hover:text-ink')}>
+                className={cx('flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium transition-colors',
+                  view === it.id ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-ink-2 hover:bg-sunken hover:text-ink')}>
                 {it.icon}{it.label}
               </button>
             ))}
             {me.isAdmin && (
-              <button onClick={() => setView('admin')}
-                className="mt-3 flex h-10 items-center gap-2.5 rounded-lg border border-dashed border-line-strong px-2.5 text-[14px] font-semibold text-ink-2 hover:bg-sunken">
-                <Settings size={18} />관리자 페이지
-              </button>
+              <>
+                <div className="mx-3 my-3 h-px bg-line" />
+                <button onClick={() => setView('admin')}
+                  className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
+                  <Settings size={18} />관리자 페이지
+                </button>
+              </>
             )}
           </nav>
-          <div className="mt-auto space-y-1 border-t border-line pt-3">
-            <div className="flex items-center gap-2.5 px-2 py-1.5">
-              <Avatar id={me.id} name={me.name} size={30} />
+          <div className="mt-auto border-t border-line p-3">
+            <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+              <Avatar id={me.id} name={me.name} size={32} />
               <div className="min-w-0 flex-1 leading-tight">
-                <p className="truncate text-[13.5px] font-semibold">{me.name} {me.title}</p>
+                <p className="truncate text-[13.5px] font-semibold">{me.name} <span className="font-normal text-ink-3">{me.title}</span></p>
                 <p className="truncate text-[12px] text-ink-3">{me.isCeo ? '대표' : dept?.name ?? (me.isAdmin ? '관리자' : '')}</p>
               </div>
-            </div>
-            <div className="flex gap-1 px-1">
-              <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle}>{isDark ? <Sun size={17} /> : <Moon size={17} />}</IconButton>
-              <IconButton label="로그아웃" onClick={() => void signOut()}><LogOut size={17} /></IconButton>
+              <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle} className="h-8 w-8">{isDark ? <Sun size={16} /> : <Moon size={16} />}</IconButton>
+              <IconButton label="로그아웃" onClick={() => void signOut()} className="h-8 w-8"><LogOut size={16} /></IconButton>
             </div>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
-            <Logo small />
-            <p className="flex-1 truncate text-[15px] font-bold">{items.find((i) => i.id === view)?.label ?? '관리자 페이지'}</p>
+            <Logo size={32} />
+            <p className="flex-1 truncate text-[15.5px] font-bold">{items.find((i) => i.id === view)?.label ?? '관리자 페이지'}</p>
             <IconButton label="검색" onClick={() => setSearchOpen(true)}><Search size={18} /></IconButton>
             <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle}>{isDark ? <Sun size={17} /> : <Moon size={17} />}</IconButton>
             {me.isAdmin && <IconButton label="관리자 페이지" onClick={() => setView('admin')}><Settings size={18} /></IconButton>}
             <IconButton label="로그아웃" onClick={() => void signOut()}><LogOut size={17} /></IconButton>
           </header>
-          <main className="min-w-0 flex-1 px-4 pb-28 pt-5 sm:px-6 lg:px-8 lg:pb-12 lg:pt-7">{children}</main>
+          <main className="min-w-0 flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-14 lg:pt-9">{children}</main>
         </div>
       </div>
 
@@ -238,7 +243,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {items.map((it) => (
           <button key={it.id} onClick={() => setView(it.id)}
-            className={cx('flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-semibold', view === it.id ? 'text-brand-ink' : 'text-ink-3')}>
+            className={cx('relative flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] font-semibold', view === it.id ? 'text-brand-ink' : 'text-ink-3')}>
+            {view === it.id && <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-brand" />}
             {it.icon}{it.label}
           </button>
         ))}
@@ -249,25 +255,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function Logo({ small }: { small?: boolean }) {
-  const s = small ? 28 : 34;
+export function Logo({ size, small }: { size?: number; small?: boolean }) {
+  const s = size ?? (small ? 32 : 40);
   return (
-    <svg width={s} height={s} viewBox="0 0 512 512" aria-hidden className="shrink-0">
-      <rect width="512" height="512" rx="112" fill="rgb(var(--brand))" />
-      <g stroke="rgb(var(--on-brand))" strokeWidth="34" strokeLinecap="round">
-        <path d="M188 104v304M324 104v304" />
-        <path d="M188 168h136M188 256h136M188 344h136" strokeWidth="28" />
-      </g>
-    </svg>
+    <span className="inline-block shrink-0" style={{ width: s, height: s }}>
+      <img src={logoUrl} alt="사닥다리종합건설" className="logo-light h-full w-full object-contain" draggable={false} />
+      <img src={logoDiscUrl} alt="" aria-hidden className="logo-dark h-full w-full object-contain" draggable={false} />
+    </span>
   );
 }
 
 export function PageHeader({ title, right, children }: { title: string; right?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-[22px] font-extrabold tracking-[-0.02em]">{title}</h1>
-        {children && <div className="mt-1.5 flex flex-wrap items-center gap-2">{children}</div>}
+        <h1 className="text-[24px] font-bold tracking-[-0.025em]">{title}</h1>
+        {children && <div className="mt-2 flex flex-wrap items-center gap-2">{children}</div>}
       </div>
       {right && <div className="flex flex-wrap items-center gap-2">{right}</div>}
     </div>

@@ -1,5 +1,5 @@
 import type {
-  AiSummary, AppSettings, Comment, Department, Directive, Entry, Grant, Member, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, WeekId,
+  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StorageUsage, WeekId,
 } from './types';
 
 export interface WeekSummary {
@@ -32,6 +32,10 @@ export interface Api {
   deleteComment(id: string): Promise<void>;
   uploadPhoto(input: NewPhotoInput): Promise<Photo>;
   deletePhoto(id: string): Promise<void>;
+  uploadAttachment(input: NewAttachmentInput): Promise<Attachment>;
+  deleteAttachment(id: string): Promise<void>;
+  /** 파일 내려받기 (서버는 잠깐 쓰는 서명 주소로 받는다) */
+  downloadAttachment(a: Attachment): Promise<void>;
   /** 대표 전용 AI 주간 요약 */
   getAiSummary(weekId: WeekId): Promise<AiSummary | null>;
   generateAiSummary(weekId: WeekId, prompt: string, sourceUpdatedAt: string): Promise<AiSummary>;
@@ -50,6 +54,9 @@ export interface Api {
     changeUsername(memberId: string, username: string): Promise<Member>;
     resetPassword(memberId: string, password: string): Promise<void>;
     saveSettings(s: AppSettings): Promise<AppSettings>;
+    storageUsage(): Promise<StorageUsage>;
+    /** 이 주차보다 오래된 사진·첨부파일을 지운다 (보고 글은 남김) */
+    cleanupMedia(beforeWeekId: WeekId): Promise<{ photos: number; files: number; bytes: number }>;
   };
 
   /** 데모 전용: 계정 전환 */

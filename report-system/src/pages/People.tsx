@@ -1,9 +1,10 @@
-import { MessageSquareText } from 'lucide-react';
+import { MapPin, MessageSquareText } from 'lucide-react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { Avatar, Badge, Card, cx, Empty, Spinner } from '../components/ui';
 import { canViewDept } from '../lib/access';
-import { activeDepartments, commentsFor, firstLines, has, hasWritten, memberDirective, personEntry } from '../lib/derive';
-import type { Member } from '../lib/types';
+import { activeDepartments, commentsFor, firstLines, has, hasWritten, memberDirective, personEntry, siteWork } from '../lib/derive';
+import { headingText, isHeading } from '../lib/sections';
+import type { Entry, Member } from '../lib/types';
 import { relativeTime } from '../lib/week';
 import { useStore } from '../state/store';
 import { DiffModeSwitch, DiffText } from '../components/DiffText';
@@ -29,20 +30,54 @@ export function PeopleGrid({ compact, onlyDepartments }: { compact?: boolean; on
   );
 }
 
+/** 첫 줄 미리보기. 대주제 줄은 제목만 */
+function previewLine(text: string): string {
+  const line = text.split('\n').find((l) => l.trim()) ?? '';
+  return isHeading(line) ? headingText(line) : line.trim();
+}
+
+function SiteWorkList({ entries, limit }: { entries: Entry[]; limit: number }) {
+  const { snap } = useStore();
+  if (!snap) return null;
+  const shown = entries.slice(0, limit);
+  return (
+    <ul className="space-y-1.5">
+      {shown.map((e) => (
+        <li key={e.id} className="flex min-w-0 items-baseline gap-2 text-[13px] leading-[1.5]">
+          <span className="shrink-0 font-semibold text-ink">{e.kind === 'misc' ? '기타사항' : snap.sites.find((s) => s.id === e.siteId)?.name}</span>
+          <span className="min-w-0 truncate text-ink-2">{previewLine(e.content)}</span>
+        </li>
+      ))}
+      {entries.length > shown.length && <li className="text-[12.5px] font-semibold text-ink-3">외 {entries.length - shown.length}건 더</li>}
+    </ul>
+  );
+}
+
 function PersonCard({ member, deptName, siteWriter, compact, onOpen }: { member: Member; deptName: string; siteWriter: boolean; compact?: boolean; onOpen(): void }) {
-  const { snap, openDrawer, setView, me } = useStore();
+  const { snap } = useStore();
   if (!snap) return null;
   const e = personEntry(snap.entries, member.id);
   const directive = memberDirective(snap.directives, member.id);
   const comments = commentsFor(snap.comments, e?.id);
   const written = hasWritten(snap, member.id);
-  const siteCount = siteWriter ? snap.entries.filter((x) => x.kind === 'site' && x.departmentId === member.departmentId && has(x.content)).length : 0;
+  const work = siteWriter ? siteWork(snap, member.id) : [];
+  const siteCount = work.filter((x) => x.kind === 'site').length;
 
-  const body = has(e?.content)
-    ? <DiffText text={e!.content} prev={personEntry(snap.prevEntries, member.id)?.content} clamp={compact ? 4 : 7} className="text-ink-2 [&_p]:text-[13px] [&_p]:leading-[1.6]" />
-    : siteWriter
-      ? <p className="text-[13px] text-ink-2">현장별 보고 <b className="text-ink">{siteCount}건</b> 작성{(me.isCeo || me.isAdmin) && <> · <span role="link" tabIndex={0} onClick={(ev) => { ev.stopPropagation(); setView('table'); openDrawer(null); }} className="font-semibold text-brand-ink hover:underline">표에서 보기</span></>}</p>
-      : <p className="text-[13px] text-ink-3">아직 작성하지 않았습니다</p>;
+  const personal = has(e?.content)
+    ? <DiffText text={e!.content} prev={personEntry(snap.prevEntries, member.id)?.content} clamp={siteWriter ? 3 : compact ? 4 : 7} className="text-ink-2 [&_p]:text-[13px] [&_p]:leading-[1.6]" />
+    : null;
+  const body = siteWriter ? (
+    <div className="space-y-2.5">
+      {work.length > 0 && (
+        <div>
+          <p className="mb-1.5 flex items-center gap-1 text-[12px] font-semibold text-ink-3"><MapPin size={12} />현장 보고 {siteCount}곳</p>
+          <SiteWorkList entries={work} limit={compact ? 4 : 6} />
+        </div>
+      )}
+      {personal}
+      {!work.length && !personal && <p className="text-[13px] text-ink-3">아직 작성하지 않았습니다</p>}
+    </div>
+  ) : personal ?? <p className="text-[13px] text-ink-3">아직 작성하지 않았습니다</p>;
 
   return (
     <Card onClick={onOpen} className="flex h-full flex-col p-4">
@@ -55,8 +90,8 @@ function PersonCard({ member, deptName, siteWriter, compact, onOpen }: { member:
         {written ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}
       </div>
       {has(directive?.content) && (
-        <p className="mt-3 line-clamp-2 whitespace-pre-line rounded-lg bg-note px-2.5 py-1.5 text-[12.5px] leading-[1.55]">
-          <span className="mr-1 font-bold text-note-ink">지시</span>{firstLines(directive!.content, 2)}
+        <p className="mt-3 rounded-lg bg-note px-2.5 py-1.5 text-[12.5px] leading-[1.55]">
+          <span className="line-clamp-2 whitespace-pre-line"><span className="mr-1 font-bold text-note-ink">지시</span>{firstLines(directive!.content, 2)}</span>
         </p>
       )}
       <div className="mt-3 flex-1">{body}</div>

@@ -3,6 +3,8 @@ import { byId, memberDirective, miscDirective, miscEntry, personEntry, reporters
 import { STAGES, type Member, type Snapshot } from './types';
 import { parseIsoDate } from './week';
 
+const fileNote = (n: number) => (n ? `(첨부파일 ${n}개 · 시스템에서 확인)` : '');
+
 /** 지금 쓰는 주간보고 엑셀과 같은 모양으로 내보낸다. snap은 이미 권한에 맞게 걸러진 데이터 */
 export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{ blob: Blob; filename: string }> {
   const ExcelJS = (await import('exceljs')).default;
@@ -82,7 +84,8 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
         siteDirective(snap.directives, s.id)?.content ?? '',
         ...depts.map((dp) => {
           const n = snap.photos.filter((p) => p.siteId === s.id && p.departmentId === dp.id).length;
-          return [siteEntry(snap.entries, s.id, dp.id)?.content ?? '', n ? `(현장 사진 ${n}장 · 시스템에서 확인)` : ''].filter(Boolean).join('\n');
+          const f = (snap.attachments ?? []).filter((a) => a.kind === 'site' && a.siteId === s.id && a.departmentId === dp.id).length;
+          return [siteEntry(snap.entries, s.id, dp.id)?.content ?? '', n ? `(현장 사진 ${n}장 · 시스템에서 확인)` : '', fileNote(f)].filter(Boolean).join('\n');
         }),
       ];
       styleRow(r);
@@ -98,7 +101,8 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
   const slotText = (slot: 'ceo_progress' | 'requests' | 'special') => miscDirective(snap.directives, slot)?.content ?? '';
   const left = [slotText('ceo_progress') && `대표진행사항\n${slotText('ceo_progress')}`].filter(Boolean).join('\n');
   const right = [slotText('requests') && `의뢰진행 내용\n${slotText('requests')}`, slotText('special') && `- 주간 특별 지시사항 -\n${slotText('special')}`].filter(Boolean).join('\n\n');
-  const miscs = depts.map((dp) => miscEntry(snap.entries, dp.id)?.content ?? '');
+  const miscs = depts.map((dp) => [miscEntry(snap.entries, dp.id)?.content ?? '',
+    fileNote((snap.attachments ?? []).filter((a) => a.kind === 'misc' && a.departmentId === dp.id).length)].filter(Boolean).join('\n'));
   if (left || right || miscs.some(Boolean)) {
     ws.getRow(r).values = ['', '기타사항', left, '', '', right, ...miscs];
     ws.mergeCells(r, 3, r, 5);
@@ -121,7 +125,8 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
     r++;
     list.forEach((m, i) => {
       const dept = snap.departments.find((x) => x.id === m.departmentId);
-      ws.getRow(r).values = [i + 1, dept?.name ?? '', '', `${m.name}${m.title}`, '', memberDirective(snap.directives, m.id)?.content ?? '', personEntry(snap.entries, m.id)?.content ?? ''];
+      ws.getRow(r).values = [i + 1, dept?.name ?? '', '', `${m.name}${m.title}`, '', memberDirective(snap.directives, m.id)?.content ?? '',
+        [personEntry(snap.entries, m.id)?.content ?? '', fileNote((snap.attachments ?? []).filter((a) => a.kind === 'dept' && a.authorId === m.id).length)].filter(Boolean).join('\n')];
       ws.mergeCells(r, 2, r, 3);
       ws.mergeCells(r, 4, r, 5);
       if (lastCol > 7) ws.mergeCells(r, 7, r, lastCol);

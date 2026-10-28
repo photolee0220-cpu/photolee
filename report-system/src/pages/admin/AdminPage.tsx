@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, KeyRound, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
+  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, HardDrive, KeyRound, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
@@ -8,13 +8,14 @@ import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal
 import { newId, type WeekSummary } from '../../lib/api';
 import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
+import { formatBytes } from '../../lib/fileTypes';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { SITE_TAGS, STAGES, type Department, type Member, type Site, type Stage } from '../../lib/types';
-import { currentWeekId, weekLabelLong } from '../../lib/week';
+import { SITE_TAGS, STAGES, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
+import { currentWeekId, shiftWeek, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
 
-type Tab = 'sites' | 'members' | 'depts' | 'weeks' | 'ai';
+type Tab = 'sites' | 'members' | 'depts' | 'weeks' | 'storage' | 'ai';
 
 export function AdminPage() {
   const { me, setView } = useStore();
@@ -24,14 +25,18 @@ export function AdminPage() {
     { id: 'members', label: '인원·관리자', icon: <Users size={16} /> },
     { id: 'depts', label: '부서·열람 권한', icon: <ShieldCheck size={16} /> },
     { id: 'weeks', label: '주차·내려받기', icon: <Download size={16} /> },
+    { id: 'storage', label: '저장 공간', icon: <HardDrive size={16} /> },
     { id: 'ai', label: 'AI 설정', icon: <Sparkles size={16} /> },
   ];
   return (
     <div className="min-h-full bg-bg">
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-3 px-4 sm:px-6">
-          <Logo small />
-          <p className="flex-1 text-[15px] font-extrabold">관리자 페이지</p>
+          <Logo size={34} />
+          <div className="flex-1 leading-tight">
+            <p className="text-[15px] font-bold">관리자 페이지</p>
+            <p className="text-[12px] text-ink-3">사닥다리종합건설 주간보고</p>
+          </div>
           <Button size="sm" tone="ghost" onClick={() => setView(defaultView(me))}><ArrowLeft size={15} />보고 화면으로</Button>
         </div>
         <nav className="mx-auto flex max-w-[1200px] gap-1 overflow-x-auto px-4 sm:px-6">
@@ -49,6 +54,7 @@ export function AdminPage() {
         {tab === 'members' && <MembersAdmin />}
         {tab === 'depts' && <DeptsAdmin />}
         {tab === 'weeks' && <WeeksAdmin />}
+        {tab === 'storage' && <StorageAdmin />}
         {tab === 'ai' && <AiSettings />}
       </main>
     </div>
@@ -116,7 +122,7 @@ function SitesAdmin() {
         { id: 'archived', label: `보관함 ${all.filter((s) => s.archived).length}` },
       ]} />
       {list.length === 0 ? <Empty title="이 단계의 현장이 없습니다" /> : (
-        <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           {list.map((s, i) => (
             <div key={s.id} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
               {filter !== 'archived' && (
@@ -275,7 +281,7 @@ function MembersAdmin() {
             <Button tone="primary" onClick={() => setEditing('new')}><UserPlus size={16} />인원 추가</Button>
           </div>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-card">
+        <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-card">
           <table className="w-full min-w-[720px] text-[13.5px]">
             <thead>
               <tr className="border-b border-line bg-sunken text-left text-[12px] text-ink-2">
@@ -425,7 +431,7 @@ function DeptsAdmin() {
       <section>
         <h1 className="text-[20px] font-extrabold">부서</h1>
         <p className="mb-3 text-[13px] text-ink-3">'현장 칸'을 켠 부서는 현장마다 보고 칸이 생깁니다 (지금은 공무, 인테리어/디자인, CM, 견적).</p>
-        <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           {depts.map((d, i) => (
             <div key={d.id} className={cx('flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0', !d.active && 'opacity-50')}>
               <div className="flex flex-col">
@@ -482,7 +488,7 @@ function GrantMatrix({ depts }: { depts: Department[] }) {
     void run(() => api.admin.setGrants(v, next));
   };
   return (
-    <div className="max-h-[70vh] overflow-auto rounded-xl border border-line bg-surface shadow-card">
+    <div className="max-h-[70vh] overflow-auto rounded-2xl border border-line bg-surface shadow-card">
       <table className="border-separate border-spacing-0 text-[12.5px]">
         <thead>
           <tr>
@@ -540,6 +546,81 @@ function WeeksAdmin() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ───────────── 저장 공간 ───────────── */
+
+/** 무료 요금제의 파일 저장 한도 */
+const STORAGE_LIMIT = 1024 * 1024 * 1024;
+
+function StorageAdmin() {
+  const { reload, toast } = useStore();
+  const [usage, setUsage] = useState<StorageUsage | null>(null);
+  const [months, setMonths] = useState('6');
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.admin.storageUsage().then(setUsage).catch((e) => { toast(e instanceof Error ? e.message : '불러오지 못했습니다.', 'error'); setUsage({ photoCount: 0, photoBytes: 0, fileCount: 0, fileBytes: 0, estimated: false }); });
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cutoff = shiftWeek(currentWeekId(), -Math.round((Number(months) * 52) / 12));
+  const used = usage ? usage.photoBytes + usage.fileBytes : 0;
+  const pct = Math.min(100, (used / STORAGE_LIMIT) * 100);
+
+  const cleanup = async () => {
+    setBusy(true);
+    try {
+      const r = await api.admin.cleanupMedia(cutoff);
+      toast(`사진 ${r.photos}장, 파일 ${r.files}개를 정리했습니다 (${formatBytes(r.bytes)})`);
+      setConfirm(false);
+      await Promise.all([load(), reload()]);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '정리하지 못했습니다.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="max-w-[720px]">
+      <h1 className="text-[20px] font-extrabold">저장 공간</h1>
+      <p className="mb-4 text-[13px] text-ink-3">현장 사진과 첨부파일이 차지하는 공간입니다. 보고 글은 거의 공간을 차지하지 않습니다.</p>
+      {!usage ? <Spinner /> : (
+        <Card className="p-5">
+          <div className="flex items-end justify-between gap-3">
+            <p className="text-[26px] font-extrabold tabular">{formatBytes(used)}</p>
+            <p className="pb-1 text-[13px] text-ink-3">무료 한도 {formatBytes(STORAGE_LIMIT)} 중 {pct.toFixed(pct < 10 ? 1 : 0)}%</p>
+          </div>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-sunken">
+            <div className={cx('h-full rounded-full', pct > 85 ? 'bg-danger' : pct > 65 ? 'bg-warn' : 'bg-brand')} style={{ width: `${Math.max(pct, used ? 1 : 0)}%` }} />
+          </div>
+          <dl className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
+            <div className="rounded-xl bg-sunken px-3 py-2.5"><dt className="text-ink-3">현장 사진</dt><dd className="mt-0.5 font-bold tabular">{usage.photoCount}장 · {formatBytes(usage.photoBytes)}</dd></div>
+            <div className="rounded-xl bg-sunken px-3 py-2.5"><dt className="text-ink-3">첨부파일</dt><dd className="mt-0.5 font-bold tabular">{usage.fileCount}개 · {formatBytes(usage.fileBytes)}</dd></div>
+          </dl>
+        </Card>
+      )}
+
+      <Card className="mt-4 p-5">
+        <h2 className="text-[16px] font-bold">오래된 사진·파일 정리</h2>
+        <p className="mt-1 text-[13px] leading-[1.6] text-ink-3">공간이 부족해지면 오래된 사진과 첨부파일만 지워서 다시 쓸 수 있습니다. <b className="text-ink-2">보고 글, 지시사항, 피드백은 그대로 남습니다.</b> 지운 파일은 되살릴 수 없으니 필요한 파일은 먼저 내려받아 두세요.</p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Select value={months} onChange={(e) => setMonths(e.target.value)} className="!w-auto">
+            <option value="3">3개월 지난</option>
+            <option value="6">6개월 지난</option>
+            <option value="12">1년 지난</option>
+            <option value="24">2년 지난</option>
+          </Select>
+          <span className="text-[13px] text-ink-2">사진·파일 ({weekLabelLong(cutoff)} 이전)</span>
+          <Button tone="danger" className="ml-auto" onClick={() => setConfirm(true)}><Trash2 size={15} />정리하기</Button>
+        </div>
+      </Card>
+
+      <Modal open={confirm} onClose={() => !busy && setConfirm(false)} title="오래된 사진·파일 정리"
+        footer={<><Button onClick={() => setConfirm(false)} disabled={busy}>취소</Button><Button tone="danger" onClick={cleanup} disabled={busy}>{busy ? <Spinner /> : <Trash2 size={15} />}지우기</Button></>}>
+        <p className="text-[14px] leading-[1.7]"><b>{weekLabelLong(cutoff)}</b>보다 이전 주차의 현장 사진과 첨부파일을 모두 지웁니다. 보고 글은 남고, 지운 파일은 되살릴 수 없습니다.</p>
+      </Modal>
     </div>
   );
 }

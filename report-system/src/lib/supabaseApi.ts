@@ -2,9 +2,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
-import type { AiSummary, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot } from './types';
+import { checkAttachable, extOf } from './fileTypes';
+import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot } from './types';
 
 const BUCKET = 'site-photos';
+const FILES = 'report-files';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -31,6 +33,11 @@ const toDirective = (r: Row): Directive => ({
 const toComment = (r: Row): Comment => ({
   id: r.id, entryId: r.entry_id, authorId: r.author_id, content: r.content, createdAt: r.created_at,
   acknowledgedAt: r.acknowledged_at, acknowledgedBy: r.acknowledged_by,
+});
+
+const toAttachment = (r: Row): Attachment => ({
+  id: r.id, weekId: r.week_id, kind: r.kind, siteId: r.site_id, departmentId: r.department_id, authorId: r.author_id,
+  fileName: r.file_name, sizeBytes: Number(r.size_bytes), mimeType: r.mime_type, uploadedBy: r.uploaded_by, createdAt: r.created_at,
 });
 
 const toSummary = (r: Row): AiSummary => ({
@@ -105,7 +112,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       const prev = await sb.from('weeks').select('id').lt('id', weekId).order('id', { ascending: false }).limit(1);
       const prevWeekId: string | null = prev.data?.[0]?.id ?? null;
       const weekIds = prevWeekId ? [weekId, prevWeekId] : [weekId];
-      const [d, m, s, g, e, dv, ph] = await Promise.all([
+      const [d, m, s, g, e, dv, ph, at] = await Promise.all([
         sb.from('departments').select('*').order('sort'),
         sb.from('members').select('*').order('name'),
         sb.from('sites').select('*').order('sort'),
@@ -113,6 +120,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         sb.from('entries').select('*').in('week_id', weekIds),
         sb.from('directives').select('*').in('week_id', weekIds),
         sb.from('photos').select('*').eq('week_id', weekId).order('created_at'),
+        sb.from('attachments').select('*').eq('week_id', weekId).order('created_at'),
       ]);
       const entries = (check(e) as Row[]).map(toEntry);
       const directives = (check(dv) as Row[]).map(toDirective);
@@ -130,6 +138,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         directives: directives.filter((x) => x.weekId === weekId),
         comments: c.map(toComment),
         photos: await withUrls(check(ph) as Row[]),
+        attachments: (check(at) as Row[]).map(toAttachment),
         prevWeekId,
         prevEntries: entries.filter((x) => x.weekId === prevWeekId),
         prevDirectives: directives.filter((x) => x.weekId === prevWeekId),
@@ -207,6 +216,40 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       await sb.storage.from(BUCKET).remove([r.storage_path]);
     },
 
+    async uploadAttachment(i) {
+      const bad = checkAttachable(i.file);
+      if (bad) throw new ApiError(bad);
+      const path = `${i.departmentId}/${i.weekId}/${crypto.randomUUID()}.${extOf(i.file.name)}`;
+      const mimeType = i.file.type || 'application/octet-stream';
+      const up = await sb.storage.from(FILES).upload(path, i.file, { contentType: mimeType, upsert: false });
+      if (up.error) throw new ApiError('파일을 올리지 못했습니다. 이 칸에 쓸 권한이 있는지 확인해 주세요.');
+      const r = await sb.from('attachments').insert({
+        week_id: i.weekId, kind: i.kind, site_id: i.siteId, department_id: i.departmentId, author_id: i.authorId,
+        storage_path: path, file_name: i.file.name, size_bytes: i.file.size, mime_type: mimeType,
+      }).select().single();
+      if (r.error) {
+        await sb.storage.from(FILES).remove([path]);
+        throw new ApiError(r.error.message);
+      }
+      return toAttachment(r.data);
+    },
+
+    async deleteAttachment(id) {
+      const r = check(await sb.from('attachments').delete().eq('id', id).select().maybeSingle());
+      if (!r) throw new ApiError('올린 사람이나 관리자만 지울 수 있습니다.');
+      await sb.storage.from(FILES).remove([r.storage_path]);
+    },
+
+    async downloadAttachment(a) {
+      const row = check(await sb.from('attachments').select('storage_path').eq('id', a.id).maybeSingle());
+      if (!row) throw new ApiError('파일을 찾을 수 없습니다.');
+      const { data, error } = await sb.storage.from(FILES).createSignedUrl(row.storage_path, 60, { download: a.fileName });
+      if (error || !data) throw new ApiError('파일을 내려받지 못했습니다.');
+      const link = document.createElement('a');
+      link.href = data.signedUrl;
+      link.click();
+    },
+
     async getAiSummary(weekId) {
       const r = check(await sb.from('ai_summaries').select('*').eq('week_id', weekId).maybeSingle());
       return r ? toSummary(r) : null;
@@ -233,7 +276,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       let t: ReturnType<typeof setTimeout> | undefined;
       const debounced = () => { clearTimeout(t); t = setTimeout(fn, 400); };
       const ch = sb.channel('report-changes');
-      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos']) {
+      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos', 'attachments']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, debounced);
       }
       ch.subscribe();
@@ -285,6 +328,37 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       async saveSettings(next) {
         check(await sb.from('app_settings').upsert({ key: 'summary_model', value: next.summaryModel, updated_at: new Date().toISOString() }));
         return next;
+      },
+      async storageUsage() {
+        const rows = check(await sb.rpc('storage_usage')) as Row[];
+        const get = (bucket: string) => rows.find((r) => r.bucket_id === bucket);
+        return {
+          photoCount: Number(get(BUCKET)?.objects ?? 0),
+          photoBytes: Number(get(BUCKET)?.bytes ?? 0),
+          fileCount: Number(get(FILES)?.objects ?? 0),
+          fileBytes: Number(get(FILES)?.bytes ?? 0),
+          estimated: false,
+        };
+      },
+      async cleanupMedia(before) {
+        const [ph, at] = await Promise.all([
+          sb.from('photos').select('id, storage_path').lt('week_id', before),
+          sb.from('attachments').select('id, storage_path, size_bytes').lt('week_id', before),
+        ]);
+        const photos = check(ph) as Row[];
+        const files = check(at) as Row[];
+        let bytes = files.reduce((n, f) => n + Number(f.size_bytes), 0);
+        // 저장 공간에서 먼저 지우고 기록을 지운다 (반대로 하면 주인 없는 파일이 남는다)
+        for (const [bucket, rows] of [[BUCKET, photos], [FILES, files]] as const) {
+          for (let i = 0; i < rows.length; i += 100) {
+            const chunk = rows.slice(i, i + 100);
+            const rm = await sb.storage.from(bucket).remove(chunk.map((r) => r.storage_path));
+            if (rm.error) throw new ApiError(`파일을 지우는 중 멈췄습니다: ${rm.error.message}`);
+            if (bucket === BUCKET) bytes += (rm.data ?? []).reduce((n, o: Row) => n + Number(o.metadata?.size ?? 0), 0);
+            check(await sb.from(bucket === BUCKET ? 'photos' : 'attachments').delete().in('id', chunk.map((r) => r.id)));
+          }
+        }
+        return { photos: photos.length, files: files.length, bytes };
       },
       async changeUsername(memberId, username) {
         const r = await adminCall({ action: 'set_username', memberId, username: username.trim().toLowerCase() });

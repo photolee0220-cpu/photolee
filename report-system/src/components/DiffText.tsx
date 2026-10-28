@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { has } from '../lib/derive';
 import { lineDiff } from '../lib/diff';
+import { hasSections, headingText, isHeading } from '../lib/sections';
+import { SectionHeading, TextBlock } from './editors';
 import { useStore } from '../state/store';
 import { Badge, cx, Segmented } from './ui';
 
@@ -17,6 +19,7 @@ export function DiffText({ text, prev, className, clamp, empty = '작성된 내�
   const [showRemoved, setShowRemoved] = useState(false);
   if (!has(text)) return <p className={cx('text-[13px] text-ink-3', className)}>{empty}</p>;
   const comparable = diffMode !== 'off' && !!snap?.prevWeekId;
+  if (!comparable && hasSections(text) && !clamp) return <TextBlock text={text} className={className} />;
   if (!comparable) {
     return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7]', !!clamp && 'overflow-hidden', className)} style={clamp ? { WebkitLineClamp: clamp, display: '-webkit-box', WebkitBoxOrient: 'vertical' } : undefined}>{text}</p>;
   }
@@ -25,10 +28,12 @@ export function DiffText({ text, prev, className, clamp, empty = '작성된 내�
   let hidden = 0;
   const rows: JSX.Element[] = [];
   d.lines.forEach((l, i) => {
-    if (only && !l.added) { hidden++; return; }
+    const heading = isHeading(l.text);
+    if (only && !l.added && !heading) { hidden++; return; }
     if (hidden) { rows.push(<p key={`h${i}`} className="text-[12px] text-ink-3">· 지난주와 같은 내용 {hidden}줄</p>); hidden = 0; }
-    rows.push(
-      <p key={i} className={cx('whitespace-pre-wrap', l.added && !d.fresh && 'rounded bg-brand-soft px-1 -mx-1 text-ink')}>{l.text || ' '}</p>,
+    rows.push(heading
+      ? <SectionHeading key={i} text={headingText(l.text)} className={cx(l.added && !d.fresh && 'rounded bg-brand-soft px-1 -mx-1')} />
+      : <p key={i} className={cx('whitespace-pre-wrap', l.added && !d.fresh && 'rounded bg-brand-soft px-1 -mx-1 text-ink')}>{l.text || '\u00a0'}</p>,
     );
   });
   if (hidden) rows.push(<p key="tail" className="text-[12px] text-ink-3">· 지난주와 같은 내용 {hidden}줄</p>);

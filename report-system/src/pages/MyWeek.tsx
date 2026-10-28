@@ -1,7 +1,8 @@
-import { CalendarClock, ChevronDown, Download, MessageSquareText } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronsDownUp, Download, MessageSquareText } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
-import { DirectiveBox, EntryEditor, Feedback, TextBlock } from '../components/editors';
+import { AttachmentList, attachmentsFor, FileCount } from '../components/Attachments';
+import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from '../components/editors';
 import { dueInfo } from '../components/SiteCard';
 import { Badge, Button, cx, Progress, Segmented, Spinner, StageChip } from '../components/ui';
 import {
@@ -20,6 +21,7 @@ export function MyWeek() {
   const exportWeek = useExport();
   const [filter, setFilter] = useState<Filter>('all');
   const [showPersonal, setShowPersonal] = useState(false);
+  const [openSites, setOpenSites] = useState<Set<string>>(() => new Set());
   const dept = snap?.departments.find((d) => d.id === me.departmentId);
   const sites = useMemo(() => (snap ? visibleSites(snap) : []), [snap]);
   if (!snap || !dept) return <div className="flex justify-center py-20"><Spinner /></div>;
@@ -39,22 +41,22 @@ export function MyWeek() {
   });
 
   const personal = (
-    <section className="rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[16px] font-bold">{siteWriter ? '부서 업무보고 (선택)' : '이번 주 업무 진행사항'}</h2>
         {has(mine?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}
       </div>
       <div className="space-y-3">
         <DirectiveBox value={memberDirective(snap.directives, me.id)?.content ?? ''} editable={false} onSave={async () => undefined} hideWhenEmpty={siteWriter} />
-        <EntryEditor
+        <SectionEditor
           key={`${weekId}-me`}
           value={mine?.content ?? ''}
-          editable
           prevContent={personEntry(snap.prevEntries, me.id)?.content}
           placeholder={'1. 진행한 일\n2. 다음 주 예정\n3. 협조가 필요한 일'}
           meta={mine && has(mine.content) ? `${relativeTime(mine.updatedAt)} 저장` : '입력하면 자동으로 저장됩니다'}
           onSave={(content) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id, content })}
         />
+        <AttachmentList target={{ kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id }} editable />
         <Feedback entry={mine} />
       </div>
     </section>
@@ -86,7 +88,7 @@ export function MyWeek() {
 
       {siteWriter && (
         <>
-          <div className="mb-4 rounded-xl border border-line bg-surface p-4 shadow-card">
+          <div className="mb-4 rounded-2xl border border-line bg-surface p-4 shadow-card">
             <div className="flex items-center justify-between text-[13px]">
               <span className="font-bold">현장별 보고</span>
               <span className="tabular text-ink-3"><b className="text-ink">{writtenSites.length}</b> / {sites.length}곳 작성</span>
@@ -99,7 +101,11 @@ export function MyWeek() {
               { id: 'directive', label: '지시 있는 현장' },
               { id: 'todo', label: '아직 안 쓴 현장' },
             ]} />
+            {openSites.size > 0 && (
+              <Button size="sm" tone="ghost" onClick={() => setOpenSites(new Set())}><ChevronsDownUp size={15} />모두 접기</Button>
+            )}
           </div>
+          <p className="mb-4 text-[12.5px] text-ink-3">현장 이름을 누르면 작성 칸이 열립니다. 우리 부서가 맡은 현장만 쓰면 됩니다.</p>
           <div className="space-y-6">
             {STAGES.map((st) => {
               const list = filtered.filter((s) => s.stage === st.id);
@@ -107,8 +113,15 @@ export function MyWeek() {
               return (
                 <section key={st.id}>
                   <h3 className="mb-2 text-[14px] font-bold text-ink-2">{st.label} <span className="text-ink-3">{list.length}</span></h3>
-                  <div className="space-y-2.5">
-                    {list.map((s) => <SiteWriteCard key={s.id} site={s} deptId={dept.id} />)}
+                  <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+                    {list.map((s, i) => (
+                      <SiteWriteRow key={s.id} site={s} deptId={dept.id} first={i === 0} open={openSites.has(s.id)}
+                        onToggle={() => setOpenSites((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                          return next;
+                        })} />
+                    ))}
                   </div>
                 </section>
               );
@@ -134,38 +147,48 @@ export function MyWeek() {
   );
 }
 
-function SiteWriteCard({ site, deptId }: { site: Site; deptId: string }) {
+function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; deptId: string; open: boolean; onToggle(): void; first: boolean }) {
   const { snap, weekId, saveEntry } = useStore();
-  const e = snap ? siteEntry(snap.entries, site.id, deptId) : undefined;
-  const directive = snap ? siteDirective(snap.directives, site.id) : undefined;
-  const prev = snap ? siteEntry(snap.prevEntries, site.id, deptId) : undefined;
-  const [open, setOpen] = useState(() => has(e?.content) || has(directive?.content) || has(prev?.content) || !isCompleted(site));
   if (!snap) return null;
+  const e = siteEntry(snap.entries, site.id, deptId);
+  const directive = siteDirective(snap.directives, site.id);
+  const prev = siteEntry(snap.prevEntries, site.id, deptId);
   const due = dueInfo(site);
+  const written = has(e?.content);
   const unacked = commentsFor(snap.comments, e?.id).filter((c) => !c.acknowledgedAt).length;
+  const photoCount = snap.photos.filter((p) => p.siteId === site.id && p.departmentId === deptId).length;
+  const target = { kind: 'site' as const, siteId: site.id, departmentId: deptId, authorId: null };
+  const fileCount = attachmentsFor(snap.attachments, target).length;
+  const preview = written ? e!.content.split('\n').find((l) => l.trim()) : undefined;
 
   return (
-    <article className={cx('rounded-xl border bg-surface shadow-card', has(e?.content) ? 'border-line' : 'border-line-strong')}>
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+    <article className={cx(!first && 'border-t border-line', open && 'bg-sunken/40')}>
+      <button onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-sunken/60">
+        <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
+          written ? 'bg-brand text-on-brand' : 'border-2 border-line-strong')}>
+          {written && <Check size={14} strokeWidth={3} />}
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-bold">{site.name}</span>
-            <StageChip stage={site.stage} />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[15px] font-bold">{site.name}</span>
             {has(directive?.content) && <Badge tone="note">지시</Badge>}
             {unacked > 0 && <Badge tone="brand"><MessageSquareText size={11} />피드백 {unacked}</Badge>}
-            <PhotoCount count={snap.photos.filter((p) => p.siteId === site.id && p.departmentId === deptId).length} />
+            <PhotoCount count={photoCount} />
+            <FileCount count={fileCount} />
           </div>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-ink-3">
-            <span>{site.process || site.note}</span>
-            {!(site.stage === 'construction' && isCompleted(site)) && <span className="inline-flex items-center gap-1"><CalendarClock size={12} />{due.label}</span>}
-            {site.progress != null && <span className="font-semibold text-ink-2">{site.progress}%</span>}
-          </p>
+          {!open && preview && <p className="mt-0.5 truncate text-[12.5px] text-ink-3">{preview}</p>}
         </div>
-        {has(e?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}
+        <span className={cx('shrink-0 text-[12.5px] font-semibold', written ? 'text-brand-ink' : 'text-ink-3')}>{written ? '작성' : '미작성'}</span>
         <ChevronDown size={18} className={cx('shrink-0 text-ink-3 transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="space-y-3 border-t border-line px-4 pb-4 pt-3">
+        <div className="space-y-3 px-4 pb-4 pt-1 sm:pl-[52px]">
+          <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-ink-3">
+            <StageChip stage={site.stage} />
+            {(site.process || site.note) && <span>{site.process || site.note}</span>}
+            {!(site.stage === 'construction' && isCompleted(site)) && <span className="inline-flex items-center gap-1"><CalendarClock size={12} />{due.label}</span>}
+            {site.progress != null && <span className="font-semibold text-ink-2">공정 {site.progress}%</span>}
+          </p>
           {has(directive?.content) && <DirectiveBox value={directive!.content} editable={false} onSave={async () => undefined} />}
           <EntryEditor
             key={`${weekId}-${site.id}`}
@@ -175,13 +198,14 @@ function SiteWriteCard({ site, deptId }: { site: Site; deptId: string }) {
             prevContent={prev?.content}
             onSave={(content) => saveEntry({ weekId, kind: 'site', siteId: site.id, departmentId: deptId, authorId: null, content })}
           />
-          {has(prev?.content) && has(e?.content) && (
+          {has(prev?.content) && written && (
             <details className="text-[13px]">
               <summary className="cursor-pointer font-semibold text-ink-3">지난주에 쓴 내용</summary>
               <TextBlock text={prev!.content} className="mt-1.5 !text-[13px] text-ink-2" />
             </details>
           )}
           <PhotoStrip siteId={site.id} departmentId={deptId} editable />
+          <AttachmentList target={target} editable />
           <Feedback entry={e} />
         </div>
       )}
@@ -192,7 +216,8 @@ function SiteWriteCard({ site, deptId }: { site: Site; deptId: string }) {
 function MiscCard({ deptId, optional }: { deptId: string; optional?: boolean }) {
   const { snap, weekId, saveEntry } = useStore();
   const e = snap ? miscEntry(snap.entries, deptId) : undefined;
-  const [open, setOpen] = useState(!optional || has(e?.content));
+  const target = { kind: 'misc' as const, siteId: null, departmentId: deptId, authorId: null };
+  const [open, setOpen] = useState(!optional || has(e?.content) || attachmentsFor(snap?.attachments, target).length > 0);
   if (!snap) return null;
   if (!open) {
     return (
@@ -202,7 +227,7 @@ function MiscCard({ deptId, optional }: { deptId: string; optional?: boolean }) 
     );
   }
   return (
-    <section className="mt-6 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+    <section className="mt-6 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <h2 className="mb-3 text-[16px] font-bold">기타사항</h2>
       <EntryEditor
         key={`${weekId}-misc`}
@@ -213,6 +238,7 @@ function MiscCard({ deptId, optional }: { deptId: string; optional?: boolean }) 
         placeholder="현장 외 진행 건, 공유할 내용"
         onSave={(content) => saveEntry({ weekId, kind: 'misc', siteId: null, departmentId: deptId, authorId: null, content })}
       />
+      <AttachmentList target={target} editable />
       <Feedback entry={e} />
     </section>
   );

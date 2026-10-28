@@ -1,15 +1,17 @@
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { canEditEntry, canViewDept } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
-  byId, has, memberDirective, miscDirective, miscEntry, personEntry, siteDepartments, siteDirective, siteEntry, activeDepartments,
+  byId, has, memberDirective, miscDirective, miscEntry, personEntry, siteDepartments, siteDirective, siteEntry, siteWork, activeDepartments,
 } from '../lib/derive';
 import { MISC_SLOTS, type Department, type Entry, type Member } from '../lib/types';
 import { formatDate, relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
-import { DirectiveBox, EntryEditor, Feedback, TextBlock } from './editors';
+import { AttachmentList } from './Attachments';
+import { DiffText } from './DiffText';
+import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from './editors';
 import { PhotoStrip } from './Photos';
 import { dueInfo, isImminent } from './SiteCard';
 import { Avatar, Badge, cx, Progress, Sheet, Spinner, StageChip } from './ui';
@@ -25,7 +27,7 @@ export function DrawerHost() {
 
 function Block({ title, right, children }: { title: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-surface p-4 shadow-card">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-card">
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[14px] font-bold">{title}</h3>
         {right}
@@ -69,7 +71,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
       subtitle={<span className="flex flex-wrap items-center gap-1.5"><StageChip stage={site.stage} />{[site.note, site.process].filter(Boolean).join(' · ')}</span>}
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card sm:grid-cols-3">
           <div className="col-span-2 sm:col-span-1">
             <p className="text-[12px] font-semibold text-ink-3">{site.progress != null ? '공정율' : '규모'}</p>
             {site.progress != null ? (
@@ -115,13 +117,14 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
                 onSave={(content) => saveEntry({ weekId, kind: 'site', siteId: site.id, departmentId: d.id, authorId: null, content })}
               />
               <PhotoStrip siteId={site.id} departmentId={d.id} editable={editable} />
+              <AttachmentList target={{ kind: 'site', siteId: site.id, departmentId: d.id, authorId: null }} editable={editable} />
               <Feedback entry={e} />
             </Block>
           );
         })}
         {depts.length === 0 && <p className="text-[13px] text-ink-3">열람 권한이 있는 부서의 보고가 없습니다.</p>}
 
-        <button onClick={() => setShowHistory((v) => !v)} className="flex w-full items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-left font-semibold shadow-card hover:bg-sunken">
+        <button onClick={() => setShowHistory((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3 text-left font-semibold shadow-card hover:bg-sunken">
           지난 기록
           <ChevronDown size={18} className={cx('transition-transform', showHistory && 'rotate-180')} />
         </button>
@@ -152,7 +155,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
 }
 
 function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
-  const { snap, me, weekId, saveEntry, saveDirective } = useStore();
+  const { snap, me, weekId, saveEntry, saveDirective, openDrawer } = useStore();
   const [showPrev, setShowPrev] = useState(false);
   const person = snap?.members.find((m) => m.id === id);
   if (!snap || !person) return null;
@@ -163,6 +166,9 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const directive = memberDirective(snap.directives, person.id);
   const prevDirective = memberDirective(snap.prevDirectives, person.id);
   const editable = !me.isCeo && canEditEntry(me, { kind: 'dept', departmentId: person.departmentId ?? '', authorId: person.id });
+  const work = dept?.writesSites ? siteWork(snap, person.id) : [];
+  const showPersonal = !dept?.writesSites || has(e?.content) || editable;
+  const saveMine = (content: string) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: person.departmentId!, authorId: person.id, content });
 
   return (
     <Sheet open onClose={onClose}
@@ -176,17 +182,41 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
           editable={me.isCeo}
           onSave={(content) => saveDirective({ weekId, targetKind: 'member', siteId: null, memberId: person.id, slot: null, content })}
         />
-        <Block title="업무 진행사항" right={has(e?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}>
-          <EntryEditor
-            key={`${weekId}-${person.id}`}
-            value={e?.content ?? ''}
-            editable={editable}
-            prevContent={prev?.content}
-            meta={entryMeta(e, members)}
-            onSave={(content) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: person.departmentId!, authorId: person.id, content })}
-          />
-          <Feedback entry={e} />
-        </Block>
+        {dept?.writesSites && (
+          <Block title={<>현장 보고 <span className="font-medium text-ink-3">{work.filter((x) => x.kind === 'site').length}곳</span></>}>
+            {work.length === 0 ? <p className="text-[13px] text-ink-3">이번 주에 작성한 현장 보고가 없습니다.</p> : (
+              <div className="divide-y divide-line">
+                {work.map((w) => {
+                  const site = w.kind === 'site' ? snap.sites.find((s) => s.id === w.siteId) : undefined;
+                  const prevW = w.kind === 'site' ? siteEntry(snap.prevEntries, w.siteId!, w.departmentId) : miscEntry(snap.prevEntries, w.departmentId);
+                  return (
+                    <div key={w.id} className="py-3 first:pt-0 last:pb-0">
+                      <button type="button" onClick={() => openDrawer(site ? { type: 'site', id: site.id } : { type: 'misc' })}
+                        className="mb-1.5 inline-flex items-center gap-1 text-[14px] font-bold hover:text-brand-ink">
+                        {site?.name ?? '기타사항'}<ChevronRight size={15} className="text-ink-3" />
+                      </button>
+                      <DiffText text={w.content} prev={prevW?.content} />
+                      {site && <PhotoStrip siteId={site.id} departmentId={w.departmentId} editable={false} />}
+                      <AttachmentList target={{ kind: w.kind, siteId: w.siteId, departmentId: w.departmentId, authorId: null }} editable={false} />
+                      <Feedback entry={w} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Block>
+        )}
+        {showPersonal && (
+          <Block title={dept?.writesSites ? '부서 업무보고' : '업무 진행사항'} right={has(e?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}>
+            {editable ? (
+              <SectionEditor key={`${weekId}-${person.id}`} value={e?.content ?? ''} prevContent={prev?.content} meta={entryMeta(e, members)} onSave={saveMine} />
+            ) : (
+              <EntryEditor key={`${weekId}-${person.id}`} value={e?.content ?? ''} editable={false} prevContent={prev?.content} meta={entryMeta(e, members)} onSave={saveMine} />
+            )}
+            <AttachmentList target={{ kind: 'dept', siteId: null, departmentId: person.departmentId ?? '', authorId: person.id }} editable={editable} />
+            <Feedback entry={e} />
+          </Block>
+        )}
         {has(prev?.content) && (
           <Block title={`지난주 (${weekLabel(snap.prevWeekId!)})`} right={
             <button onClick={() => setShowPrev((v) => !v)} className="text-[13px] font-semibold text-brand-ink">{showPrev ? '접기' : '펼치기'}</button>}>
@@ -232,6 +262,8 @@ function MiscDrawer({ onClose }: { onClose(): void }) {
                 placeholder="현장 외 진행 건, 공유할 내용"
                 onSave={(content) => saveEntry({ weekId, kind: 'misc', siteId: null, departmentId: d.id, authorId: null, content })}
               />
+              <AttachmentList target={{ kind: 'misc', siteId: null, departmentId: d.id, authorId: null }}
+                editable={!me.isCeo && canEditEntry(me, { kind: 'misc', departmentId: d.id, authorId: null })} />
               <Feedback entry={e} />
             </Block>
           );

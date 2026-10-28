@@ -102,6 +102,31 @@ jobs:
             note database "$done_msg"
           fi
 
+      - name: Migrations
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          query() { jq -n --arg q "$1" '{query:$q}' > "$RUNNER_TEMP/q.json"; api -X POST "$API/projects/$PROJECT_REF/database/query" --data-binary @"$RUNNER_TEMP/q.json"; }
+          # 처음 설정(setup.sql)에는 0001~0003이 들어 있으므로 기록이 비어 있으면 적용된 것으로 남긴다
+          boot="create table if not exists public.app_migrations (name text primary key, applied_at timestamptz not null default now());
+                alter table public.app_migrations enable row level security;
+                insert into public.app_migrations (name)
+                  select n from unnest(array['0001_init.sql','0002_photos_ai_summary.sql','0003_summary_model_setting.sql']) n
+                  where not exists (select 1 from public.app_migrations);
+                select coalesce(json_agg(name), '[]') as applied from public.app_migrations;"
+          res=$(query "$boot") || { note migrations "check failed: $(echo "$res" | head -c 400)"; exit 1; }
+          applied=$(echo "$res" | jq -c '.[-1].applied')
+          count=0
+          for f in report-system/supabase/migrations/*.sql; do
+            name=$(basename "$f")
+            if echo "$applied" | jq -e --arg n "$name" 'index($n) != null' >/dev/null; then continue; fi
+            sql="begin;
+          $(cat "$f")
+          insert into public.app_migrations (name) values ('$name');
+          commit;"
+            if out=$(query "$sql"); then note "migration:$name" applied; count=$((count + 1)); else note "migration:$name" "failed: $(echo "$out" | head -c 400)"; exit 1; fi
+          done
+          note migrations "$count applied"
+
       - uses: supabase/setup-cli@v1
         with:
           version: 2.119.0

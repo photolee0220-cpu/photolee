@@ -14,7 +14,7 @@ export function Button({ tone = 'secondary', size = 'md', className, ...p }: But
         'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-[background,color,transform,box-shadow] duration-150 active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap',
         size === 'sm' ? 'h-8 px-2.5 text-[13px]' : 'h-10 px-3.5 text-sm',
         tone === 'primary' && 'bg-brand text-on-brand hover:brightness-110',
-        tone === 'secondary' && 'bg-surface text-ink border border-line-strong hover:bg-sunken shadow-card',
+        tone === 'secondary' && 'bg-surface text-ink border border-line hover:border-line-strong hover:bg-sunken',
         tone === 'ghost' && 'text-ink-2 hover:bg-sunken hover:text-ink',
         tone === 'danger' && 'bg-danger-soft text-danger hover:brightness-95',
         className,
@@ -38,7 +38,7 @@ export function Badge({ tone = 'neutral', children, className }: { tone?: 'neutr
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold leading-none whitespace-nowrap',
+        'inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11.5px] font-semibold leading-none whitespace-nowrap',
         tone === 'neutral' && 'bg-sunken text-ink-2',
         tone === 'brand' && 'bg-brand-soft text-brand-ink',
         tone === 'ok' && 'bg-ok-soft text-ok',
@@ -108,7 +108,7 @@ export function Card({ children, className, onClick }: { children: ReactNode; cl
     <Tag
       onClick={onClick}
       className={cx(
-        'rounded-xl border border-line bg-surface shadow-card text-left',
+        'rounded-2xl border border-line bg-surface shadow-card text-left',
         onClick && 'transition-[border-color,box-shadow,transform] hover:border-line-strong hover:shadow-pop active:scale-[.995] w-full',
         className,
       )}
@@ -211,7 +211,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-const inputCls = 'h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+const inputCls = 'h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10';
 
 export function Input(p: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...p} className={cx(inputCls, p.className)} />;

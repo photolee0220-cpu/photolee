@@ -3,81 +3,81 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 공사 현장 문서의 차분한 회색 위에 청록 한 가지 강조색, 대표 지시는 메모지 노랑 */
+/* 로고의 남색을 기준으로 한 차분한 회청색 화면, 대표 지시는 연한 메모지 노랑 */
 :root {
-  --bg: 244 245 243;
+  --bg: 245 246 248;
   --surface: 255 255 255;
-  --sunken: 238 240 237;
-  --line: 226 229 225;
-  --line-strong: 205 210 204;
-  --ink: 24 28 26;
-  --ink-2: 74 81 77;
-  --ink-3: 128 135 131;
-  --brand: 14 124 102;
-  --brand-ink: 10 92 76;
+  --sunken: 240 242 245;
+  --line: 229 232 237;
+  --line-strong: 208 214 222;
+  --ink: 23 30 40;
+  --ink-2: 75 85 99;
+  --ink-3: 134 143 156;
+  --brand: 52 80 112;
+  --brand-ink: 36 58 85;
   --on-brand: 255 255 255;
-  --brand-soft: 226 242 237;
-  --note: 255 247 219;
-  --note-ink: 112 78 6;
-  --note-line: 240 222 160;
-  --ok: 22 135 76;
-  --ok-soft: 224 244 232;
-  --warn: 196 120 6;
-  --warn-soft: 253 242 218;
-  --danger: 205 50 50;
-  --danger-soft: 252 230 230;
-  --shadow: 20 28 24;
+  --brand-soft: 234 240 247;
+  --note: 255 249 232;
+  --note-ink: 122 83 0;
+  --note-line: 241 224 176;
+  --ok: 21 128 82;
+  --ok-soft: 226 244 235;
+  --warn: 190 112 0;
+  --warn-soft: 253 243 222;
+  --danger: 200 48 48;
+  --danger-soft: 252 233 233;
+  --shadow: 23 30 40;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: 16 19 18;
-    --surface: 24 28 27;
-    --sunken: 19 23 22;
-    --line: 40 46 44;
-    --line-strong: 58 66 63;
-    --ink: 233 237 235;
-    --ink-2: 178 186 182;
-    --ink-3: 124 133 129;
-    --brand: 52 196 164;
-    --brand-ink: 120 222 198;
-    --on-brand: 8 32 27;
-    --brand-soft: 20 52 45;
-    --note: 48 40 18;
-    --note-ink: 240 208 120;
-    --note-line: 84 70 30;
-    --ok: 74 200 130;
-    --ok-soft: 20 48 33;
-    --warn: 236 170 60;
-    --warn-soft: 56 40 14;
-    --danger: 240 110 110;
-    --danger-soft: 60 24 24;
+    --bg: 15 18 23;
+    --surface: 23 27 34;
+    --sunken: 19 23 29;
+    --line: 38 44 54;
+    --line-strong: 56 64 77;
+    --ink: 232 236 241;
+    --ink-2: 176 185 197;
+    --ink-3: 122 132 146;
+    --brand: 143 178 217;
+    --brand-ink: 184 208 235;
+    --on-brand: 14 26 40;
+    --brand-soft: 29 40 56;
+    --note: 46 39 20;
+    --note-ink: 240 206 122;
+    --note-line: 82 69 32;
+    --ok: 86 200 140;
+    --ok-soft: 20 46 34;
+    --warn: 236 172 70;
+    --warn-soft: 54 40 16;
+    --danger: 240 112 112;
+    --danger-soft: 58 25 25;
     --shadow: 0 0 0;
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-  --bg: 16 19 18;
-  --surface: 24 28 27;
-  --sunken: 19 23 22;
-  --line: 40 46 44;
-  --line-strong: 58 66 63;
-  --ink: 233 237 235;
-  --ink-2: 178 186 182;
-  --ink-3: 124 133 129;
-  --brand: 52 196 164;
-  --brand-ink: 120 222 198;
-  --on-brand: 8 32 27;
-  --brand-soft: 20 52 45;
-  --note: 48 40 18;
-  --note-ink: 240 208 120;
-  --note-line: 84 70 30;
-  --ok: 74 200 130;
-  --ok-soft: 20 48 33;
-  --warn: 236 170 60;
-  --warn-soft: 56 40 14;
-  --danger: 240 110 110;
-  --danger-soft: 60 24 24;
+  --bg: 15 18 23;
+  --surface: 23 27 34;
+  --sunken: 19 23 29;
+  --line: 38 44 54;
+  --line-strong: 56 64 77;
+  --ink: 232 236 241;
+  --ink-2: 176 185 197;
+  --ink-3: 122 132 146;
+  --brand: 143 178 217;
+  --brand-ink: 184 208 235;
+  --on-brand: 14 26 40;
+  --brand-soft: 29 40 56;
+  --note: 46 39 20;
+  --note-ink: 240 206 122;
+  --note-line: 82 69 32;
+  --ok: 86 200 140;
+  --ok-soft: 20 46 34;
+  --warn: 236 172 70;
+  --warn-soft: 54 40 16;
+  --danger: 240 112 112;
+  --danger-soft: 58 25 25;
   --shadow: 0 0 0;
   color-scheme: dark;
 }
@@ -85,7 +85,8 @@
 html, body, #root { height: 100%; }
 body {
   @apply bg-bg text-ink font-sans antialiased;
-  font-size: 14px;
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
   word-break: keep-all;
   overflow-wrap: anywhere;
   font-feature-settings: 'ss06';
@@ -95,6 +96,15 @@ h1, h2, h3 { text-wrap: balance; }
 .tabular { font-variant-numeric: tabular-nums; }
 .scrollbar-thin { scrollbar-width: thin; }
 textarea { field-sizing: content; }
+
+/* 로고: 밝은 화면은 투명 로고, 어두운 화면은 흰 원 위 로고 */
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .logo-light { display: none; }
+  :root:not([data-theme='light']) .logo-dark { display: block; }
+}
+:root[data-theme='dark'] .logo-light { display: none; }
+:root[data-theme='dark'] .logo-dark { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

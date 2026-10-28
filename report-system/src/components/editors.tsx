@@ -1,8 +1,9 @@
-import { Check, CornerDownRight, History, MessageSquareText, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Plus, Send, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { canEditEntry } from '../lib/access';
 import { byId, commentsFor, has } from '../lib/derive';
 import type { Entry } from '../lib/types';
+import { hasSections, headingText, isHeading, parseSections, serializeSections, type Section } from '../lib/sections';
 import { relativeTime } from '../lib/week';
 import { useStore } from '../state/store';
 import { DiffText } from './DiffText';
@@ -72,9 +73,26 @@ function SaveIndicator({ state, savedAt }: { state: SaveState; savedAt: Date | n
   return null;
 }
 
+/** "■ 제목" 줄은 대주제 제목으로 보여준다 */
+export function SectionHeading({ text, className }: { text: string; className?: string }) {
+  if (!text) return null;
+  return (
+    <p className={cx('mt-3 flex items-center gap-2 text-[14.5px] font-bold text-ink first:mt-0', className)}>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-brand" aria-hidden />{text}
+    </p>
+  );
+}
+
 export function TextBlock({ text, empty = '작성된 내용이 없습니다', className }: { text: string | undefined; empty?: string; className?: string }) {
   if (!has(text)) return <p className={cx('text-[13px] text-ink-3', className)}>{empty}</p>;
-  return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7] text-ink', className)}>{text}</p>;
+  if (!hasSections(text)) return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7] text-ink', className)}>{text}</p>;
+  return (
+    <div className={cx('text-[14px] leading-[1.7] text-ink', className)}>
+      {text!.split('\n').map((line, i) => isHeading(line)
+        ? <SectionHeading key={i} text={headingText(line)} />
+        : <p key={i} className="whitespace-pre-wrap">{line || '\u00a0'}</p>)}
+    </div>
+  );
 }
 
 /** 보고 칸: 권한이 있으면 바로 고치고 자동 저장 */
@@ -105,14 +123,125 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
         onBlur={a.blur}
         placeholder={placeholder ?? '이번 주 진행 내용을 적어주세요'}
         className={cx(
-          'block w-full resize-y rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-[14px] leading-[1.7] text-ink placeholder:text-ink-3',
-          'focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20',
+          'block w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-3 text-[14.5px] leading-[1.75] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong',
+          'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10',
           compact ? 'min-h-[88px]' : 'min-h-[120px]',
         )}
       />
       <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center justify-between gap-2 text-[12px]">
         <div className="text-ink-3">{meta}</div>
         <div className="flex items-center gap-3">
+          <SaveIndicator state={a.state} savedAt={a.savedAt} />
+          {has(prevContent) && !has(a.text) && (
+            <button type="button" onClick={() => a.replace(prevContent!)} className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline">
+              <History size={13} />지난주 내용 불러오기
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Block = Section & { key: number };
+let blockKey = 1;
+const toBlocks = (text: string): Block[] => parseSections(text).map((s) => ({ ...s, key: blockKey++ }));
+
+/** 대주제별로 나눠 쓰는 보고 칸. "+ 대주제 추가"로 제목과 내용 칸을 늘린다 */
+export function SectionEditor({ value, onSave, prevContent, meta, placeholder }: {
+  value: string;
+  onSave(v: string): Promise<unknown>;
+  prevContent?: string;
+  meta?: React.ReactNode;
+  placeholder?: string;
+}) {
+  const a = useAutosave(value, onSave);
+  const [blocks, setBlocks] = useState<Block[]>(() => toBlocks(value));
+  const [confirmDel, setConfirmDel] = useState<number | null>(null);
+  const [forced, setForced] = useState(false);
+  const written = useRef(a.text);
+
+  useEffect(() => {
+    if (a.text !== written.current) {
+      written.current = a.text;
+      setBlocks(toBlocks(a.text));
+    }
+  }, [a.text]);
+
+  const commit = (next: Block[]) => {
+    setBlocks(next);
+    const text = serializeSections(next);
+    written.current = text;
+    a.change(text);
+  };
+  const patch = (i: number, p: Partial<Section>) => commit(blocks.map((b, j) => (j === i ? { ...b, ...p } : b)));
+  const move = (i: number, d: -1 | 1) => {
+    const next = [...blocks];
+    [next[i], next[i + d]] = [next[i + d], next[i]];
+    commit(next);
+  };
+  const remove = (i: number) => {
+    setConfirmDel(null);
+    const next = blocks.filter((_, j) => j !== i);
+    commit(next.length ? next : [{ title: '', body: '', key: blockKey++ }]);
+  };
+  const add = () => {
+    if (blocks.length === 1 && !blocks[0].title && !blocks[0].body.trim() && !forced) { setForced(true); return; }
+    commit([...blocks, { title: '', body: '', key: blockKey++ }]);
+  };
+  const sectioned = forced || blocks.length > 1 || !!blocks[0]?.title;
+  const field = 'block w-full bg-transparent placeholder:text-ink-3 focus:outline-none';
+
+  return (
+    <div>
+      <div className="space-y-3">
+        {blocks.map((b, i) => (
+          <div key={b.key} className={cx(sectioned && 'rounded-xl border border-line bg-surface px-3.5 pb-1 pt-2.5 transition-colors focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10')}>
+            {sectioned && (
+              <div className="flex items-center gap-2 border-b border-line pb-2">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-brand" aria-hidden />
+                <input
+                  id={`section-title-${b.key}`}
+                  value={b.title}
+                  onChange={(e) => patch(i, { title: e.target.value.replace(/^■\s*/, '') })}
+                  onFocus={a.focus}
+                  onBlur={a.blur}
+                  placeholder={i === 0 ? '대제목 (선택)' : '대제목 (예: 공공입찰)'}
+                  className={cx(field, 'flex-1 text-[15px] font-bold text-ink')}
+                />
+                <div className="flex shrink-0 items-center text-ink-3">
+                  <button type="button" aria-label="위로" disabled={i === 0} onClick={() => move(i, -1)} className="rounded p-1 hover:bg-sunken hover:text-ink disabled:opacity-25"><ArrowUp size={14} /></button>
+                  <button type="button" aria-label="아래로" disabled={i === blocks.length - 1} onClick={() => move(i, 1)} className="rounded p-1 hover:bg-sunken hover:text-ink disabled:opacity-25"><ArrowDown size={14} /></button>
+                  {confirmDel === i ? (
+                    <button type="button" onClick={() => remove(i)} className="ml-1 rounded-md bg-danger-soft px-2 py-0.5 text-[12px] font-semibold text-danger">삭제</button>
+                  ) : (
+                    <button type="button" aria-label="대주제 삭제" onClick={() => (b.body.trim() || b.title.trim() ? setConfirmDel(i) : remove(i))} className="rounded p-1 hover:bg-sunken hover:text-danger"><Trash2 size={14} /></button>
+                  )}
+                </div>
+              </div>
+            )}
+            <textarea
+              id={`section-body-${b.key}`}
+              value={b.body}
+              onChange={(e) => patch(i, { body: e.target.value })}
+              onFocus={a.focus}
+              onBlur={a.blur}
+              placeholder={sectioned ? '내용' : placeholder ?? '이번 주 진행 내용을 적어주세요'}
+              className={cx(
+                field,
+                'resize-y text-[14.5px] leading-[1.75] text-ink',
+                sectioned ? 'min-h-[72px] py-2' : 'min-h-[120px] rounded-xl border border-line bg-surface px-3.5 py-3 transition-colors hover:border-line-strong focus:border-brand focus:ring-4 focus:ring-brand/10',
+              )}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex min-h-[20px] flex-wrap items-center justify-between gap-2 text-[12px]">
+        <button type="button" onClick={add} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] font-semibold text-brand-ink hover:bg-brand-soft">
+          <Plus size={15} />{sectioned ? '대주제 추가' : '대주제로 나눠 쓰기'}
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-ink-3">{meta}</span>
           <SaveIndicator state={a.state} savedAt={a.savedAt} />
           {has(prevContent) && !has(a.text) && (
             <button type="button" onClick={() => a.replace(prevContent!)} className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline">

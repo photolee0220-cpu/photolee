@@ -73,3 +73,11 @@ export function colorFor(id: string): string {
 export function firstLines(text: string, n = 3): string {
   return text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, n).join('\n');
 }
+
+/** 현장 보고 부서 사람이 이번 주 마지막으로 고친 현장 칸과 기타사항 */
+export function siteWork(snap: Snapshot, memberId: string): Entry[] {
+  const order = new Map(snap.sites.map((s, i) => [s.id, i]));
+  return snap.entries
+    .filter((e) => (e.kind === 'site' || e.kind === 'misc') && e.updatedBy === memberId && has(e.content))
+    .sort((a, b) => (a.kind === 'misc' ? 1 : 0) - (b.kind === 'misc' ? 1 : 0) || (order.get(a.siteId!) ?? 0) - (order.get(b.siteId!) ?? 0));
+}

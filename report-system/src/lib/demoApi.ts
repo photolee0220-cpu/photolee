@@ -4,7 +4,8 @@ import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } fro
 import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { askClaudeForSummary } from './summary';
-import type { AiSummary, AppSettings, Comment, Directive, Entry, Member, Photo, Seed, Snapshot, WeekId } from './types';
+import { checkAttachable } from './fileTypes';
+import type { AiSummary, AppSettings, Attachment, Comment, Directive, Entry, Member, Photo, Seed, Snapshot, WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -15,6 +16,7 @@ const DEMO_PASSWORD = '1234';
 interface DemoState extends Seed {
   passwords: Record<string, string>;
   photos: Photo[];
+  attachments: Attachment[];
   summaries: Record<WeekId, AiSummary>;
   settings: AppSettings;
 }
@@ -28,7 +30,7 @@ function safeSet(k: string, v: string | null): boolean {
 
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return { ...s, photos: s.photos ?? [], summaries: {}, settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
+  return { ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], summaries: {}, settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
 }
 
 let state: DemoState = (() => {
@@ -36,7 +38,7 @@ let state: DemoState = (() => {
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as DemoState;
-      if (parsed.reportDate === seed.reportDate) return { ...parsed, photos: parsed.photos ?? [], summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } };
+      if (parsed.reportDate === seed.reportDate) return { ...parsed, photos: parsed.photos ?? [], attachments: parsed.attachments ?? [], summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } };
     } catch { /* 손상된 데이터는 초기화 */ }
   }
   return fresh();
@@ -48,7 +50,7 @@ try {
   channel = new BroadcastChannel(KEY);
   channel.onmessage = () => {
     const raw = safeGet(KEY);
-    if (raw) state = JSON.parse(raw);
+    if (raw) { state = JSON.parse(raw); state.attachments ??= []; }
     listeners.forEach((l) => l());
   };
 } catch { channel = null; }
@@ -85,6 +87,7 @@ function weeksWithData(): WeekId[] {
   state.entries.forEach((e) => set.add(e.weekId));
   state.directives.forEach((d) => set.add(d.weekId));
   state.photos.forEach((p) => set.add(p.weekId));
+  state.attachments.forEach((a) => set.add(a.weekId));
   return [...set].sort();
 }
 
@@ -122,6 +125,7 @@ export const demoApi: Api = {
       directives: visibleDirectives(m, state.directives.filter((d) => d.weekId === weekId)),
       comments: [],
       photos: state.photos.filter((p) => p.weekId === weekId && canViewDept(m, p.departmentId, state.grants)),
+      attachments: state.attachments.filter((a) => a.weekId === weekId && canViewDept(m, a.departmentId, state.grants)),
       prevWeekId,
       prevEntries: prevWeekId ? visibleEntries(m, state.entries.filter((e) => e.weekId === prevWeekId)) : [],
       prevDirectives: prevWeekId ? visibleDirectives(m, state.directives.filter((d) => d.weekId === prevWeekId)) : [],
@@ -238,6 +242,43 @@ export const demoApi: Api = {
     persist();
   },
 
+  async uploadAttachment(input) {
+    const m = me();
+    if (!canEditEntry(m, input)) throw new ApiError('이 칸에 파일을 올릴 권한이 없습니다.');
+    const bad = checkAttachable(input.file);
+    if (bad) throw new ApiError(bad);
+    if (input.file.size > 2 * 1024 * 1024) throw new ApiError('체험판은 브라우저 저장 공간이 작아 2MB까지만 올릴 수 있습니다. 실제 서버는 20MB까지 됩니다.');
+    const a: Attachment = {
+      id: newId('f'), weekId: input.weekId, kind: input.kind, siteId: input.siteId, departmentId: input.departmentId, authorId: input.authorId,
+      fileName: input.file.name, sizeBytes: input.file.size, mimeType: input.file.type || 'application/octet-stream',
+      uploadedBy: m.id, createdAt: new Date().toISOString(), dataUrl: await blobToDataUrl(input.file),
+    };
+    state.attachments.push(a);
+    if (!persist()) {
+      state.attachments = state.attachments.filter((x) => x.id !== a.id);
+      persist();
+      throw new ApiError('체험판은 브라우저 저장 공간이 작아 파일을 더 올릴 수 없습니다. 실제 서버에서는 제한이 없습니다.');
+    }
+    return structuredClone(a);
+  },
+
+  async deleteAttachment(id) {
+    const m = me();
+    const a = state.attachments.find((x) => x.id === id);
+    if (!a || (a.uploadedBy !== m.id && !m.isAdmin)) throw new ApiError('올린 사람이나 관리자만 지울 수 있습니다.');
+    state.attachments = state.attachments.filter((x) => x.id !== id);
+    persist();
+  },
+
+  async downloadAttachment(a) {
+    const full = state.attachments.find((x) => x.id === a.id);
+    if (!full?.dataUrl) throw new ApiError('파일을 찾을 수 없습니다.');
+    const link = document.createElement('a');
+    link.href = full.dataUrl;
+    link.download = full.fileName;
+    link.click();
+  },
+
   async getAiSummary(weekId) {
     const m = me();
     if (!m.isCeo) return null;
@@ -321,6 +362,27 @@ export const demoApi: Api = {
       state.settings = { summaryModel: summaryModel(next.summaryModel).id };
       persist();
       return structuredClone(state.settings);
+    },
+    async storageUsage() {
+      requireAdmin();
+      const size = (u: string | undefined) => Math.round(((u?.length ?? 0) * 3) / 4);
+      return {
+        photoCount: state.photos.length,
+        photoBytes: state.photos.reduce((n, p) => n + size(p.url), 0),
+        fileCount: state.attachments.length,
+        fileBytes: state.attachments.reduce((n, a) => n + a.sizeBytes, 0),
+        estimated: false,
+      };
+    },
+    async cleanupMedia(before) {
+      requireAdmin();
+      const oldPhotos = state.photos.filter((p) => p.weekId < before);
+      const oldFiles = state.attachments.filter((a) => a.weekId < before);
+      const bytes = oldPhotos.reduce((n, p) => n + Math.round((p.url.length * 3) / 4), 0) + oldFiles.reduce((n, a) => n + a.sizeBytes, 0);
+      state.photos = state.photos.filter((p) => p.weekId >= before);
+      state.attachments = state.attachments.filter((a) => a.weekId >= before);
+      persist();
+      return { photos: oldPhotos.length, files: oldFiles.length, bytes };
     },
     async changeUsername(memberId, username) {
       requireAdmin();

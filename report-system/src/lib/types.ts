@@ -127,6 +127,41 @@ export interface NewPhotoInput {
   caption: string;
 }
 
+/** 보고 칸에 붙인 파일 (PDF, 엑셀, 한글 등) */
+export interface Attachment {
+  id: string;
+  weekId: WeekId;
+  kind: EntryKind;
+  siteId: string | null;
+  departmentId: string;
+  authorId: string | null;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  uploadedBy: string;
+  createdAt: string;
+  /** 체험판 전용: 파일 내용 */
+  dataUrl?: string;
+}
+
+export interface NewAttachmentInput {
+  weekId: WeekId;
+  kind: EntryKind;
+  siteId: string | null;
+  departmentId: string;
+  authorId: string | null;
+  file: File;
+}
+
+export interface StorageUsage {
+  photoCount: number;
+  photoBytes: number;
+  fileCount: number;
+  fileBytes: number;
+  /** 크기 기록이 없는 옛 사진이 있어 일부 어림값 */
+  estimated: boolean;
+}
+
 export interface AiSummary {
   weekId: WeekId;
   highlights: string[];
@@ -152,6 +187,7 @@ export interface Seed {
   directives: Directive[];
   comments: Comment[];
   photos?: Photo[];
+  attachments?: Attachment[];
 }
 
 /** 화면 하나를 그리는 데 필요한 데이터. 권한에 따라 이미 걸러진 상태 */
@@ -165,6 +201,7 @@ export interface Snapshot {
   directives: Directive[];
   comments: Comment[];
   photos: Photo[];
+  attachments: Attachment[];
   /** 같은 범위의 직전 주차 기록 (참고용) */
   prevWeekId: WeekId | null;
   prevEntries: Entry[];
