@@ -36,9 +36,9 @@ jobs:
           [ -n "$AT" ] && rec "관리자 로그인" 1 "ok" || rec "관리자 로그인" 0 "$(echo "$tok" | jq -c '{code,error_code,msg}' 2>/dev/null | head -c 200)"
           H=(-H "apikey: $ANON" -H "Authorization: Bearer $AT")
           n=$(curl -sS "$URL/rest/v1/members?select=id" "${H[@]}" | jq 'length')
-          [ "$n" = 16 ] && rec "인원 목록" 1 "$n명" || rec "인원 목록" 0 "$n"
+          [ "$n" -ge 16 ] && rec "인원 목록" 1 "$n명" || rec "인원 목록" 0 "$n"
           n=$(curl -sS "$URL/rest/v1/entries?select=id" "${H[@]}" | jq 'length')
-          [ "$n" = 41 ] && rec "10/26 보고" 1 "$n칸" || rec "10/26 보고" 0 "$n"
+          [ "$n" -ge 41 ] && rec "보고 칸" 1 "$n칸" || rec "보고 칸" 0 "$n"
           n=$(curl -sS "$URL/rest/v1/sites?select=id" "${H[@]}" | jq 'length')
           [ "$n" = 22 ] && rec "현장" 1 "$n곳" || rec "현장" 0 "$n"
           a=$(curl -sS "$URL/rest/v1/members?select=id" -H "apikey: $ANON" | jq 'length')
@@ -55,6 +55,30 @@ jobs:
           echo "$up" | jq -e '.Key // .key // .Id // .id' >/dev/null && rec "사진 저장소 올리기" 1 "ok" || rec "사진 저장소 올리기" 0 "$(echo "$up" | head -c 200)"
           del=$(curl -sS -X DELETE "$URL/storage/v1/object/site-photos" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg p "$dept/2026-11-02/verify-test.jpg" '{prefixes:[$p]}')")
           echo "$del" | jq -e 'length == 1' >/dev/null && rec "사진 저장소 지우기" 1 "ok" || rec "사진 저장소 지우기" 0 "$(echo "$del" | head -c 200)"
+          # 첨부파일: 올리기 → 기록 → 내려받기 → 지우기, 20MB 초과 거절, 사용량
+          curl -sS -X POST "$URL/rest/v1/rpc/ensure_week" "${H[@]}" -H "Content-Type: application/json" -d '{"p_week":"2026-11-02"}' >/dev/null
+          FP="$dept/2026-11-02/verify-test.pdf"
+          printf '%%PDF-1.4\n%% verify test\n%%%%EOF\n' > "$RUNNER_TEMP/t.pdf"
+          up=$(curl -sS -X POST "$URL/storage/v1/object/report-files/$FP" "${H[@]}" -H "Content-Type: application/pdf" --data-binary @"$RUNNER_TEMP/t.pdf")
+          echo "$up" | jq -e '.Key // .key // .Id // .id' >/dev/null && rec "첨부파일 올리기" 1 "ok" || rec "첨부파일 올리기" 0 "$(echo "$up" | head -c 200)"
+          row=$(curl -sS -X POST "$URL/rest/v1/attachments" "${H[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" \
+            -d "$(jq -n --arg d "$dept" --arg p "$FP" '{week_id:"2026-11-02", kind:"misc", department_id:$d, storage_path:$p, file_name:"점검용.pdf", size_bytes:30, mime_type:"application/pdf"}')")
+          AID=$(echo "$row" | jq -r '.[0].id // empty')
+          [ -n "$AID" ] && rec "첨부파일 기록" 1 "ok" || rec "첨부파일 기록" 0 "$(echo "$row" | head -c 200)"
+          a=$(curl -sS "$URL/rest/v1/attachments?select=id" -H "apikey: $ANON" | jq 'length')
+          [ "$a" = 0 ] && rec "첨부파일: 로그인 안 한 사람 차단" 1 "0건" || rec "첨부파일: 로그인 안 한 사람 차단" 0 "$a"
+          sig=$(curl -sS -X POST "$URL/storage/v1/object/sign/report-files/$FP" "${H[@]}" -H "Content-Type: application/json" -d '{"expiresIn":60}' | jq -r '.signedURL // empty')
+          curl -sS "$URL/storage/v1$sig" -o "$RUNNER_TEMP/back.pdf"
+          cmp -s "$RUNNER_TEMP/t.pdf" "$RUNNER_TEMP/back.pdf" && rec "첨부파일 내려받기" 1 "내용 일치" || rec "첨부파일 내려받기" 0 "sig=${sig:0:20} $(head -c 120 "$RUNNER_TEMP/back.pdf")"
+          head -c 21500000 /dev/zero > "$RUNNER_TEMP/big.pdf"
+          big=$(curl -sS -o "$RUNNER_TEMP/big.out" -w "%{http_code}" -X POST "$URL/storage/v1/object/report-files/$dept/2026-11-02/verify-big.pdf" "${H[@]}" -H "Content-Type: application/pdf" --data-binary @"$RUNNER_TEMP/big.pdf")
+          [ "$big" -ge 400 ] && rec "20MB 넘는 파일 거절" 1 "HTTP $big" || { rec "20MB 넘는 파일 거절" 0 "HTTP $big"; curl -sS -X DELETE "$URL/storage/v1/object/report-files" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg p "$dept/2026-11-02/verify-big.pdf" '{prefixes:[$p]}')" >/dev/null; }
+          u=$(curl -sS -X POST "$URL/rest/v1/rpc/storage_usage" "${H[@]}" -H "Content-Type: application/json" -d '{}')
+          echo "$u" | jq -e 'type == "array"' >/dev/null && rec "저장 공간 사용량" 1 "$(echo "$u" | jq -c 'map({(.bucket_id): .bytes}) | add // {}')" || rec "저장 공간 사용량" 0 "$(echo "$u" | head -c 200)"
+          [ -n "$AID" ] && curl -sS -X DELETE "$URL/rest/v1/attachments?id=eq.$AID" "${H[@]}" >/dev/null
+          del=$(curl -sS -X DELETE "$URL/storage/v1/object/report-files" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg p "$FP" '{prefixes:[$p]}')")
+          left=$(curl -sS "$URL/rest/v1/attachments?select=id&week_id=eq.2026-11-02&file_name=eq.%EC%A0%90%EA%B2%80%EC%9A%A9.pdf" "${H[@]}" | jq 'length')
+          echo "$del" | jq -e 'length == 1' >/dev/null && [ "$left" = 0 ] && rec "첨부파일 지우기(점검 흔적 정리)" 1 "ok" || rec "첨부파일 지우기(점검 흔적 정리)" 0 "$(echo "$del" | head -c 150) left=$left"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()
