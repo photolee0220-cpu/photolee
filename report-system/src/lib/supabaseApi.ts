@@ -3,7 +3,7 @@ import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf } from './fileTypes';
-import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot } from './types';
+import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot, StageDef } from './types';
 
 const BUCKET = 'site-photos';
 const FILES = 'report-files';
@@ -21,6 +21,7 @@ const toSite = (r: Row): Site => ({
   progress: r.progress == null ? null : Number(r.progress), scale: r.scale, tags: r.tags ?? [], sort: r.sort,
   archived: r.archived, completedAt: r.completed_at,
 });
+const toStage = (r: Row): StageDef => ({ id: r.id, label: r.label, short: r.short, sort: r.sort });
 const toGrant = (r: Row): Grant => ({ viewerDepartmentId: r.viewer_department_id, targetDepartmentId: r.target_department_id });
 const toEntry = (r: Row): Entry => ({
   id: r.id, weekId: r.week_id, kind: r.kind, siteId: r.site_id, departmentId: r.department_id, authorId: r.author_id,
@@ -112,7 +113,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       const prev = await sb.from('weeks').select('id').lt('id', weekId).order('id', { ascending: false }).limit(1);
       const prevWeekId: string | null = prev.data?.[0]?.id ?? null;
       const weekIds = prevWeekId ? [weekId, prevWeekId] : [weekId];
-      const [d, m, s, g, e, dv, ph, at] = await Promise.all([
+      const [d, m, s, g, e, dv, ph, at, st, ss] = await Promise.all([
         sb.from('departments').select('*').order('sort'),
         sb.from('members').select('*').order('name'),
         sb.from('sites').select('*').order('sort'),
@@ -121,6 +122,8 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         sb.from('directives').select('*').in('week_id', weekIds),
         sb.from('photos').select('*').eq('week_id', weekId).order('created_at'),
         sb.from('attachments').select('*').eq('week_id', weekId).order('created_at'),
+        sb.from('stages').select('*').order('sort'),
+        sb.rpc('site_report_status', { p_week: weekId }),
       ]);
       const entries = (check(e) as Row[]).map(toEntry);
       const directives = (check(dv) as Row[]).map(toDirective);
@@ -133,12 +136,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         departments: (check(d) as Row[]).map(toDept),
         members: (check(m) as Row[]).map(toMember),
         sites: (check(s) as Row[]).map(toSite),
+        stages: (check(st) as Row[]).map(toStage),
         grants: (check(g) as Row[]).map(toGrant),
         entries: current,
         directives: directives.filter((x) => x.weekId === weekId),
         comments: c.map(toComment),
         photos: await withUrls(check(ph) as Row[]),
         attachments: (check(at) as Row[]).map(toAttachment),
+        siteStatus: (check(ss) as Row[]).map((r) => ({ siteId: r.site_id, departmentId: r.department_id, updatedAt: r.updated_at })),
         prevWeekId,
         prevEntries: entries.filter((x) => x.weekId === prevWeekId),
         prevDirectives: directives.filter((x) => x.weekId === prevWeekId),
@@ -276,7 +281,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       let t: ReturnType<typeof setTimeout> | undefined;
       const debounced = () => { clearTimeout(t); t = setTimeout(fn, 400); };
       const ch = sb.channel('report-changes');
-      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos', 'attachments']) {
+      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos', 'attachments', 'stages']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, debounced);
       }
       ch.subscribe();
@@ -295,6 +300,16 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           ? check(await sb.from('sites').insert(row).select().single())
           : check(await sb.from('sites').update(row).eq('id', site.id).select().single());
         return toSite(r);
+      },
+      async saveStage(st) {
+        const row = { id: st.id, short: st.short.trim(), label: st.label.trim() || st.short.trim(), sort: st.sort };
+        const r = await sb.from('stages').upsert(row).select().single();
+        if (r.error) throw new ApiError(r.error.code === '23505' ? '같은 단계가 이미 있습니다.' : r.error.message);
+        return toStage(r.data);
+      },
+      async deleteStage(id) {
+        const { error } = await sb.from('stages').delete().eq('id', id);
+        if (error) throw new ApiError(error.code === '23503' ? '이 단계에 현장이 있어 지울 수 없습니다. 현장을 다른 단계로 옮기거나 보관함의 현장도 확인해 주세요.' : error.message);
       },
       async saveDepartment(d) {
         const row = { name: d.name, sort: d.sort, writes_sites: d.writesSites, active: d.active };

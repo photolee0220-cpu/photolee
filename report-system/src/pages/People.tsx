@@ -41,7 +41,7 @@ function SiteWorkList({ entries }: { entries: Entry[] }) {
     <ul className="space-y-1">
       {entries.slice(0, SITE_ROWS).map((e) => (
         <li key={e.id} className="flex min-w-0 items-baseline gap-2 text-[13px] leading-[1.55]">
-          <span className="shrink-0 font-semibold text-ink">{e.kind === 'misc' ? '기타사항' : snap.sites.find((s) => s.id === e.siteId)?.name}</span>
+          <span className="shrink-0 font-semibold text-ink">{snap.sites.find((s) => s.id === e.siteId)?.name}</span>
           <span className="min-w-0 truncate text-ink-2">{previewLine(e.content)}</span>
         </li>
       ))}

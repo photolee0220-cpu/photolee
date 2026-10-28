@@ -1,9 +1,9 @@
 import { ApiError } from './api';
 import {
-  has, memberDirective, miscDirective, miscEntry, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites,
+  has, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites,
 } from './derive';
 import { lineDiff } from './diff';
-import { STAGES, type Snapshot } from './types';
+import { isBuildStage, type Snapshot } from './types';
 
 export interface SummaryResult {
   highlights: string[];
@@ -66,29 +66,18 @@ export function buildSummaryPrompt(snap: Snapshot): { prompt: string; changed: C
     }
   };
 
-  const special = miscDirective(snap.directives, 'special');
-  if (has(special?.content)) out.push('', '## 주간 특별 지시사항', special!.content.trim());
-
   out.push('', `## 지난주 대비 바뀐 현장 (siteId 목록)`, changed.length ? changed.map((c) => c.siteId).join(', ') : '(없음)');
 
-  for (const st of STAGES) {
+  for (const st of snap.stages) {
     const list = visibleSites(snap).filter((s) => s.stage === st.id);
     if (!list.length) continue;
     out.push('', `## ${st.label}`);
     for (const s of list) {
-      const meta = [s.process, s.progress != null ? `공정율 ${s.progress}%` : s.scale, s.dueDate ? `${st.id === 'construction' ? '준공' : '착공'}예상 ${s.dueDate}` : s.dueText, s.tags.join('·')].filter(Boolean).join(' | ');
+      const meta = [s.process, s.progress != null ? `공정율 ${s.progress}%` : s.scale, s.dueDate ? `${isBuildStage(st.id) ? '준공' : '착공'}예상 ${s.dueDate}` : s.dueText, s.tags.join('·')].filter(Boolean).join(' | ');
       out.push('', `### [${s.id}] ${s.name}${s.note ? ` (${s.note})` : ''}${changedIds.has(s.id) ? ' *바뀜*' : ''}`, meta);
       cell('대표 지시', siteDirective(snap.directives, s.id)?.content, siteDirective(snap.prevDirectives, s.id)?.content);
       for (const d of depts) cell(d.name, siteEntry(snap.entries, s.id, d.id)?.content, siteEntry(snap.prevEntries, s.id, d.id)?.content);
     }
-  }
-
-  const misc = depts.map((d) => [d.name, miscEntry(snap.entries, d.id)?.content, miscEntry(snap.prevEntries, d.id)?.content] as const).filter(([, t]) => has(t));
-  if (misc.length || has(miscDirective(snap.directives, 'ceo_progress')?.content)) {
-    out.push('', '## 기타사항');
-    cell('대표 진행사항', miscDirective(snap.directives, 'ceo_progress')?.content, miscDirective(snap.prevDirectives, 'ceo_progress')?.content);
-    cell('의뢰 진행', miscDirective(snap.directives, 'requests')?.content, miscDirective(snap.prevDirectives, 'requests')?.content);
-    for (const [name, t, p] of misc) cell(name, t, p);
   }
 
   out.push('', '## 부서별 보고');

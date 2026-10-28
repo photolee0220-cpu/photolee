@@ -6,7 +6,6 @@ import logoDiscUrl from '../assets/logo-disc.png';
 import logoUrl from '../assets/logo.png';
 import { api } from '../lib/client';
 import { byId, has, personEntry } from '../lib/derive';
-import { STAGES } from '../lib/types';
 import { currentWeekId, deadlineText, shiftWeek, weekLabel } from '../lib/week';
 import { useStore, type View } from '../state/store';
 import { Avatar, Badge, cx, IconButton } from './ui';
@@ -107,14 +106,13 @@ function SearchPalette() {
     const term = q.trim();
     const match = (s: string) => !term || s.includes(term);
     const sites = snap.sites.filter((s) => !s.archived && (match(s.name) || match(s.note))).map((s) => ({
-      key: s.id, label: s.name, sub: `${STAGES.find((x) => x.id === s.stage)!.short} · ${s.process || s.note}`,
+      key: s.id, label: s.name, sub: `${snap.stages.find((x) => x.id === s.stage)?.short ?? ''} · ${s.process || s.note}`,
       run: () => openDrawer({ type: 'site', id: s.id }),
     }));
     const people = snap.members.filter((m) => m.active && m.departmentId && !m.isCeo && (match(m.name) || match(depts.get(m.departmentId)?.name ?? '')))
       .filter((m) => me.isCeo || me.isAdmin || m.departmentId === me.departmentId || has(personEntry(snap.entries, m.id)?.content))
       .map((m) => ({ key: m.id, label: `${m.name} ${m.title}`, sub: depts.get(m.departmentId!)?.name ?? '', run: () => openDrawer({ type: 'person', id: m.id }) }));
-    const misc = match('기타사항') ? [{ key: 'misc', label: '기타사항', sub: '대표 진행사항, 특별 지시, 부서 기타', run: () => openDrawer({ type: 'misc' }) }] : [];
-    return [...sites, ...people, ...misc].slice(0, 12);
+    return [...sites, ...people].slice(0, 12);
   }, [snap, q, me, openDrawer]);
 
   if (!searchOpen) return null;

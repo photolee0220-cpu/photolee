@@ -1,6 +1,6 @@
 import { CalendarClock, MessageSquareText } from 'lucide-react';
-import { commentsFor, firstLines, has, isCompleted, siteDepartments, siteDirective, siteEntry } from '../lib/derive';
-import type { Site, Snapshot } from '../lib/types';
+import { commentsFor, firstLines, has, isCompleted, siteDepartments, siteDirective, siteEntry, siteStatusOf } from '../lib/derive';
+import { isBuildStage, type Site, type Snapshot } from '../lib/types';
 import { dday, formatDate } from '../lib/week';
 import { canViewDept } from '../lib/access';
 import { useStore } from '../state/store';
@@ -9,8 +9,8 @@ import { PhotoCount } from './Photos';
 import { Badge, Card, cx, Progress, StageChip } from './ui';
 
 export function dueInfo(site: Site): { label: string; tone: 'neutral' | 'ok' | 'warn' | 'danger' } {
-  const prefix = site.stage === 'construction' ? '준공' : '착공';
-  if (site.stage === 'construction' && isCompleted(site)) return { label: '준공완료', tone: 'ok' };
+  const prefix = isBuildStage(site.stage) ? '준공' : '착공';
+  if (isBuildStage(site.stage) && isCompleted(site)) return { label: '준공완료', tone: 'ok' };
   if (!site.dueDate) return { label: `${prefix}예상 ${site.dueText || '미정'}`, tone: 'neutral' };
   const d = dday(site.dueDate)!;
   const date = formatDate(site.dueDate);
@@ -19,7 +19,7 @@ export function dueInfo(site: Site): { label: string; tone: 'neutral' | 'ok' | '
 }
 
 export function isImminent(site: Site): boolean {
-  if (site.stage !== 'construction' || isCompleted(site)) return false;
+  if (!isBuildStage(site.stage) || isCompleted(site)) return false;
   const d = dday(site.dueDate);
   return d != null && d >= 0 && d <= 90;
 }
@@ -40,7 +40,7 @@ export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; o
   const directive = siteDirective(snap.directives, site.id);
   const due = dueInfo(site);
   const feedback = depts.reduce((n, d) => n + commentsFor(snap.comments, siteEntry(snap.entries, site.id, d.id)?.id).length, 0);
-  const completed = site.stage === 'construction' && isCompleted(site);
+  const completed = isBuildStage(site.stage) && isCompleted(site);
   const changes = siteChanges(snap, site.id, depts.map((d) => d.id));
 
   return (
@@ -82,8 +82,8 @@ export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; o
       )}
 
       <div className="mt-auto flex items-center gap-1.5 pt-3">
-        {depts.map((d) => {
-          const done = has(siteEntry(snap.entries, site.id, d.id)?.content);
+        {siteDepartments(snap).map((d) => {
+          const done = !!siteStatusOf(snap, site.id, d.id);
           return (
             <span key={d.id} title={`${d.name} ${done ? '작성' : '미작성'}`}
               className={cx('rounded-md px-1.5 py-0.5 text-[11px] font-semibold', done ? 'bg-brand-soft text-brand-ink' : 'bg-sunken text-ink-3')}>

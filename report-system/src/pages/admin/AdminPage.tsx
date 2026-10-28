@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, HardDrive, KeyRound, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
+  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, HardDrive, KeyRound, Layers, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
@@ -10,7 +10,7 @@ import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes } from '../../lib/fileTypes';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { SITE_TAGS, STAGES, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
+import { isBuildStage, SITE_TAGS, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
 import { currentWeekId, shiftWeek, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
@@ -88,6 +88,7 @@ function SitesAdmin() {
   const { run } = useRun();
   const [filter, setFilter] = useState<Stage | 'archived'>('construction');
   const [editing, setEditing] = useState<Site | null>(null);
+  const [managing, setManaging] = useState(false);
   if (!snap) return <Spinner />;
   const all = [...snap.sites].sort((a, b) => a.sort - b.sort);
   const list = all.filter((s) => (filter === 'archived' ? s.archived : !s.archived && s.stage === filter));
@@ -115,10 +116,13 @@ function SitesAdmin() {
           <h1 className="text-[20px] font-extrabold">현장 관리</h1>
           <p className="text-[13px] text-ink-3">현장 추가, 단계 이동(영업 → CM → 공사진행), 공정율·준공일 수정, 준공 처리를 합니다. 보관한 현장의 기록은 그대로 남습니다.</p>
         </div>
-        <Button tone="primary" onClick={() => setEditing(blank())}><Plus size={16} />현장 추가</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setManaging(true)}><Layers size={16} />단계 관리</Button>
+          <Button tone="primary" onClick={() => setEditing(blank())}><Plus size={16} />현장 추가</Button>
+        </div>
       </div>
       <Segmented<Stage | 'archived'> value={filter} onChange={setFilter} className="mb-4" options={[
-        ...STAGES.map((s) => ({ id: s.id as Stage | 'archived', label: `${s.short} ${count(s.id)}` })),
+        ...snap.stages.map((s) => ({ id: s.id as Stage | 'archived', label: `${s.short} ${count(s.id)}` })),
         { id: 'archived', label: `보관함 ${all.filter((s) => s.archived).length}` },
       ]} />
       {list.length === 0 ? <Empty title="이 단계의 현장이 없습니다" /> : (
@@ -133,14 +137,14 @@ function SitesAdmin() {
               )}
               <div className="min-w-[200px] flex-1">
                 <p className="flex flex-wrap items-center gap-1.5 font-bold">{s.name}<StageChip stage={s.stage} />{s.tags.map((t) => <Badge key={t}>{t}</Badge>)}</p>
-                <p className="text-[12.5px] text-ink-3">{[s.note, s.process, s.progress != null ? `${s.progress}%` : s.scale, isCompleted(s) && s.stage === 'construction' ? '' : dueInfo(s).label].filter(Boolean).join(' · ')}</p>
+                <p className="text-[12.5px] text-ink-3">{[s.note, s.process, s.progress != null ? `${s.progress}%` : s.scale, isCompleted(s) && isBuildStage(s.stage) ? '' : dueInfo(s).label].filter(Boolean).join(' · ')}</p>
               </div>
               <div className="flex gap-1.5">
                 {s.archived ? (
                   <Button size="sm" onClick={() => run(() => api.admin.saveSite({ ...s, archived: false }), '현장을 다시 꺼냈습니다')}><ArchiveRestore size={14} />다시 꺼내기</Button>
                 ) : (
                   <>
-                    {s.stage === 'construction' && !isCompleted(s) && (
+                    {isBuildStage(s.stage) && !isCompleted(s) && (
                       <Button size="sm" onClick={() => run(() => api.admin.saveSite({ ...s, progress: 100, process: '준공완료', completedAt: new Date().toISOString().slice(0, 10) }), `${s.name} 준공 처리했습니다`)}>
                         <CheckCircle2 size={14} />준공 처리
                       </Button>
@@ -154,7 +158,63 @@ function SitesAdmin() {
         </div>
       )}
       {editing && <SiteForm site={editing} onClose={() => setEditing(null)} />}
+      {managing && <StagesModal onClose={() => setManaging(false)} />}
     </div>
+  );
+}
+
+/** 현장 단계 이름 변경·순서·추가·삭제. 현장이 있는 단계는 지울 수 없다 */
+function StagesModal({ onClose }: { onClose(): void }) {
+  const { snap } = useStore();
+  const { run, busy } = useRun();
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [newName, setNewName] = useState('');
+  if (!snap) return null;
+  const stages = snap.stages;
+  const used = (id: string) => snap.sites.filter((x) => x.stage === id).length;
+  const nameOf = (st: StageDef) => names[st.id] ?? st.short;
+
+  const rename = (st: StageDef) => {
+    const name = nameOf(st).trim();
+    if (!name || name === st.short) return;
+    void run(() => api.admin.saveStage({ ...st, short: name, label: name }), '단계 이름을 바꿨습니다');
+  };
+  const move = (i: number, d: -1 | 1) => {
+    const a = stages[i];
+    const b = stages[i + d];
+    void run(async () => { await api.admin.saveStage({ ...a, sort: b.sort }); await api.admin.saveStage({ ...b, sort: a.sort }); });
+  };
+  const add = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    const st: StageDef = { id: newId('st'), label: name, short: name, sort: Math.max(0, ...stages.map((x) => x.sort)) + 1 };
+    if (await run(() => api.admin.saveStage(st), `'${name}' 단계를 추가했습니다`)) setNewName('');
+  };
+
+  return (
+    <Modal open onClose={onClose} title="현장 단계 관리" width={520} footer={<Button onClick={onClose}>닫기</Button>}>
+      <p className="mb-3 text-[13px] text-ink-3">단계 이름은 대시보드 현장 현황 탭, 표 보기, 엑셀에 그대로 쓰입니다. 현장이 남아 있는 단계는 지울 수 없습니다.</p>
+      <div className="overflow-hidden rounded-xl border border-line">
+        {stages.map((st, i) => (
+          <div key={st.id} className="flex items-center gap-2 border-b border-line px-3 py-2 last:border-0">
+            <div className="flex flex-col">
+              <button aria-label="위로" disabled={i === 0 || busy} onClick={() => move(i, -1)} className="text-ink-3 hover:text-ink disabled:opacity-25"><ArrowUp size={14} /></button>
+              <button aria-label="아래로" disabled={i === stages.length - 1 || busy} onClick={() => move(i, 1)} className="text-ink-3 hover:text-ink disabled:opacity-25"><ArrowDown size={14} /></button>
+            </div>
+            <Input value={nameOf(st)} onChange={(e) => setNames((n) => ({ ...n, [st.id]: e.target.value }))} onBlur={() => rename(st)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} className="flex-1" aria-label="단계 이름" />
+            <span className="w-14 shrink-0 text-right text-[12.5px] text-ink-3">현장 {used(st.id)}</span>
+            <IconButton label="단계 삭제" disabled={used(st.id) > 0 || busy} onClick={() => run(() => api.admin.deleteStage(st.id), `'${st.short}' 단계를 지웠습니다`)}>
+              <Trash2 size={15} />
+            </IconButton>
+          </div>
+        ))}
+      </div>
+      <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+        <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="새 단계 이름 (예: 자체사업, 입찰진행)" />
+        <Button tone="primary" type="submit" disabled={!newName.trim() || busy}><Plus size={15} />추가</Button>
+      </form>
+    </Modal>
   );
 }
 
@@ -162,7 +222,18 @@ function SiteForm({ site, onClose }: { site: Site; onClose(): void }) {
   const { run, busy } = useRun();
   const [s, set] = useState<Site>(site);
   const [customTag, setCustomTag] = useState('');
+  const [addingStage, setAddingStage] = useState<string | null>(null);
+  const { snap } = useStore();
   const isNew = site.id.startsWith('new_');
+  const addStage = async () => {
+    const name = (addingStage ?? '').trim();
+    if (!name) return;
+    const stage: StageDef = { id: newId('st'), label: name, short: name, sort: Math.max(0, ...(snap?.stages ?? []).map((x) => x.sort)) + 1 };
+    if (await run(() => api.admin.saveStage(stage), `'${name}' 단계를 추가했습니다`)) {
+      up('stage', stage.id);
+      setAddingStage(null);
+    }
+  };
   const up = <K extends keyof Site>(k: K, v: Site[K]) => set((x) => ({ ...x, [k]: v }));
   const tagOptions = [...new Set([...SITE_TAGS, ...s.tags])];
 
@@ -184,11 +255,23 @@ function SiteForm({ site, onClose }: { site: Site; onClose(): void }) {
         <div className="sm:col-span-2"><Field label="부가 정보" hint="설계사무소, 금융기관 등"><Input id="site-note" value={s.note} onChange={(e) => up('note', e.target.value)} placeholder="예: 아벨 · 신한은행 진행" /></Field></div>
         <Field label="단계">
           <Select id="site-stage" value={s.stage} onChange={(e) => up('stage', e.target.value as Stage)}>
-            {STAGES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            {(snap?.stages ?? []).map((x) => <option key={x.id} value={x.id}>{x.short}</option>)}
           </Select>
+          {addingStage == null ? (
+            <button type="button" onClick={() => setAddingStage('')} className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-ink hover:underline">
+              <Plus size={13} />단계 추가
+            </button>
+          ) : (
+            <div className="mt-1.5 flex gap-1.5">
+              <Input id="new-stage" value={addingStage} onChange={(e) => setAddingStage(e.target.value)} placeholder="예: 자체사업" autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addStage(); } if (e.key === 'Escape') { e.stopPropagation(); setAddingStage(null); } }} />
+              <Button size="sm" tone="primary" onClick={addStage} disabled={!addingStage.trim()}>추가</Button>
+              <Button size="sm" tone="ghost" onClick={() => setAddingStage(null)}>취소</Button>
+            </div>
+          )}
         </Field>
-        <Field label={s.stage === 'construction' ? '주요 진행 공정' : '주요 진행 사항'}><Input id="site-process" value={s.process} onChange={(e) => up('process', e.target.value)} placeholder="예: 철콘공사" /></Field>
-        <Field label={s.stage === 'construction' ? '준공예상일' : '착공예상일'} hint="비우면 아래 표기가 쓰입니다">
+        <Field label={isBuildStage(s.stage) ? '주요 진행 공정' : '주요 진행 사항'}><Input id="site-process" value={s.process} onChange={(e) => up('process', e.target.value)} placeholder="예: 철콘공사" /></Field>
+        <Field label={isBuildStage(s.stage) ? '준공예상일' : '착공예상일'} hint="비우면 아래 표기가 쓰입니다">
           <Input id="site-due" type="date" value={s.dueDate ?? ''} onChange={(e) => up('dueDate', e.target.value || null)} />
         </Field>
         <Field label="날짜 대신 표기"><Input id="site-due-text" value={s.dueText} onChange={(e) => up('dueText', e.target.value)} placeholder="미정" /></Field>

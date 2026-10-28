@@ -1,6 +1,6 @@
 import { canViewDept } from './access';
-import { byId, memberDirective, miscDirective, miscEntry, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites } from './derive';
-import { STAGES, type Member, type Snapshot } from './types';
+import { byId, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites } from './derive';
+import { isBuildStage, type Member, type Snapshot } from './types';
 import { parseIsoDate } from './week';
 
 const fileNote = (n: number) => (n ? `(첨부파일 ${n}개 · 시스템에서 확인)` : '');
@@ -64,11 +64,11 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
   };
 
   const sites = visibleSites(snap);
-  for (const stage of STAGES) {
+  for (const stage of snap.stages) {
     const list = sites.filter((s) => s.stage === stage.id);
     if (!list.length) continue;
     section(stage.label);
-    const isCons = stage.id === 'construction';
+    const isCons = isBuildStage(stage.id);
     ws.getRow(r).values = ['NO', '현장명', isCons ? '준공예상일' : '착공예상일', isCons ? '주요진행공정' : '주요진행사항', isCons ? '공정율' : '연면적', '대표님 지시사항',
       ...depts.map((dp) => `${dp.name} (${people(dp.id)})`)];
     styleRow(r, { head: true });
@@ -95,21 +95,6 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
       ws.getCell(r, 6).fill = noteFill;
       r++;
     });
-  }
-
-  // 기타사항
-  const slotText = (slot: 'ceo_progress' | 'requests' | 'special') => miscDirective(snap.directives, slot)?.content ?? '';
-  const left = [slotText('ceo_progress') && `대표진행사항\n${slotText('ceo_progress')}`].filter(Boolean).join('\n');
-  const right = [slotText('requests') && `의뢰진행 내용\n${slotText('requests')}`, slotText('special') && `- 주간 특별 지시사항 -\n${slotText('special')}`].filter(Boolean).join('\n\n');
-  const miscs = depts.map((dp) => [miscEntry(snap.entries, dp.id)?.content ?? '',
-    fileNote((snap.attachments ?? []).filter((a) => a.kind === 'misc' && a.departmentId === dp.id).length)].filter(Boolean).join('\n'));
-  if (left || right || miscs.some(Boolean)) {
-    ws.getRow(r).values = ['', '기타사항', left, '', '', right, ...miscs];
-    ws.mergeCells(r, 3, r, 5);
-    styleRow(r);
-    ws.getCell(r, 2).font = { name: '맑은 고딕', size: 9, bold: true };
-    ws.getCell(r, 6).fill = noteFill;
-    r++;
   }
 
   // 현장 외 부서별 보고 (사람별)

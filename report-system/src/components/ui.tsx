@@ -1,7 +1,8 @@
 import { X } from 'lucide-react';
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { colorFor, initials } from '../lib/derive';
-import { STAGES, type Stage } from '../lib/types';
+import type { Stage } from '../lib/types';
+import { useStore } from '../state/store';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -75,8 +76,9 @@ export function Progress({ value, className }: { value: number | null; className
 }
 
 export function StageChip({ stage }: { stage: Stage }) {
-  const s = STAGES.find((x) => x.id === stage)!;
-  return <Badge tone={stage === 'construction' ? 'brand' : stage === 'cm' ? 'neutral' : 'warn'}>{s.short}</Badge>;
+  const { snap } = useStore();
+  const s = snap?.stages.find((x) => x.id === stage);
+  return <Badge tone={stage === 'construction' ? 'brand' : stage === 'cm' ? 'neutral' : stage === 'sales' ? 'warn' : 'ok'}>{s?.short ?? stage}</Badge>;
 }
 
 export function Segmented<T extends string>({ value, onChange, options, className }: {

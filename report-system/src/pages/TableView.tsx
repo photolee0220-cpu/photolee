@@ -3,9 +3,9 @@ import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell'
 import { Button, cx, Spinner } from '../components/ui';
 import { canViewDept } from '../lib/access';
 import {
-  has, memberDirective, miscDirective, miscEntry, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites,
+  has, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites,
 } from '../lib/derive';
-import { STAGES } from '../lib/types';
+import { isBuildStage } from '../lib/types';
 import { formatDate, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
@@ -39,10 +39,10 @@ export function TableView() {
       </PageHeader>
 
       <div className="space-y-6">
-        {STAGES.map((stage) => {
+        {snap.stages.map((stage) => {
           const list = sites.filter((s) => s.stage === stage.id);
           if (!list.length) return null;
-          const cons = stage.id === 'construction';
+          const cons = isBuildStage(stage.id);
           return (
             <section key={stage.id}>
               <h2 className="mb-2 text-[15px] font-bold">{stage.label} <span className="text-ink-3">{list.length}</span></h2>
@@ -80,30 +80,6 @@ export function TableView() {
             </section>
           );
         })}
-
-        <section>
-          <h2 className="mb-2 text-[15px] font-bold">기타사항</h2>
-          <div role="button" tabIndex={0} onClick={() => openDrawer({ type: 'misc' })} onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'misc' })} className="w-full cursor-pointer overflow-x-auto rounded-2xl border border-line bg-surface text-left shadow-card hover:border-line-strong">
-            <table className="w-max min-w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  {(me.isCeo || me.isAdmin) && <th className={cx(th, 'min-w-[260px] bg-note text-note-ink')}>대표 진행사항</th>}
-                  {(me.isCeo || me.isAdmin) && <th className={cx(th, 'min-w-[260px] bg-note text-note-ink')}>의뢰 진행 내용</th>}
-                  <th className={cx(th, 'min-w-[260px] bg-note text-note-ink')}>주간 특별 지시사항</th>
-                  {depts.map((d) => <th key={d.id} className={cx(th, 'min-w-[280px]')}>{d.name}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  {(me.isCeo || me.isAdmin) && <td className={td}><Clip text={miscDirective(snap.directives, 'ceo_progress')?.content} /></td>}
-                  {(me.isCeo || me.isAdmin) && <td className={td}><Clip text={miscDirective(snap.directives, 'requests')?.content} /></td>}
-                  <td className={td}><Clip text={miscDirective(snap.directives, 'special')?.content} /></td>
-                  {depts.map((d) => <td key={d.id} className={cx(td, 'max-w-[360px]')}><Clip diff text={miscEntry(snap.entries, d.id)?.content} prev={miscEntry(snap.prevEntries, d.id)?.content} /></td>)}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
 
         <section>
           <h2 className="mb-2 text-[15px] font-bold">현장 외 부서별 보고</h2>

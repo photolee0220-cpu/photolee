@@ -1,12 +1,11 @@
-import { AlertTriangle, ArrowRight, Download, Landmark, Lock, MessageSquareText, StickyNote, Users } from 'lucide-react';
+import { AlertTriangle, Download, Landmark, Lock, MessageSquareText, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
-import { DirectiveBox } from '../components/editors';
 import { dueInfo, isImminent, SiteCard } from '../components/SiteCard';
 import { Badge, Button, Card, cx, Empty, Progress, Segmented, Select, Spinner } from '../components/ui';
 import { canViewFinance } from '../lib/access';
-import { hasWritten, isCompleted, miscDirective, reporters, visibleSites } from '../lib/derive';
-import { STAGES, type Site, type Stage } from '../lib/types';
+import { hasWritten, isCompleted, reporters, visibleSites } from '../lib/derive';
+import { isBuildStage, type Site, type Stage } from '../lib/types';
 import { dday } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
@@ -17,7 +16,7 @@ import { PeopleGrid } from './People';
 type SortKey = 'order' | 'progress' | 'due';
 
 export function Dashboard() {
-  const { snap, loading, me, weekId, openDrawer, saveDirective, setView } = useStore();
+  const { snap, loading, me, openDrawer, setView } = useStore();
   const [stage, setStage] = useState<Stage | 'all'>('construction');
   const [sort, setSort] = useState<SortKey>('order');
   const [tag, setTag] = useState<string | null>(null);
@@ -29,8 +28,8 @@ export function Dashboard() {
   const people = reporters(snap);
   const done = people.filter((m) => hasWritten(snap, m.id));
   const missing = people.filter((m) => !hasWritten(snap, m.id));
-  const counts = Object.fromEntries(STAGES.map((s) => [s.id, sites.filter((x) => x.stage === s.id).length])) as Record<Stage, number>;
-  const active = sites.filter((s) => s.stage === 'construction' && !isCompleted(s));
+  const counts: Record<Stage, number> = Object.fromEntries(snap.stages.map((s) => [s.id, sites.filter((x) => x.stage === s.id).length]));
+  const active = sites.filter((s) => isBuildStage(s.stage) && !isCompleted(s));
   const withProgress = active.filter((s) => s.progress != null);
   const avg = withProgress.length ? Math.round(withProgress.reduce((n, s) => n + s.progress!, 0) / withProgress.length) : null;
   const imminent = sites.filter(isImminent);
@@ -38,7 +37,6 @@ export function Dashboard() {
   const ceoComments = snap.comments.filter((c) => snap.members.find((m) => m.id === c.authorId)?.isCeo);
   const acked = ceoComments.filter((c) => c.acknowledgedAt);
   const tags = [...new Set(sites.flatMap((s) => s.tags))];
-  const special = miscDirective(snap.directives, 'special');
   const myDeptName = snap.departments.find((d) => d.id === me.departmentId)?.name;
 
   let list = sites.filter((s) => (stage === 'all' || s.stage === stage) && (!tag || s.tags.includes(tag)));
@@ -78,7 +76,7 @@ export function Dashboard() {
         </Tile>
         <Tile label="진행 현장" icon={<Landmark size={15} />}>
           <p className="text-[26px] font-extrabold tabular leading-none">{active.length}<span className="text-[15px] font-bold text-ink-3"> 곳 공사 중</span></p>
-          <p className="mt-2 text-[12.5px] text-ink-3">CM {counts.cm} · 영업 {counts.sales} · 준공완료 {counts.construction - active.length}</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">CM {counts.cm ?? 0} · 영업 {counts.sales ?? 0} · 준공완료 {sites.filter((s) => isBuildStage(s.stage) && isCompleted(s)).length}</p>
           {avg != null && <p className="mt-1 text-[12.5px] font-semibold text-ink-2">평균 공정율 {avg}%</p>}
         </Tile>
         <Tile label="준공 일정" icon={<AlertTriangle size={15} />}>
@@ -101,26 +99,6 @@ export function Dashboard() {
         </Tile>
       </div>
 
-      {/* 특별 지시 */}
-      <div className="mt-4 grid items-start gap-3 lg:grid-cols-[1fr_auto]">
-        <DirectiveBox
-          key={`${weekId}-special`}
-          label="주간 특별 지시사항 · 전 직원에게 보입니다"
-          value={special?.content ?? ''}
-          prevContent={miscDirective(snap.prevDirectives, 'special')?.content}
-          editable={me.isCeo}
-          onSave={(content) => saveDirective({ weekId, targetKind: 'misc', siteId: null, memberId: null, slot: 'special', content })}
-        />
-        <Card onClick={() => openDrawer({ type: 'misc' })} className="flex items-center gap-3 p-4 lg:w-[260px]">
-          <StickyNote size={20} className="shrink-0 text-ink-3" />
-          <div className="min-w-0 flex-1">
-            <p className="font-bold">기타사항</p>
-            <p className="text-[12.5px] text-ink-3">대표 진행사항 · 의뢰 진행 · 부서 기타</p>
-          </div>
-          <ArrowRight size={16} className="text-ink-3" />
-        </Card>
-      </div>
-
       {/* 공정율 한눈에 + 이슈 */}
       <div className="mt-8 grid items-start gap-4 xl:grid-cols-[1.7fr_1fr]">
         <Card className="p-5">
@@ -128,7 +106,7 @@ export function Dashboard() {
             <h2 className="text-[16px] font-bold">공사 현장 공정율</h2>
             <span className="text-[12px] text-ink-3">막대를 누르면 현장 상세가 열립니다</span>
           </div>
-          <ProgressChart sites={sites.filter((s) => s.stage === 'construction')} onOpen={(id) => openDrawer({ type: 'site', id })} />
+          <ProgressChart sites={sites.filter((s) => isBuildStage(s.stage))} onOpen={(id) => openDrawer({ type: 'site', id })} />
         </Card>
         <Card className="p-5">
           <h2 className="mb-3 text-[16px] font-bold">이슈별 현장</h2>
@@ -142,7 +120,7 @@ export function Dashboard() {
           <h2 className="mr-2 text-[17px] font-bold">현장 현황</h2>
           <Segmented<Stage | 'all'> value={stage} onChange={setStage} options={[
             { id: 'all', label: `전체 ${sites.length}` },
-            ...STAGES.map((s) => ({ id: s.id, label: `${s.short} ${counts[s.id]}` })),
+            ...snap.stages.map((s) => ({ id: s.id, label: `${s.short} ${counts[s.id]}` })),
           ]} />
           <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="!h-9 !w-auto text-[13px]" aria-label="정렬">
             <option value="order">등록순</option>
@@ -205,7 +183,7 @@ export function Dashboard() {
 }
 
 function dueRank(s: Site): number {
-  if (s.stage !== 'construction' || isCompleted(s)) return 1e6 + s.sort;
+  if (!isBuildStage(s.stage) || isCompleted(s)) return 1e6 + s.sort;
   const d = dday(s.dueDate);
   return d == null ? 5e5 + s.sort : d;
 }

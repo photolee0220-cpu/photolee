@@ -1,4 +1,4 @@
-import { CalendarClock, Check, ChevronDown, ChevronsDownUp, Download, MessageSquareText } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, MessageSquareText } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { AttachmentList, attachmentsFor, FileCount } from '../components/Attachments';
@@ -6,21 +6,22 @@ import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from '.
 import { dueInfo } from '../components/SiteCard';
 import { Badge, Button, cx, Progress, Segmented, Spinner, StageChip } from '../components/ui';
 import {
-  byId, commentsFor, has, isCompleted, memberDirective, miscDirective, miscEntry, personEntry, siteDirective, siteEntry, visibleSites,
+  byId, commentsFor, has, isCompleted, memberDirective, personEntry, siteDirective, siteEntry, visibleSites,
 } from '../lib/derive';
-import { STAGES, type Site } from '../lib/types';
+import { isBuildStage, type Site } from '../lib/types';
 import { relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
 import { PhotoCount, PhotoStrip } from '../components/Photos';
 
 type Filter = 'all' | 'directive' | 'todo';
+type Tab = 'sites' | 'report';
 
 export function MyWeek() {
   const { snap, me, weekId, saveEntry } = useStore();
   const exportWeek = useExport();
   const [filter, setFilter] = useState<Filter>('all');
-  const [showPersonal, setShowPersonal] = useState(false);
+  const [tab, setTab] = useState<Tab>('sites');
   const [openSites, setOpenSites] = useState<Set<string>>(() => new Set());
   const dept = snap?.departments.find((d) => d.id === me.departmentId);
   const sites = useMemo(() => (snap ? visibleSites(snap) : []), [snap]);
@@ -28,7 +29,6 @@ export function MyWeek() {
 
   const members = byId(snap.members);
   const mine = personEntry(snap.entries, me.id);
-  const special = miscDirective(snap.directives, 'special');
   const siteWriter = dept.writesSites;
   const writtenSites = sites.filter((s) => has(siteEntry(snap.entries, s.id, dept.id)?.content));
   const newFeedback = snap.comments.filter((c) => !c.acknowledgedAt && members.get(c.authorId)?.isCeo
@@ -43,7 +43,7 @@ export function MyWeek() {
   const personal = (
     <section className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[16px] font-bold">{siteWriter ? '부서 업무보고 (선택)' : '이번 주 업무 진행사항'}</h2>
+        <h2 className="text-[16px] font-bold">{siteWriter ? '부서 업무보고' : '이번 주 업무 진행사항'}</h2>
         {has(mine?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}
       </div>
       <div className="space-y-3">
@@ -78,19 +78,30 @@ export function MyWeek() {
         </div>
       )}
 
-      {has(special?.content) && (
-        <div className="mb-4">
-          <DirectiveBox label="이번 주 특별 지시사항" value={special!.content} editable={false} onSave={async () => undefined} />
-        </div>
-      )}
-
       {!siteWriter && personal}
 
       {siteWriter && (
+        <div role="tablist" className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-sunken p-1">
+          {([
+            ['sites', '현장별 보고', `${writtenSites.length}/${sites.length}`],
+            ['report', '부서 업무보고', has(mine?.content) ? '작성' : '미작성'],
+          ] as const).map(([id, label, sub]) => (
+            <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+              className={cx('flex h-11 items-center justify-center gap-2 rounded-lg text-[14.5px] font-bold transition-colors',
+                tab === id ? 'bg-surface text-ink shadow-card' : 'text-ink-3 hover:text-ink')}>
+              {label}<span className={cx('text-[12px] font-semibold', tab === id ? 'text-brand-ink' : 'text-ink-3')}>{sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {siteWriter && tab === 'report' && personal}
+
+      {siteWriter && tab === 'sites' && (
         <>
           <div className="mb-4 rounded-2xl border border-line bg-surface p-4 shadow-card">
             <div className="flex items-center justify-between text-[13px]">
-              <span className="font-bold">현장별 보고</span>
+              <span className="font-bold">작성 진행</span>
               <span className="tabular text-ink-3"><b className="text-ink">{writtenSites.length}</b> / {sites.length}곳 작성</span>
             </div>
             <Progress value={sites.length ? (writtenSites.length / sites.length) * 100 : 0} className="mt-2" />
@@ -107,7 +118,7 @@ export function MyWeek() {
           </div>
           <p className="mb-4 text-[12.5px] text-ink-3">현장 이름을 누르면 작성 칸이 열립니다. 우리 부서가 맡은 현장만 쓰면 됩니다.</p>
           <div className="space-y-6">
-            {STAGES.map((st) => {
+            {snap.stages.map((st) => {
               const list = filtered.filter((s) => s.stage === st.id);
               if (!list.length) return null;
               return (
@@ -129,26 +140,16 @@ export function MyWeek() {
             {!filtered.length && <p className="py-8 text-center text-[13px] text-ink-3">해당하는 현장이 없습니다.</p>}
           </div>
 
-          <MiscCard deptId={dept.id} />
-
-          <div className="mt-6">
-            {showPersonal || has(mine?.content) ? personal : (
-              <button onClick={() => setShowPersonal(true)} className="w-full rounded-xl border border-dashed border-line-strong px-4 py-3 text-[13.5px] font-semibold text-ink-2 hover:bg-surface">
-                + 현장과 별개로 부서 업무보고 쓰기
-              </button>
-            )}
-          </div>
         </>
       )}
 
-      {!siteWriter && <MiscCard deptId={dept.id} optional />}
       <p className="mt-8 text-center text-[12px] text-ink-3">{weekLabel(weekId)} · 입력한 내용은 자동 저장되며 마감 후에도 고칠 수 있습니다</p>
     </div>
   );
 }
 
 function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; deptId: string; open: boolean; onToggle(): void; first: boolean }) {
-  const { snap, weekId, saveEntry } = useStore();
+  const { snap, weekId, saveEntry, openDrawer } = useStore();
   if (!snap) return null;
   const e = siteEntry(snap.entries, site.id, deptId);
   const directive = siteDirective(snap.directives, site.id);
@@ -186,8 +187,12 @@ function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; dep
           <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-ink-3">
             <StageChip stage={site.stage} />
             {(site.process || site.note) && <span>{site.process || site.note}</span>}
-            {!(site.stage === 'construction' && isCompleted(site)) && <span className="inline-flex items-center gap-1"><CalendarClock size={12} />{due.label}</span>}
+            {!(isBuildStage(site.stage) && isCompleted(site)) && <span className="inline-flex items-center gap-1"><CalendarClock size={12} />{due.label}</span>}
             {site.progress != null && <span className="font-semibold text-ink-2">공정 {site.progress}%</span>}
+            <button type="button" onClick={() => openDrawer({ type: 'site', id: site.id })}
+              className="ml-auto inline-flex items-center gap-0.5 font-semibold text-brand-ink hover:underline">
+              현장 전체 보기<ChevronRight size={14} />
+            </button>
           </p>
           {has(directive?.content) && <DirectiveBox value={directive!.content} editable={false} onSave={async () => undefined} />}
           <EntryEditor
@@ -210,36 +215,5 @@ function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; dep
         </div>
       )}
     </article>
-  );
-}
-
-function MiscCard({ deptId, optional }: { deptId: string; optional?: boolean }) {
-  const { snap, weekId, saveEntry } = useStore();
-  const e = snap ? miscEntry(snap.entries, deptId) : undefined;
-  const target = { kind: 'misc' as const, siteId: null, departmentId: deptId, authorId: null };
-  const [open, setOpen] = useState(!optional || has(e?.content) || attachmentsFor(snap?.attachments, target).length > 0);
-  if (!snap) return null;
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="mt-4 w-full rounded-xl border border-dashed border-line-strong px-4 py-3 text-[13.5px] font-semibold text-ink-2 hover:bg-surface">
-        + 기타사항 쓰기 (현장 외 진행 건, 공유할 내용)
-      </button>
-    );
-  }
-  return (
-    <section className="mt-6 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
-      <h2 className="mb-3 text-[16px] font-bold">기타사항</h2>
-      <EntryEditor
-        key={`${weekId}-misc`}
-        compact
-        value={e?.content ?? ''}
-        editable
-        prevContent={miscEntry(snap.prevEntries, deptId)?.content}
-        placeholder="현장 외 진행 건, 공유할 내용"
-        onSave={(content) => saveEntry({ weekId, kind: 'misc', siteId: null, departmentId: deptId, authorId: null, content })}
-      />
-      <AttachmentList target={target} editable />
-      <Feedback entry={e} />
-    </section>
   );
 }

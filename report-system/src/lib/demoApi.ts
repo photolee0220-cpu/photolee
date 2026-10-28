@@ -5,7 +5,7 @@ import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { askClaudeForSummary } from './summary';
 import { checkAttachable } from './fileTypes';
-import type { AiSummary, AppSettings, Attachment, Comment, Directive, Entry, Member, Photo, Seed, Snapshot, WeekId } from './types';
+import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type Snapshot, type StageDef, type WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -17,6 +17,7 @@ interface DemoState extends Seed {
   passwords: Record<string, string>;
   photos: Photo[];
   attachments: Attachment[];
+  stages: StageDef[];
   summaries: Record<WeekId, AiSummary>;
   settings: AppSettings;
 }
@@ -28,9 +29,30 @@ function safeSet(k: string, v: string | null): boolean {
   try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); return true; } catch { return false; }
 }
 
+/** 기타사항은 없어졌다: 쓴 사람의 부서 업무보고 끝에 '■ 기타사항' 대주제로 옮긴다 (서버 0005와 같은 규칙) */
+function foldMisc(st: DemoState): DemoState {
+  for (const misc of st.entries.filter((e) => e.kind === 'misc')) {
+    const who = st.members.find((m) => m.id === misc.updatedBy) ?? st.members.find((m) => m.active && m.departmentId === misc.departmentId);
+    if (!who) continue;
+    if (misc.content.trim()) {
+      let target = st.entries.find((e) => e.kind === 'dept' && e.weekId === misc.weekId && e.authorId === who.id);
+      if (!target) {
+        target = { ...misc, id: newId('e'), kind: 'dept', siteId: null, authorId: who.id, departmentId: who.departmentId ?? misc.departmentId, content: '', updatedBy: who.id };
+        st.entries.push(target);
+      }
+      target.content = target.content.trim() ? `${target.content.trimEnd()}\n\n■ 기타사항\n${misc.content}` : `■ 기타사항\n${misc.content}`;
+      st.comments.forEach((c) => { if (c.entryId === misc.id) c.entryId = target!.id; });
+    }
+    st.attachments.forEach((a) => { if (a.kind === 'misc' && a.departmentId === misc.departmentId && a.weekId === misc.weekId) { a.kind = 'dept'; a.authorId = who.id; } });
+    st.entries = st.entries.filter((e) => e.id !== misc.id);
+  }
+  st.attachments.forEach((a) => { if (a.kind === 'misc') { a.kind = 'dept'; a.authorId = a.uploadedBy; } });
+  return st;
+}
+
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return { ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], summaries: {}, settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) };
+  return foldMisc({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
 }
 
 let state: DemoState = (() => {
@@ -38,7 +60,7 @@ let state: DemoState = (() => {
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as DemoState;
-      if (parsed.reportDate === seed.reportDate) return { ...parsed, photos: parsed.photos ?? [], attachments: parsed.attachments ?? [], summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } };
+      if (parsed.reportDate === seed.reportDate) return foldMisc({ ...parsed, photos: parsed.photos ?? [], attachments: parsed.attachments ?? [], stages: parsed.stages ?? structuredClone(DEFAULT_STAGES), summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } });
     } catch { /* 손상된 데이터는 초기화 */ }
   }
   return fresh();
@@ -50,7 +72,7 @@ try {
   channel = new BroadcastChannel(KEY);
   channel.onmessage = () => {
     const raw = safeGet(KEY);
-    if (raw) { state = JSON.parse(raw); state.attachments ??= []; }
+    if (raw) { state = JSON.parse(raw); state.attachments ??= []; state.stages ??= structuredClone(DEFAULT_STAGES); }
     listeners.forEach((l) => l());
   };
 } catch { channel = null; }
@@ -120,12 +142,15 @@ export const demoApi: Api = {
       departments: state.departments,
       members: state.members,
       sites: state.sites,
+      stages: [...state.stages].sort((a, b) => a.sort - b.sort),
       grants: state.grants,
       entries: visibleEntries(m, state.entries.filter((e) => e.weekId === weekId)),
       directives: visibleDirectives(m, state.directives.filter((d) => d.weekId === weekId)),
       comments: [],
       photos: state.photos.filter((p) => p.weekId === weekId && canViewDept(m, p.departmentId, state.grants)),
       attachments: state.attachments.filter((a) => a.weekId === weekId && canViewDept(m, a.departmentId, state.grants)),
+      siteStatus: state.entries.filter((e) => e.weekId === weekId && e.kind === 'site' && e.content.trim())
+        .map((e) => ({ siteId: e.siteId!, departmentId: e.departmentId, updatedAt: e.updatedAt })),
       prevWeekId,
       prevEntries: prevWeekId ? visibleEntries(m, state.entries.filter((e) => e.weekId === prevWeekId)) : [],
       prevDirectives: prevWeekId ? visibleDirectives(m, state.directives.filter((d) => d.weekId === prevWeekId)) : [],
@@ -313,6 +338,22 @@ export const demoApi: Api = {
       if (i >= 0) state.sites[i] = site; else state.sites.push(site);
       persist();
       return structuredClone(site);
+    },
+    async saveStage(st) {
+      requireAdmin();
+      if (!st.short.trim()) throw new ApiError('단계 이름을 입력해 주세요.');
+      if (state.stages.some((x) => x.id !== st.id && x.short === st.short.trim())) throw new ApiError('같은 이름의 단계가 이미 있습니다.');
+      const next = { ...st, short: st.short.trim(), label: st.label.trim() || st.short.trim() };
+      const i = state.stages.findIndex((x) => x.id === st.id);
+      if (i >= 0) state.stages[i] = next; else state.stages.push(next);
+      persist();
+      return structuredClone(next);
+    },
+    async deleteStage(id) {
+      requireAdmin();
+      if (state.sites.some((s) => s.stage === id)) throw new ApiError('이 단계에 현장이 있어 지울 수 없습니다. 현장을 다른 단계로 옮기거나 보관함의 현장도 확인해 주세요.');
+      state.stages = state.stages.filter((x) => x.id !== id);
+      persist();
     },
     async saveDepartment(d) {
       requireAdmin();

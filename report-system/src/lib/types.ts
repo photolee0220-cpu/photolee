@@ -1,10 +1,32 @@
-export type Stage = 'construction' | 'cm' | 'sales';
+/** 현장 단계. 기본 3개(construction·cm·sales) 외에 관리자가 추가한다 */
+export type Stage = string;
 
-export const STAGES: { id: Stage; label: string; short: string }[] = [
-  { id: 'construction', label: '공사진행현장', short: '공사진행' },
-  { id: 'cm', label: 'CM진행현장', short: 'CM' },
-  { id: 'sales', label: '영업현장', short: '영업' },
+export interface StageDef {
+  id: Stage;
+  /** 묶음 제목 (예: 공사진행현장) */
+  label: string;
+  /** 탭·표시용 짧은 이름 (예: 공사진행) */
+  short: string;
+  sort: number;
+}
+
+export const DEFAULT_STAGES: StageDef[] = [
+  { id: 'construction', label: '공사진행현장', short: '공사진행', sort: 1 },
+  { id: 'cm', label: 'CM진행현장', short: 'CM', sort: 2 },
+  { id: 'sales', label: '영업현장', short: '영업', sort: 3 },
 ];
+
+/** CM·영업은 착공 전 단계. 그 밖의 단계(직접 추가한 단계 포함)는 공사진행처럼 공정율·준공일을 쓴다 */
+export function isBuildStage(stage: Stage): boolean {
+  return stage !== 'cm' && stage !== 'sales';
+}
+
+/** 현장 칸을 쓰는 부서마다 이번 주 작성 여부 (내용은 열람 권한이 있을 때만 entries에 있다) */
+export interface SiteReportStatus {
+  siteId: string;
+  departmentId: string;
+  updatedAt: string;
+}
 
 export const SITE_TAGS = ['잔금대기', '설계변경', '금융진행', '하자', '협력업체 선정', '소송·분쟁', '착공준비', '준공임박'] as const;
 
@@ -182,6 +204,7 @@ export interface Seed {
   departments: Department[];
   members: Member[];
   sites: Site[];
+  stages?: StageDef[];
   grants: Grant[];
   entries: Entry[];
   directives: Directive[];
@@ -196,12 +219,14 @@ export interface Snapshot {
   departments: Department[];
   members: Member[];
   sites: Site[];
+  stages: StageDef[];
   grants: Grant[];
   entries: Entry[];
   directives: Directive[];
   comments: Comment[];
   photos: Photo[];
   attachments: Attachment[];
+  siteStatus: SiteReportStatus[];
   /** 같은 범위의 직전 주차 기록 (참고용) */
   prevWeekId: WeekId | null;
   prevEntries: Entry[];

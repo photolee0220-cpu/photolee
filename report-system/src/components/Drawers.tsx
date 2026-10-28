@@ -1,12 +1,12 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { canEditEntry, canViewDept } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
-  byId, has, memberDirective, miscDirective, miscEntry, personEntry, siteDepartments, siteDirective, siteEntry, siteWork, activeDepartments,
+  byId, has, memberDirective, personEntry, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork,
 } from '../lib/derive';
-import { MISC_SLOTS, type Department, type Entry, type Member } from '../lib/types';
+import { isBuildStage, type Department, type Entry, type Member } from '../lib/types';
 import { formatDate, relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { AttachmentList } from './Attachments';
@@ -21,8 +21,7 @@ export function DrawerHost() {
   const close = () => openDrawer(null);
   if (!drawer) return null;
   if (drawer.type === 'site') return <SiteDrawer id={drawer.id} onClose={close} />;
-  if (drawer.type === 'person') return <PersonDrawer id={drawer.id} onClose={close} />;
-  return <MiscDrawer onClose={close} />;
+  return <PersonDrawer id={drawer.id} onClose={close} />;
 }
 
 function Block({ title, right, children }: { title: ReactNode; right?: ReactNode; children: ReactNode }) {
@@ -58,7 +57,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const site = snap?.sites.find((s) => s.id === id);
   if (!snap || !site) return null;
   const members = byId(snap.members);
-  const depts = siteDepartments(snap).filter((d) => canViewDept(me, d.id, snap.grants));
+  const depts = siteDepartments(snap);
   const directive = siteDirective(snap.directives, site.id);
   const prevDirective = siteDirective(snap.prevDirectives, site.id);
   const due = dueInfo(site);
@@ -79,7 +78,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
             ) : <p className="mt-1 font-semibold">{site.scale || '—'}</p>}
           </div>
           <div>
-            <p className="text-[12px] font-semibold text-ink-3">{site.stage === 'construction' ? '준공예상일' : '착공예상일'}</p>
+            <p className="text-[12px] font-semibold text-ink-3">{isBuildStage(site.stage) ? '준공예상일' : '착공예상일'}</p>
             <p className={cx('mt-1 font-semibold tabular', due.tone === 'warn' && 'text-warn', due.tone === 'danger' && 'text-danger', due.tone === 'ok' && 'text-ok')}>
               {site.dueDate ? formatDate(site.dueDate) : site.dueText || '미정'}
             </p>
@@ -102,6 +101,17 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
         />
 
         {depts.map((d) => {
+          const status = siteStatusOf(snap, site.id, d.id);
+          if (!canViewDept(me, d.id, snap.grants)) {
+            return (
+              <Block key={d.id} title={<>{d.name} <span className="font-medium text-ink-3">{deptPeople(d, snap.members)}</span></>}
+                right={status ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}>
+                <p className="flex items-center gap-1.5 text-[13px] text-ink-3">
+                  {status ? <><Lock size={13} className="shrink-0" />{relativeTime(status.updatedAt)} 작성 · 열람 권한이 없어 내용은 보이지 않습니다</> : '이번 주에 아직 작성하지 않았습니다'}
+                </p>
+              </Block>
+            );
+          }
           const e = siteEntry(snap.entries, site.id, d.id);
           const prev = siteEntry(snap.prevEntries, site.id, d.id);
           const editable = !me.isCeo && canEditEntry(me, { kind: 'site', departmentId: d.id, authorId: null });
@@ -122,7 +132,6 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
             </Block>
           );
         })}
-        {depts.length === 0 && <p className="text-[13px] text-ink-3">열람 권한이 있는 부서의 보고가 없습니다.</p>}
 
         <button onClick={() => setShowHistory((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3 text-left font-semibold shadow-card hover:bg-sunken">
           지난 기록
@@ -187,13 +196,13 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
             {work.length === 0 ? <p className="text-[13px] text-ink-3">이번 주에 작성한 현장 보고가 없습니다.</p> : (
               <div className="divide-y divide-line">
                 {work.map((w) => {
-                  const site = w.kind === 'site' ? snap.sites.find((s) => s.id === w.siteId) : undefined;
-                  const prevW = w.kind === 'site' ? siteEntry(snap.prevEntries, w.siteId!, w.departmentId) : miscEntry(snap.prevEntries, w.departmentId);
+                  const site = snap.sites.find((s) => s.id === w.siteId);
+                  const prevW = siteEntry(snap.prevEntries, w.siteId!, w.departmentId);
                   return (
                     <div key={w.id} className="py-3 first:pt-0 last:pb-0">
-                      <button type="button" onClick={() => openDrawer(site ? { type: 'site', id: site.id } : { type: 'misc' })}
+                      <button type="button" onClick={() => site && openDrawer({ type: 'site', id: site.id })}
                         className="mb-1.5 inline-flex items-center gap-1 text-[14px] font-bold hover:text-brand-ink">
-                        {site?.name ?? '기타사항'}<ChevronRight size={15} className="text-ink-3" />
+                        {site?.name}<ChevronRight size={15} className="text-ink-3" />
                       </button>
                       <DiffText text={w.content} prev={prevW?.content} />
                       {site && <PhotoStrip siteId={site.id} departmentId={w.departmentId} editable={false} />}
@@ -223,51 +232,6 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
             {showPrev ? <TextBlock text={prev!.content} className="text-ink-2" /> : <p className="line-clamp-2 whitespace-pre-line text-[13px] text-ink-3">{prev!.content}</p>}
           </Block>
         )}
-      </div>
-    </Sheet>
-  );
-}
-
-function MiscDrawer({ onClose }: { onClose(): void }) {
-  const { snap, me, weekId, saveEntry, saveDirective } = useStore();
-  if (!snap) return null;
-  const members = byId(snap.members);
-  const slots = MISC_SLOTS.filter((s) => s.everyone || me.isCeo || me.isAdmin);
-  const depts = activeDepartments(snap).filter((d) => canViewDept(me, d.id, snap.grants)
-    && (has(miscEntry(snap.entries, d.id)?.content) || (!me.isCeo && me.departmentId === d.id) || d.writesSites));
-
-  return (
-    <Sheet open onClose={onClose} title="기타사항" subtitle={weekLabel(weekId)}>
-      <div className="space-y-4">
-        {slots.map((s) => (
-          <DirectiveBox
-            key={`${weekId}-${s.id}`}
-            label={s.label}
-            value={miscDirective(snap.directives, s.id)?.content ?? ''}
-            prevContent={miscDirective(snap.prevDirectives, s.id)?.content}
-            editable={me.isCeo}
-            onSave={(content) => saveDirective({ weekId, targetKind: 'misc', siteId: null, memberId: null, slot: s.id, content })}
-          />
-        ))}
-        {depts.map((d) => {
-          const e = miscEntry(snap.entries, d.id);
-          return (
-            <Block key={d.id} title={<>{d.name} <span className="font-medium text-ink-3">{deptPeople(d, snap.members)}</span></>}>
-              <EntryEditor
-                key={`${weekId}-misc-${d.id}`}
-                value={e?.content ?? ''}
-                editable={!me.isCeo && canEditEntry(me, { kind: 'misc', departmentId: d.id, authorId: null })}
-                prevContent={miscEntry(snap.prevEntries, d.id)?.content}
-                meta={entryMeta(e, members)}
-                placeholder="현장 외 진행 건, 공유할 내용"
-                onSave={(content) => saveEntry({ weekId, kind: 'misc', siteId: null, departmentId: d.id, authorId: null, content })}
-              />
-              <AttachmentList target={{ kind: 'misc', siteId: null, departmentId: d.id, authorId: null }}
-                editable={!me.isCeo && canEditEntry(me, { kind: 'misc', departmentId: d.id, authorId: null })} />
-              <Feedback entry={e} />
-            </Block>
-          );
-        })}
       </div>
     </Sheet>
   );

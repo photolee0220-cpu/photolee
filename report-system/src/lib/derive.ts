@@ -74,10 +74,15 @@ export function firstLines(text: string, n = 3): string {
   return text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, n).join('\n');
 }
 
-/** 현장 보고 부서 사람이 이번 주 마지막으로 고친 현장 칸과 기타사항 */
+/** 현장 보고 부서 사람이 이번 주 마지막으로 고친 현장 칸 */
 export function siteWork(snap: Snapshot, memberId: string): Entry[] {
   const order = new Map(snap.sites.map((s, i) => [s.id, i]));
   return snap.entries
-    .filter((e) => (e.kind === 'site' || e.kind === 'misc') && e.updatedBy === memberId && has(e.content))
-    .sort((a, b) => (a.kind === 'misc' ? 1 : 0) - (b.kind === 'misc' ? 1 : 0) || (order.get(a.siteId!) ?? 0) - (order.get(b.siteId!) ?? 0));
+    .filter((e) => e.kind === 'site' && e.updatedBy === memberId && has(e.content))
+    .sort((a, b) => (order.get(a.siteId!) ?? 0) - (order.get(b.siteId!) ?? 0));
+}
+
+/** 이 현장 칸을 그 부서가 이번 주에 썼는지 (내용 열람 권한과 관계없이 알 수 있다) */
+export function siteStatusOf(snap: Snapshot, siteId: string, deptId: string) {
+  return snap.siteStatus.find((x) => x.siteId === siteId && x.departmentId === deptId);
 }

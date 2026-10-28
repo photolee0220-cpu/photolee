@@ -1,5 +1,5 @@
 import type {
-  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StorageUsage, WeekId,
+  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId,
 } from './types';
 
 export interface WeekSummary {
@@ -45,6 +45,9 @@ export interface Api {
 
   admin: {
     saveSite(site: Site): Promise<Site>;
+    saveStage(stage: StageDef): Promise<StageDef>;
+    /** 현장이 남아 있는 단계는 지울 수 없다 */
+    deleteStage(id: string): Promise<void>;
     saveDepartment(d: Department): Promise<Department>;
     deleteDepartment(id: string): Promise<void>;
     setGrants(viewerDepartmentId: string, targetIds: string[]): Promise<Grant[]>;
