@@ -1,0 +1,97 @@
+# 실제 사이트에서 대표 계정으로 AI 주간 요약을 한 번 만들어 본다 (비밀번호 없이 일회용 로그인)
+# 결과는 gh-pages 브랜치의 _ops/ai-check.json (성공 여부·줄 수·모델만, 요약 내용은 남기지 않음)
+name: ai-summary-check
+on:
+  push:
+    branches: [claude/pouch-design-handdrawn-CSzwC]
+    paths: [report-system/supabase/ai-check-request.txt]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SITE: https://photolee0220-cpu.github.io/photolee
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Browser
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm init -y >/dev/null
+          npm i playwright@1.49.1 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: CEO session
+        run: |
+          cfg=$(curl -sS "$SITE/config.js?$(date +%s)")
+          URL=$(echo "$cfg" | grep -o "https://[a-z0-9]*\.supabase\.co")
+          ANON=$(echo "$cfg" | grep -o "supabaseAnonKey: '[^']*'" | sed "s/supabaseAnonKey: '//;s/'//")
+          REF=$(echo "$URL" | sed -E 's#https://([a-z0-9]+)\.supabase\.co#\1#')
+          SRV=$(curl -sS "https://api.supabase.com/v1/projects/$REF/api-keys" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq -r '.[] | select(.name == "service_role") | .api_key')
+          echo "::add-mask::$ANON"; echo "::add-mask::$SRV"
+          TH=$(curl -sS -X POST "$URL/auth/v1/admin/generate_link" -H "apikey: $SRV" -H "Authorization: Bearer $SRV" -H "Content-Type: application/json" \
+            -d '{"type":"magiclink","email":"ceo@sadakdari-report.app"}' | jq -r '.hashed_token // .properties.hashed_token // empty')
+          curl -sS -X POST "$URL/auth/v1/verify" -H "apikey: $ANON" -H "Content-Type: application/json" -d "$(jq -n --arg t "$TH" '{type:"magiclink", token_hash:$t}')" \
+            | jq '. + {expires_at: (now | floor) + .expires_in}' > "$RUNNER_TEMP/session.json"
+          echo "::add-mask::$(jq -r .access_token "$RUNNER_TEMP/session.json")"
+          echo "::add-mask::$(jq -r .refresh_token "$RUNNER_TEMP/session.json")"
+          echo "REF=$REF" >> "$GITHUB_ENV"
+          jq -e '.access_token' "$RUNNER_TEMP/session.json" >/dev/null && echo "session ok" || { echo "session failed"; jq -c '{code,error_code,msg}' "$RUNNER_TEMP/session.json"; }
+      - name: Make summary in the site
+        working-directory: ${{ runner.temp }}
+        run: |
+          cat > check.cjs <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const out = { at: new Date().toISOString(), ok: false };
+          (async () => {
+            const session = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/session.json', 'utf8'));
+            if (!session.access_token) { out.error = '대표 계정 일회용 로그인 실패'; return; }
+            const b = await chromium.launch();
+            const ctx = await b.newContext({ viewport: { width: 1360, height: 900 } });
+            await ctx.addInitScript(([k, v]) => localStorage.setItem(k, v), [`sb-${process.env.REF}-auth-token`, JSON.stringify(session)]);
+            const p = await ctx.newPage();
+            const errors = [];
+            p.on('pageerror', (e) => errors.push(e.message));
+            await p.goto(process.env.SITE + '/', { waitUntil: 'networkidle' });
+            await p.waitForTimeout(2000);
+            if (await p.getByText(/새 비밀번호/).count()) { out.error = '대표 계정이 아직 첫 비밀번호 변경 전이라 화면에 들어갈 수 없음'; await b.close(); return; }
+            const btn = p.getByRole('button', { name: /요약 만들기|다시 만들기/ }).first();
+            await btn.waitFor({ timeout: 30000 });
+            out.week = (await p.getByText(/월 \d+일 보고/).first().textContent())?.trim();
+            await btn.click();
+            const t0 = Date.now();
+            for (;;) {
+              await p.waitForTimeout(2000);
+              const busy = await p.getByText('정리하는 중').count();
+              if (!busy || Date.now() - t0 > 180000) break;
+            }
+            out.seconds = Math.round((Date.now() - t0) / 1000);
+            const panel = p.locator('section, div').filter({ has: p.getByText('AI 주간 요약') }).first();
+            out.highlights = await panel.locator('ol li, ul li').count();
+            const meta = await p.getByText(/Claude (Haiku|Sonnet|Opus)[^·]*·/).first().textContent().catch(() => null);
+            out.model = meta ? meta.split('·')[0].trim() : null;
+            const toast = await p.locator('[role=status], [role=alert]').allInnerTexts().catch(() => []);
+            if (toast.length) out.message = toast.join(' / ').slice(0, 200);
+            out.ok = out.highlights > 0 && !!out.model;
+            out.pageErrors = errors.slice(0, 3);
+            await b.close();
+          })().catch((e) => { out.error = String(e).slice(0, 300); }).finally(() => {
+            fs.writeFileSync(process.env.RUNNER_TEMP + '/ai-check.json', JSON.stringify(out, null, 2));
+            console.log(JSON.stringify(out));
+          });
+          EOF
+          node check.cjs
+      - name: Publish result
+        if: always()
+        run: |
+          git fetch origin gh-pages && git worktree add "$RUNNER_TEMP/site" origin/gh-pages
+          mkdir -p "$RUNNER_TEMP/site/_ops"
+          cp "$RUNNER_TEMP/ai-check.json" "$RUNNER_TEMP/site/_ops/ai-check.json" 2>/dev/null || echo '{"ok":false,"error":"no result"}' > "$RUNNER_TEMP/site/_ops/ai-check.json"
+          cd "$RUNNER_TEMP/site"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -m "ai summary check" && git push origin HEAD:gh-pages || true
