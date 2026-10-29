@@ -1,1 +1,1 @@
-verify 2026-10-28T08:51:27Z site delete
+verify 2026-10-29T13:56:24Z release 0007-0008
