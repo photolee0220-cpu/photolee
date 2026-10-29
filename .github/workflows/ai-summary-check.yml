@@ -25,6 +25,7 @@ jobs:
           npm i playwright@1.49.1 >/dev/null
           npx playwright install --with-deps chromium >/dev/null
       - name: CEO session
+        continue-on-error: true
         run: |
           cfg=$(curl -sS "$SITE/config.js?$(date +%s)")
           URL=$(echo "$cfg" | grep -o "https://[a-z0-9]*\.supabase\.co")
@@ -32,14 +33,20 @@ jobs:
           REF=$(echo "$URL" | sed -E 's#https://([a-z0-9]+)\.supabase\.co#\1#')
           SRV=$(curl -sS "https://api.supabase.com/v1/projects/$REF/api-keys" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq -r '.[] | select(.name == "service_role") | .api_key')
           echo "::add-mask::$ANON"; echo "::add-mask::$SRV"
-          TH=$(curl -sS -X POST "$URL/auth/v1/admin/generate_link" -H "apikey: $SRV" -H "Authorization: Bearer $SRV" -H "Content-Type: application/json" \
-            -d '{"type":"magiclink","email":"ceo@sadakdari-report.app"}' | jq -r '.hashed_token // .properties.hashed_token // empty')
+          # 아이디가 바뀌었을 수 있어 대표 계정의 실제 로그인 이메일을 서버에서 찾는다
+          CEO=$(curl -sS "$URL/rest/v1/members?select=id&is_ceo=eq.true&active=eq.true&limit=1" -H "apikey: $SRV" -H "Authorization: Bearer $SRV" | jq -r '.[0].id // empty')
+          EMAIL=$(curl -sS "$URL/auth/v1/admin/users/$CEO" -H "apikey: $SRV" -H "Authorization: Bearer $SRV" | jq -r '.email // empty')
+          echo "ceo found: $([ -n "$CEO" ] && echo yes || echo no), email found: $([ -n "$EMAIL" ] && echo yes || echo no)" | tee "$RUNNER_TEMP/diag.txt"
+          link=$(curl -sS -X POST "$URL/auth/v1/admin/generate_link" -H "apikey: $SRV" -H "Authorization: Bearer $SRV" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg e "$EMAIL" '{type:"magiclink", email:$e}')")
+          TH=$(echo "$link" | jq -r '.hashed_token // .properties.hashed_token // empty')
+          [ -n "$TH" ] || echo "link error: $(echo "$link" | jq -c '{code,error_code,msg}' 2>/dev/null)" | tee -a "$RUNNER_TEMP/diag.txt"
           curl -sS -X POST "$URL/auth/v1/verify" -H "apikey: $ANON" -H "Content-Type: application/json" -d "$(jq -n --arg t "$TH" '{type:"magiclink", token_hash:$t}')" \
-            | jq '. + {expires_at: (now | floor) + .expires_in}' > "$RUNNER_TEMP/session.json"
+            | jq 'if .expires_in then . + {expires_at: ((now | floor) + .expires_in)} else . end' > "$RUNNER_TEMP/session.json"
           echo "::add-mask::$(jq -r .access_token "$RUNNER_TEMP/session.json")"
           echo "::add-mask::$(jq -r .refresh_token "$RUNNER_TEMP/session.json")"
           echo "REF=$REF" >> "$GITHUB_ENV"
-          jq -e '.access_token' "$RUNNER_TEMP/session.json" >/dev/null && echo "session ok" || { echo "session failed"; jq -c '{code,error_code,msg}' "$RUNNER_TEMP/session.json"; }
+          if jq -e '.access_token' "$RUNNER_TEMP/session.json" >/dev/null; then echo "session ok"; else echo "session failed: $(jq -c '{code,error_code,msg}' "$RUNNER_TEMP/session.json")"; fi
       - name: Make summary in the site
         working-directory: ${{ runner.temp }}
         run: |
@@ -49,7 +56,12 @@ jobs:
           const out = { at: new Date().toISOString(), ok: false };
           (async () => {
             const session = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/session.json', 'utf8'));
-            if (!session.access_token) { out.error = '대표 계정 일회용 로그인 실패'; return; }
+            if (!session.access_token) {
+              let diag = '';
+              try { diag = fs.readFileSync(process.env.RUNNER_TEMP + '/diag.txt', 'utf8').trim(); } catch {}
+              out.error = `대표 계정 일회용 로그인 실패 (${diag}; ${JSON.stringify({ code: session.code, error_code: session.error_code, msg: session.msg })})`;
+              return;
+            }
             const b = await chromium.launch();
             const ctx = await b.newContext({ viewport: { width: 1360, height: 900 } });
             await ctx.addInitScript(([k, v]) => localStorage.setItem(k, v), [`sb-${process.env.REF}-auth-token`, JSON.stringify(session)]);
