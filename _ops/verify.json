@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-28T08:51:56Z",
+  "at": "2026-10-29T13:57:17Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -24,12 +24,12 @@
     {
       "check": "보고 칸",
       "ok": true,
-      "detail": "48칸"
+      "detail": "58칸"
     },
     {
       "check": "현장",
       "ok": true,
-      "detail": "23곳"
+      "detail": "26곳"
     },
     {
       "check": "로그인 안 한 사람 차단",
@@ -39,7 +39,7 @@
     {
       "check": "주차 목록",
       "ok": true,
-      "detail": "[\"2026-11-02\",\"2026-10-26\"]"
+      "detail": "[\"2026-11-02\",\"2026-10-26\",\"2026-10-19\"]"
     },
     {
       "check": "서버 기능: 계정 관리",
@@ -130,6 +130,66 @@
       "check": "관리자: 현장 삭제",
       "ok": true,
       "detail": "점검용 현장 만들고 삭제 {\"entries\":0,\"directives\":0,\"photos\":0,\"files\":0}"
+    },
+    {
+      "check": "이번 보고일(잠금 기준)",
+      "ok": true,
+      "detail": "2026-11-02"
+    },
+    {
+      "check": "새 표: entry_history",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "새 표: backups",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "새 표: push_subscriptions",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "새 표: site_summaries",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "새 표: push_log",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "지시 처리 상태 칸",
+      "ok": true,
+      "detail": "{\"status\":\"open\"}"
+    },
+    {
+      "check": "본부장(전체 열람·코멘트) 권한 칸",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "서버 비밀값은 관리자도 못 읽음",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "백업 만들기",
+      "ok": true,
+      "detail": "최신 백업 84135바이트"
+    },
+    {
+      "check": "알림 서버: 서명 키",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "알림 서버: 예약 작업 비밀값 확인",
+      "ok": true,
+      "detail": "틀린 값 거절(403)"
     }
   ]
 }
