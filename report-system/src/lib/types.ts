@@ -47,6 +47,8 @@ export interface Member {
   departmentId: string | null;
   isCeo: boolean;
   isAdmin: boolean;
+  /** 전체 열람·코멘트 (예: 건설 본부장). 보고는 쓰지 않는다 */
+  isExecutive: boolean;
   active: boolean;
   mustChangePassword: boolean;
 }
@@ -295,4 +297,5 @@ export interface NewMemberInput {
   departmentId: string | null;
   isAdmin: boolean;
   isCeo: boolean;
+  isExecutive: boolean;
 }

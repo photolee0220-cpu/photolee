@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
   const domain = Deno.env.get('LOGIN_EMAIL_DOMAIN') ?? 'sadakdari-report.app';
 
   if (body.action === 'create') {
-    const { username, password, name, title, departmentId, isAdmin, isCeo } = body;
+    const { username, password, name, title, departmentId, isAdmin, isCeo, isExecutive } = body;
     if (!/^[a-z0-9._-]{3,30}$/.test(username)) return json({ error: '아이디는 영문 소문자, 숫자, 점(.)으로 3~30자여야 합니다.' }, 400);
     if (!password || password.length < 6) return json({ error: '비밀번호는 6자 이상이어야 합니다.' }, 400);
     const { data: created, error } = await service.auth.admin.createUser({
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message.includes('already') ? '이미 사용 중인 아이디입니다.' : error.message }, 400);
     const { data: member, error: e2 } = await service.from('members').insert({
       id: created.user.id, username, name, title: title ?? '', department_id: departmentId,
-      is_admin: !!isAdmin, is_ceo: !!isCeo, must_change_password: true,
+      is_admin: !!isAdmin, is_ceo: !!isCeo, is_executive: !!isExecutive, must_change_password: true,
     }).select().single();
     if (e2) {
       await service.auth.admin.deleteUser(created.user.id);

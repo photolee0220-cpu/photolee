@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, History, Lock, Sparkles } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { canEditEntry, canViewDept, isWeekLocked } from '../lib/access';
+import { canEditEntry, canViewDept, isReviewer, isWeekLocked } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
@@ -115,7 +115,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
           }
           const e = siteEntry(snap.entries, site.id, d.id);
           const prev = siteEntry(snap.prevEntries, site.id, d.id);
-          const editable = !me.isCeo && !isWeekLocked(me, weekId) && canEditEntry(me, { kind: 'site', departmentId: d.id, authorId: null });
+          const editable = !isReviewer(me) && !isWeekLocked(me, weekId) && canEditEntry(me, { kind: 'site', departmentId: d.id, authorId: null });
           return (
             <Block key={d.id} title={<>{d.name} <span className="font-medium text-ink-3">{deptPeople(d, snap.members)}</span></>}
               right={has(e?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}>
@@ -151,7 +151,7 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const prev = personEntry(snap.prevEntries, person.id);
   const directive = memberDirective(snap.directives, person.id);
   const prevDirective = memberDirective(snap.prevDirectives, person.id);
-  const editable = !me.isCeo && !isWeekLocked(me, weekId) && canEditEntry(me, { kind: 'dept', departmentId: person.departmentId ?? '', authorId: person.id });
+  const editable = !isReviewer(me) && !isWeekLocked(me, weekId) && canEditEntry(me, { kind: 'dept', departmentId: person.departmentId ?? '', authorId: person.id });
   const work = dept?.writesSites ? siteWork(snap, person.id) : [];
   const showPersonal = !dept?.writesSites || has(e?.content) || editable;
   const saveMine = (content: string) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: person.departmentId!, authorId: person.id, content });
@@ -257,7 +257,7 @@ function WritersDrawer({ onClose }: { onClose(): void }) {
 
 type FeedbackFilter = 'all' | 'open' | 'done';
 
-/** 대시보드 '대표님 피드백': 누구에게 어떤 피드백을 남겼고 확인했는지 */
+/** 대시보드 '피드백': 대표·본부장이 누구에게 어떤 피드백을 남겼고 확인했는지 */
 function FeedbackDrawer({ onClose }: { onClose(): void }) {
   const { snap, weekId, openDrawer } = useStore();
   const [filter, setFilter] = useState<FeedbackFilter>('all');
@@ -265,7 +265,7 @@ function FeedbackDrawer({ onClose }: { onClose(): void }) {
   const members = byId(snap.members);
   const depts = byId(snap.departments);
   const entries = byId(snap.entries);
-  const isCeo = (id: string) => !!members.get(id)?.isCeo;
+  const isCeo = (id: string) => isReviewer(members.get(id));
   const ceoComments = snap.comments.filter((c) => isCeo(c.authorId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const open = ceoComments.filter((c) => !c.acknowledgedAt);
   const list = filter === 'open' ? open : filter === 'done' ? ceoComments.filter((c) => c.acknowledgedAt) : ceoComments;
@@ -288,7 +288,7 @@ function FeedbackDrawer({ onClose }: { onClose(): void }) {
   };
 
   return (
-    <Sheet open onClose={onClose} title="대표님 피드백" subtitle={`${weekLabel(weekId)} · ${ceoComments.length - open.length} / ${ceoComments.length}건 확인`} width={600}>
+    <Sheet open onClose={onClose} title="피드백" subtitle={`${weekLabel(weekId)} · ${ceoComments.length - open.length} / ${ceoComments.length}건 확인`} width={600}>
       <Segmented<FeedbackFilter> value={filter} onChange={setFilter} className="mb-4" options={[
         { id: 'all', label: `전체 ${ceoComments.length}` },
         { id: 'open', label: `미확인 ${open.length}` },
@@ -309,7 +309,7 @@ function FeedbackDrawer({ onClose }: { onClose(): void }) {
                     : <Badge tone="warn">미확인</Badge>}
                 </div>
                 <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-[1.65]">{c.content}</p>
-                <p className="mt-1 text-[12px] text-ink-3">{relativeTime(c.createdAt)} 남김</p>
+                <p className="mt-1 text-[12px] text-ink-3">{members.get(c.authorId)?.isCeo ? '대표님' : `${members.get(c.authorId)?.name ?? ''} ${members.get(c.authorId)?.title ?? ''}`} · {relativeTime(c.createdAt)} 남김</p>
                 {replies.map((r) => (
                   <div key={r.id} className="mt-2 rounded-lg bg-sunken px-3 py-2 text-[13px]">
                     <span className="font-semibold">{members.get(r.authorId)?.name}</span> <span className="text-ink-3">{relativeTime(r.createdAt)}</span>

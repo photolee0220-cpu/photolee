@@ -1,5 +1,5 @@
 import seed from '@seed';
-import { canEditEntry, canSetDirectiveStatus, canViewDept, canViewDirective, isWeekLocked } from './access';
+import { canEditEntry, canSetDirectiveStatus, canViewDept, canViewDirective, isReviewer, isWeekLocked } from './access';
 import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } from './api';
 import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
@@ -39,6 +39,7 @@ function safeSet(k: string, v: string | null): boolean {
 /** 예전 체험판 데이터에 새 항목을 채운다 */
 function normalize(st: DemoState): DemoState {
   st.history ??= [];
+  st.members.forEach((m) => { m.isExecutive ??= false; });
   st.siteSummaries ??= {};
   st.backups ??= [];
   st.directives.forEach((d) => { d.status ??= 'open'; d.statusBy ??= null; d.statusAt ??= null; });
@@ -238,7 +239,7 @@ export const demoApi: Api = {
     const m = me();
     const e = state.entries.find((x) => x.id === entryId);
     if (!e) throw new ApiError('보고 내용을 찾을 수 없습니다.');
-    if (!m.isCeo && !canEditEntry(m, e)) throw new ApiError('피드백을 남길 권한이 없습니다.');
+    if (!isReviewer(m) && !canEditEntry(m, e)) throw new ApiError('피드백을 남길 권한이 없습니다.');
     const c: Comment = { id: newId('c'), entryId, authorId: m.id, content, createdAt: new Date().toISOString(), acknowledgedAt: null, acknowledgedBy: null };
     state.comments.push(c);
     persist();
@@ -464,7 +465,7 @@ export const demoApi: Api = {
       if (state.members.some((m) => m.username === input.username)) throw new ApiError('이미 사용 중인 아이디입니다.');
       const m: Member = {
         id: newId('m'), username: input.username, name: input.name, title: input.title, departmentId: input.departmentId,
-        isCeo: input.isCeo, isAdmin: input.isAdmin, active: true, mustChangePassword: true,
+        isCeo: input.isCeo, isAdmin: input.isAdmin, isExecutive: input.isExecutive, active: true, mustChangePassword: true,
       };
       state.members.push(m);
       state.passwords[m.username] = input.password;

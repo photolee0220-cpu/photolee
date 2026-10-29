@@ -4,7 +4,12 @@ import { currentWeekId } from './week';
 /** 서버(Supabase RLS)와 같은 규칙. 데모 모드와 화면 표시에서 사용 */
 
 export function canSeeAll(me: Member): boolean {
-  return me.isCeo || me.isAdmin;
+  return me.isCeo || me.isAdmin || me.isExecutive;
+}
+
+/** 보고를 쓰지 않고 검토하며 코멘트를 남기는 사람 (대표, 본부장). 이들의 코멘트는 담당자가 확인해야 한다 */
+export function isReviewer(m: Pick<Member, 'isCeo' | 'isExecutive'> | undefined | null): boolean {
+  return !!m && (m.isCeo || m.isExecutive);
 }
 
 export function viewableDepartmentIds(me: Member, grants: Grant[]): Set<string> | 'all' {

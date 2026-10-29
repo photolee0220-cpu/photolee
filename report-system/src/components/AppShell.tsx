@@ -1,5 +1,5 @@
 import {
-  CalendarRange, ChevronLeft, ChevronRight, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Table2, Users, Eye,
+  CalendarRange, ChevronLeft, ChevronRight, FileText, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Table2, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -8,6 +8,7 @@ import { api } from '../lib/client';
 import { byId, has, personEntry } from '../lib/derive';
 import { currentWeekId, deadlineText, shiftWeek, weekLabel } from '../lib/week';
 import { useStore, type View } from '../state/store';
+import { canSeeAll, isReviewer } from '../lib/access';
 import { NotificationButton } from './Notifications';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
@@ -15,13 +16,16 @@ type NavItem = { id: View; label: string; icon: ReactNode };
 
 export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean): NavItem[] {
   const items: NavItem[] = [];
-  if (me.departmentId && !me.isCeo) items.push({ id: 'mine', label: '이번 주 작성', icon: <PenLine size={18} /> });
-  if (me.isCeo || me.isAdmin) {
+  if (me.departmentId && !isReviewer(me)) {
+    items.push({ id: 'mine', label: '이번 주 작성', icon: <PenLine size={18} /> });
+    items.push({ id: 'report', label: '내 보고', icon: <FileText size={18} /> });
+  }
+  if (canSeeAll(me)) {
     items.push({ id: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={18} /> });
     items.push({ id: 'table', label: '표 보기', icon: <Table2 size={18} /> });
     items.push({ id: 'people', label: '부서 보고', icon: <Users size={18} /> });
   }
-  if (hasShared && !me.isCeo && !me.isAdmin) items.push({ id: 'shared', label: '함께 보는 부서', icon: <Eye size={18} /> });
+  if (hasShared && !canSeeAll(me)) items.push({ id: 'shared', label: '함께 보는 부서', icon: <Eye size={18} /> });
   items.push({ id: 'history', label: '지난 보고', icon: <History size={18} /> });
   return items;
 }
@@ -110,15 +114,15 @@ function SearchPalette() {
       key: s.id, label: s.name, sub: `${snap.stages.find((x) => x.id === s.stage)?.short ?? ''} · ${s.process || s.note}`,
       run: () => openDrawer({ type: 'site', id: s.id }),
     }));
-    const people = snap.members.filter((m) => m.active && m.departmentId && !m.isCeo && (match(m.name) || match(depts.get(m.departmentId)?.name ?? '')))
-      .filter((m) => me.isCeo || me.isAdmin || m.departmentId === me.departmentId || has(personEntry(snap.entries, m.id)?.content))
+    const people = snap.members.filter((m) => m.active && m.departmentId && !isReviewer(m) && (match(m.name) || match(depts.get(m.departmentId)?.name ?? '')))
+      .filter((m) => canSeeAll(me) || m.departmentId === me.departmentId || has(personEntry(snap.entries, m.id)?.content))
       .map((m) => ({ key: m.id, label: `${m.name} ${m.title}`, sub: depts.get(m.departmentId!)?.name ?? '', run: () => openDrawer({ type: 'person', id: m.id }) }));
     return [...sites, ...people].slice(0, 12);
   }, [snap, q, me, openDrawer]);
 
   if (!searchOpen) return null;
   const close = () => { setSearchOpen(false); setQ(''); setSel(0); };
-  const go = (i: number) => { const r = results[i]; if (!r) return; close(); if (me.departmentId && !me.isCeo) setView(me.isAdmin ? 'dashboard' : 'mine'); setTimeout(r.run, 0); };
+  const go = (i: number) => { const r = results[i]; if (!r) return; close(); if (me.departmentId && !isReviewer(me)) setView(me.isAdmin ? 'dashboard' : 'mine'); setTimeout(r.run, 0); };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]">
@@ -217,7 +221,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Avatar id={me.id} name={me.name} size={32} />
               <div className="min-w-0 flex-1 leading-tight">
                 <p className="truncate text-[13.5px] font-semibold">{me.name} <span className="font-normal text-ink-3">{me.title}</span></p>
-                <p className="truncate text-[12px] text-ink-3">{me.isCeo ? '대표' : dept?.name ?? (me.isAdmin ? '관리자' : '')}</p>
+                <p className="truncate text-[12px] text-ink-3">{me.isCeo ? '대표' : me.isExecutive ? me.title || '전체 열람' : dept?.name ?? (me.isAdmin ? '관리자' : '')}</p>
               </div>
               <NotificationButton className="h-8 w-8" size={16} />
               <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle} className="h-8 w-8">{isDark ? <Sun size={16} /> : <Moon size={16} />}</IconButton>

@@ -424,7 +424,7 @@ function MembersAdmin() {
                   <td className="px-4 py-2.5"><span className="flex items-center gap-2"><Avatar id={m.id} name={m.name} size={26} /><b>{m.name}</b> <span className="text-ink-3">{m.title}</span></span></td>
                   <td className="px-3 py-2.5 font-mono text-[12.5px] text-ink-2">{m.username}</td>
                   <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}</td>
-                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && <span className="text-ink-3">직원</span>}</span></td>
+                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}</span></td>
                   <td className="px-3 py-2.5"><span className="flex items-center gap-1.5">{m.active ? (m.mustChangePassword ? <Badge tone="note">첫 로그인 전</Badge> : <Badge tone="ok">사용 중</Badge>) : <Badge>중지</Badge>}
                     {pushOn.has(m.id) && <span title="알림 켬" className="text-brand-ink"><Bell size={14} /></span>}</span></td>
                   <td className="px-3 py-2.5">
@@ -450,7 +450,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
   const { run, busy } = useRun();
   const [m, set] = useState({
     name: member?.name ?? '', title: member?.title ?? '', username: member?.username ?? '', password: genPassword(),
-    departmentId: member?.departmentId ?? '', isAdmin: member?.isAdmin ?? false, isCeo: member?.isCeo ?? false, active: member?.active ?? true,
+    departmentId: member?.departmentId ?? '', isAdmin: member?.isAdmin ?? false, isCeo: member?.isCeo ?? false, isExecutive: member?.isExecutive ?? false, active: member?.active ?? true,
   });
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null);
   if (!snap) return null;
@@ -463,11 +463,11 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
       const renamed = m.username !== member.username;
       const ok = await run(async () => {
         if (renamed) await api.admin.changeUsername(member.id, m.username);
-        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, active: m.active });
+        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active });
       }, renamed ? `저장했습니다. 이제 아이디 ${m.username}(으)로 로그인합니다` : '저장했습니다');
       if (ok) onClose();
     } else {
-      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo }), `${m.name}님 계정을 만들었습니다`);
+      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive }), `${m.name}님 계정을 만들었습니다`);
       if (ok) setCreated({ username: m.username, password: m.password });
     }
   };
@@ -509,6 +509,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
         <div className="space-y-3 sm:col-span-2">
           <Toggle checked={m.isAdmin} onChange={(v) => up('isAdmin', v)} disabled={isSelf} label={<>관리자 <span className="text-ink-3">현장·인원·부서 관리, 전체 엑셀</span></>} />
           <Toggle checked={m.isCeo} onChange={(v) => up('isCeo', v)} label={<>대표 <span className="text-ink-3">전체 열람, 지시사항·피드백 입력, 회계 현황</span></>} />
+          <Toggle checked={m.isExecutive} onChange={(v) => up('isExecutive', v)} label={<>전체 열람·코멘트 <span className="text-ink-3">본부장 등 · 모든 보고를 보고 코멘트만 남김 (보고 작성·마감 알림 대상 아님)</span></>} />
           {member && <Toggle checked={m.active} onChange={(v) => up('active', v)} disabled={isSelf} label={<>계정 사용 <span className="text-ink-3">끄면 로그인할 수 없고 기록은 남습니다</span></>} />}
         </div>
       </div>
@@ -649,7 +650,7 @@ function WeeksAdmin() {
   const [weeks, setWeeks] = useState<WeekSummary[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => { api.listWeeks().then(setWeeks).catch(() => setWeeks([])); }, []);
-  const reportersCount = useMemo(() => snap?.members.filter((m) => m.active && m.departmentId && !m.isCeo).length ?? 0, [snap]);
+  const reportersCount = useMemo(() => snap?.members.filter((m) => m.active && m.departmentId && !m.isCeo && !m.isExecutive).length ?? 0, [snap]);
   const cur = currentWeekId();
 
   return (

@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
       return json({ week, targets: targets.length, ...r });
     }
 
-    const { data: c } = await db.from('comments').select('id, entry_id, content').eq('id', input.commentId).maybeSingle();
+    const { data: c } = await db.from('comments').select('id, entry_id, content, author_id').eq('id', input.commentId).maybeSingle();
     if (!c) return json({ error: 'not found' }, 404);
     const { data: e } = await db.from('entries').select('kind, site_id, department_id, author_id').eq('id', c.entry_id).maybeSingle();
     if (!e) return json({ error: 'not found' }, 404);
@@ -110,7 +110,9 @@ Deno.serve(async (req) => {
       targets = [e.author_id];
     }
     const text = String(c.content).replace(/\s+/g, ' ').slice(0, 90);
-    const r = await send(db, targets, { title: `대표님 피드백 · ${where}`, body: text, tag: `feedback-${c.id}` }, 'feedback');
+    const { data: author } = await db.from('members').select('name, title, is_ceo').eq('id', c.author_id).maybeSingle();
+    const who = author?.is_ceo ? '대표님 피드백' : `${author?.name ?? ''} ${author?.title ?? ''} 코멘트`.trim();
+    const r = await send(db, targets, { title: `${who} · ${where}`, body: text, tag: `feedback-${c.id}` }, 'feedback');
     return json(r);
   }
 

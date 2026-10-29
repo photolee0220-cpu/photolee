@@ -1,6 +1,6 @@
-import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, Lock, MessageSquareText } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, FileText, Lock, MessageSquareText } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { isWeekLocked } from '../lib/access';
+import { isReviewer, isWeekLocked } from '../lib/access';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { AttachmentList, attachmentsFor, FileCount } from '../components/Attachments';
 import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from '../components/editors';
@@ -19,7 +19,7 @@ type Filter = 'all' | 'directive' | 'todo';
 type Tab = 'sites' | 'report';
 
 export function MyWeek() {
-  const { snap, me, weekId, saveEntry } = useStore();
+  const { snap, me, weekId, saveEntry, setView } = useStore();
   const exportWeek = useExport();
   const [filter, setFilter] = useState<Filter>('all');
   const [tab, setTab] = useState<Tab>('sites');
@@ -33,7 +33,7 @@ export function MyWeek() {
   const siteWriter = dept.writesSites;
   const locked = isWeekLocked(me, weekId);
   const writtenSites = sites.filter((s) => has(siteEntry(snap.entries, s.id, dept.id)?.content));
-  const newFeedback = snap.comments.filter((c) => !c.acknowledgedAt && members.get(c.authorId)?.isCeo
+  const newFeedback = snap.comments.filter((c) => !c.acknowledgedAt && isReviewer(members.get(c.authorId))
     && snap.entries.some((e) => e.id === c.entryId && (e.kind === 'dept' ? e.authorId === me.id : e.departmentId === dept.id)));
 
   const filtered = sites.filter((s) => {
@@ -73,6 +73,7 @@ export function MyWeek() {
     <div className="mx-auto max-w-[920px]">
       <PageHeader title="이번 주 작성" right={<>
         <WeekSwitcher />
+        <Button size="sm" onClick={() => setView('report')}><FileText size={15} />보고 화면</Button>
         <Button size="sm" onClick={() => exportWeek(snap)}><Download size={15} />엑셀</Button>
       </>}>
         <DeadlineBadge />
@@ -87,7 +88,7 @@ export function MyWeek() {
 
       {newFeedback.length > 0 && (
         <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-[13.5px] font-semibold text-brand-ink">
-          <MessageSquareText size={18} />대표님 피드백 {newFeedback.length}건이 확인을 기다립니다. 해당 칸 아래에서 확인해 주세요.
+          <MessageSquareText size={18} />피드백 {newFeedback.length}건이 확인을 기다립니다. 해당 칸 아래에서 확인해 주세요.
         </div>
       )}
 

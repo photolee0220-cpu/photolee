@@ -38,7 +38,7 @@ export function activeDepartments(snap: Snapshot): Department[] {
 export function reporters(snap: Snapshot): Member[] {
   const order = new Map(snap.departments.map((d) => [d.id, d.sort]));
   return snap.members
-    .filter((m) => m.active && m.departmentId && !m.isCeo)
+    .filter((m) => m.active && m.departmentId && !m.isCeo && !m.isExecutive)
     .sort((a, b) => (order.get(a.departmentId!) ?? 0) - (order.get(b.departmentId!) ?? 0));
 }
 

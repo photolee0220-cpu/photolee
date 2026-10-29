@@ -14,7 +14,7 @@ type Row = Record<string, any>;
 const toDept = (r: Row): Department => ({ id: r.id, name: r.name, sort: r.sort, writesSites: r.writes_sites, active: r.active });
 const toMember = (r: Row): Member => ({
   id: r.id, username: r.username, name: r.name, title: r.title, departmentId: r.department_id,
-  isCeo: r.is_ceo, isAdmin: r.is_admin, active: r.active, mustChangePassword: r.must_change_password,
+  isCeo: r.is_ceo, isAdmin: r.is_admin, isExecutive: !!r.is_executive, active: r.active, mustChangePassword: r.must_change_password,
 });
 const toSite = (r: Row): Site => ({
   id: r.id, name: r.name, note: r.note, stage: r.stage, dueDate: r.due_date, dueText: r.due_text, process: r.process,
@@ -402,7 +402,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         const before = check(await sb.from('members').select('*').eq('id', m.id).single());
         if (before.active !== m.active) await adminCall({ action: 'set_active', memberId: m.id, active: m.active });
         const r = check(await sb.from('members').update({
-          name: m.name, title: m.title, department_id: m.departmentId, is_admin: m.isAdmin, is_ceo: m.isCeo,
+          name: m.name, title: m.title, department_id: m.departmentId, is_admin: m.isAdmin, is_ceo: m.isCeo, is_executive: m.isExecutive,
         }).eq('id', m.id).select().single());
         return toMember(r);
       },

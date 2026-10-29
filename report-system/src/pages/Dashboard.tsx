@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { dueInfo, isImminent, SiteCard } from '../components/SiteCard';
 import { Badge, Button, Card, cx, Empty, Progress, Segmented, Select, Spinner } from '../components/ui';
-import { canViewFinance } from '../lib/access';
+import { canViewFinance, isReviewer } from '../lib/access';
 import { activeDirectives, hasWritten, isCompleted, reporters, visibleSites } from '../lib/derive';
 import { isBuildStage, type Site, type Stage } from '../lib/types';
 import { dday } from '../lib/week';
@@ -38,7 +38,7 @@ export function Dashboard() {
   const overdue = active.filter((s) => (dday(s.dueDate) ?? 0) < 0);
   const directives = activeDirectives(snap.directives);
   const prevOpen = activeDirectives(snap.prevDirectives).filter((d) => d.status !== 'done').length;
-  const ceoComments = snap.comments.filter((c) => snap.members.find((m) => m.id === c.authorId)?.isCeo);
+  const ceoComments = snap.comments.filter((c) => isReviewer(snap.members.find((m) => m.id === c.authorId)));
   const acked = ceoComments.filter((c) => c.acknowledgedAt);
   const tags = [...new Set(sites.flatMap((s) => s.tags))];
   const myDeptName = snap.departments.find((d) => d.id === me.departmentId)?.name;
@@ -103,7 +103,7 @@ export function Dashboard() {
             </>
           ) : <p className="text-[13px] leading-relaxed text-ink-3">이번 주 지시사항이 없습니다.{prevOpen > 0 && <b className="block text-warn">지난주 미완료 {prevOpen}건</b>}</p>}
         </Tile>
-        <Tile label="대표님 피드백" icon={<MessageSquareText size={15} />} onClick={() => openDrawer({ type: 'feedback' })}>
+        <Tile label="피드백" icon={<MessageSquareText size={15} />} onClick={() => openDrawer({ type: 'feedback' })}>
           {ceoComments.length ? (
             <>
               <p className="text-[26px] font-extrabold tabular leading-none">{acked.length}<span className="text-[15px] font-bold text-ink-3"> / {ceoComments.length}건 확인</span></p>

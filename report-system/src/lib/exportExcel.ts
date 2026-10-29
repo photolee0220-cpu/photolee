@@ -1,4 +1,4 @@
-import { canViewDept } from './access';
+import { canSeeAll, canViewDept } from './access';
 import { byId, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites } from './derive';
 import { isBuildStage, type Member, type Snapshot } from './types';
 import { parseIsoDate } from './week';
@@ -125,7 +125,7 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
   ws.getCell(r + 1, 1).font = { name: '맑은 고딕', size: 8, color: { argb: 'FF888888' } };
 
   const buf = await wb.xlsx.writeBuffer();
-  const scope = me.isAdmin || me.isCeo ? '전체' : snap.departments.find((x) => x.id === me.departmentId)?.name.replace(/[\\/]/g, '·') ?? '';
+  const scope = canSeeAll(me) ? '전체' : snap.departments.find((x) => x.id === me.departmentId)?.name.replace(/[\\/]/g, '·') ?? '';
   return {
     blob: new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     filename: `주간보고_${yymmdd}_${scope}.xlsx`,

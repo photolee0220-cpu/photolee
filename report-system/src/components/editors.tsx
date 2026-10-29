@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Plus, Send, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { canEditEntry, canSetDirectiveStatus } from '../lib/access';
+import { canEditEntry, canSetDirectiveStatus, isReviewer } from '../lib/access';
 import { api } from '../lib/client';
 import { lineDiff } from '../lib/diff';
 import { byId, commentsFor, has } from '../lib/derive';
@@ -400,8 +400,8 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
   if (!snap || !entry || !has(entry.content)) return null;
   const members = byId(snap.members);
   const list = commentsFor(snap.comments, entry.id);
-  const canWrite = me.isCeo || canEditEntry(me, entry);
-  const owner = !me.isCeo && (entry.kind === 'dept' ? entry.authorId === me.id : me.departmentId === entry.departmentId);
+  const canWrite = isReviewer(me) || canEditEntry(me, entry);
+  const owner = !isReviewer(me) && (entry.kind === 'dept' ? entry.authorId === me.id : me.departmentId === entry.departmentId);
   const history = <div className="flex justify-end"><EntryHistoryLink entry={entry} /></div>;
   if (!list.length && !canWrite) return <div className="mt-2">{history}</div>;
 
@@ -423,13 +423,14 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
       {history}
       {list.map((c) => {
         const author = members.get(c.authorId);
-        const fromCeo = author?.isCeo;
+        // 대표·본부장 코멘트는 담당자가 확인한다
+        const fromCeo = isReviewer(author);
         return (
           <div key={c.id} className={cx('flex gap-2.5 rounded-lg px-3 py-2.5', fromCeo ? 'bg-brand-soft' : 'bg-sunken')}>
             {fromCeo ? <MessageSquareText size={16} className="mt-0.5 shrink-0 text-brand-ink" /> : <CornerDownRight size={16} className="mt-0.5 shrink-0 text-ink-3" />}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 text-[12px]">
-                <span className="font-bold text-ink">{author?.name ?? '알 수 없음'}{fromCeo && ' · 피드백'}</span>
+                <span className="font-bold text-ink">{author?.name ?? '알 수 없음'}{fromCeo && (author?.isCeo ? ' · 피드백' : ` ${author?.title ?? ''} · 코멘트`)}</span>
                 <span className="text-ink-3">{relativeTime(c.createdAt)}</span>
                 {c.authorId === me.id && (
                   <button onClick={() => deleteComment(c.id).catch(() => toast('지우지 못했습니다.', 'error'))} className="ml-auto text-ink-3 hover:text-danger" aria-label="삭제"><Trash2 size={13} /></button>
@@ -457,7 +458,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send(); }}
-            placeholder={me.isCeo ? '이 내용에 피드백 남기기' : '답글 남기기'}
+            placeholder={me.isCeo ? '이 내용에 피드백 남기기' : isReviewer(me) ? '이 내용에 코멘트 남기기' : '답글 남기기'}
             rows={1}
             className="min-h-[40px] flex-1 resize-none rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] placeholder:text-ink-3 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
           />
