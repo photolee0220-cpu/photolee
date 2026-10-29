@@ -1,67 +1,62 @@
 {
   "result": "success",
   "project_ref": "hwpkxybtglkbxpaihfzl",
-  "run": "40659589470",
+  "run": "40798375674",
   "steps": [
     {
       "step": "secrets",
       "message": "ok",
-      "at": "2026-10-28T08:49:47Z"
+      "at": "2026-10-29T01:06:43Z"
     },
     {
       "step": "organization",
       "message": "using keugwxbvqwqbihrskrfi (사닥다리종합건설)",
-      "at": "2026-10-28T08:49:47Z"
+      "at": "2026-10-29T01:06:43Z"
     },
     {
       "step": "project",
       "message": "using existing hwpkxybtglkbxpaihfzl",
-      "at": "2026-10-28T08:49:47Z"
+      "at": "2026-10-29T01:06:43Z"
     },
     {
       "step": "project",
       "message": "status ACTIVE_HEALTHY",
-      "at": "2026-10-28T08:49:48Z"
+      "at": "2026-10-29T01:06:43Z"
     },
     {
       "step": "database",
       "message": "already set up, skipped",
-      "at": "2026-10-28T08:50:09Z"
-    },
-    {
-      "step": "migration:0006_delete_site.sql",
-      "message": "applied",
-      "at": "2026-10-28T08:50:11Z"
+      "at": "2026-10-29T01:07:05Z"
     },
     {
       "step": "migrations",
-      "message": "1 applied",
-      "at": "2026-10-28T08:50:11Z"
+      "message": "0 applied",
+      "at": "2026-10-29T01:07:06Z"
     },
     {
       "step": "function:admin-users",
       "message": "deployed",
-      "at": "2026-10-28T08:50:39Z"
+      "at": "2026-10-29T01:07:37Z"
     },
     {
       "step": "function:weekly-summary",
       "message": "deployed",
-      "at": "2026-10-28T08:50:42Z"
+      "at": "2026-10-29T01:07:41Z"
     },
     {
       "step": "secrets:anthropic",
-      "message": "not provided (AI 요약은 키를 넣은 뒤 사용)",
-      "at": "2026-10-28T08:50:42Z"
+      "message": "set",
+      "at": "2026-10-29T01:07:43Z"
     },
     {
       "step": "keys",
       "message": "public key ready",
-      "at": "2026-10-28T08:50:42Z"
+      "at": "2026-10-29T01:07:44Z"
     },
     {
       "step": "website",
       "message": "connected to https://hwpkxybtglkbxpaihfzl.supabase.co",
-      "at": "2026-10-28T08:50:43Z"
+      "at": "2026-10-29T01:07:45Z"
     }
   ]
 }
