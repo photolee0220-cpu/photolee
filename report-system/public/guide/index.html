@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>주간보고 사용 설명서 · 사닥다리종합건설</title>
+<link rel="icon" href="../icon-64.png" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #fff; --sunken: #f0f2f5; --line: #e5e8ed;
+    --ink: #171e28; --ink-2: #4b5563; --ink-3: #868f9c;
+    --brand: #345070; --brand-ink: #243a55; --brand-soft: #eaf0f7;
+    --note: #fff9e8; --note-ink: #7a5300; --note-line: #f1e0b0; --ok: #15803d; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1217; --surface: #171b22; --sunken: #1d222b; --line: #2a303a;
+      --ink: #e8ebf0; --ink-2: #b4bcc8; --ink-3: #8a93a1;
+      --brand: #8fb2d9; --brand-ink: #b8d0eb; --brand-soft: #1d2838;
+      --note: #2a2414; --note-ink: #e5c46b; --note-line: #4a3f1f; --ok: #4ade80; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; word-break: keep-all; }
+  a { color: var(--brand-ink); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 64px; }
+  header.hero { background: var(--brand); color: #fff; padding: 40px 16px 36px; }
+  header.hero .wrap { padding-bottom: 0; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .hero-logo { width: 72px; height: 72px; border-radius: 50%; background: #fff; padding: 4px; flex: none; }
+  .hero h1 { margin: 4px 0 6px; font-size: 30px; line-height: 1.3; letter-spacing: -0.02em; }
+  .hero p { margin: 0; opacity: .88; }
+  .hero .qr { margin-left: auto; background: #fff; border-radius: 14px; padding: 10px; text-align: center; color: var(--brand-ink); font-size: 12px; font-weight: 700; }
+  .hero .qr img { width: 104px; height: 104px; display: block; }
+  .chip { display: inline-block; background: rgba(255,255,255,.16); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; margin: -18px 0 28px; position: relative; box-shadow: 0 4px 16px rgba(20,30,50,.06); }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 24px; }
+  nav.toc li { break-inside: avoid; }
+  nav.toc a { text-decoration: none; font-weight: 600; }
+  section.step { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 24px 20px; margin: 0 0 18px; }
+  .step h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; }
+  .num { flex: none; width: 32px; height: 32px; border-radius: 10px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 16px; }
+  .lead { color: var(--ink-2); margin: 0 0 14px; }
+  .row { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .row > .text { flex: 1 1 300px; min-width: 0; }
+  .shots { display: flex; gap: 14px; flex-wrap: wrap; }
+  figure { margin: 0; flex: none; width: 240px; }
+  figure img { width: 100%; display: block; border-radius: 22px; border: 6px solid #1f2733; box-shadow: 0 8px 24px rgba(20,30,50,.14); background: #fff; }
+  figure.wide { width: 100%; }
+  figure.wide img { border-radius: 12px; border-width: 1px; border-color: var(--line); }
+  figure.flat img { border-radius: 12px; border: 1px solid var(--line); box-shadow: none; }
+  figcaption { font-size: 13px; color: var(--ink-3); text-align: center; margin-top: 8px; }
+  ol.steps, ul.points { padding-left: 0; list-style: none; margin: 0 0 12px; }
+  ol.steps { counter-reset: s; }
+  ol.steps li { counter-increment: s; position: relative; padding-left: 34px; margin: 0 0 10px; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 24px; height: 24px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-ink); font-weight: 800; font-size: 13px; display: grid; place-items: center; }
+  ul.points li { position: relative; padding-left: 18px; margin: 0 0 6px; }
+  ul.points li::before { content: ""; position: absolute; left: 2px; top: 11px; width: 6px; height: 6px; border-radius: 2px; background: var(--brand); }
+  .tip { background: var(--brand-soft); border-radius: 14px; padding: 12px 14px; margin: 12px 0 0; font-size: 15px; }
+  .warn { background: var(--note); border: 1px solid var(--note-line); color: var(--ink); border-radius: 14px; padding: 12px 14px; margin: 12px 0 0; font-size: 15px; }
+  .warn b { color: var(--note-ink); }
+  .ui { display: inline-block; border: 1px solid var(--line); background: var(--sunken); border-radius: 8px; padding: 0 7px; font-size: .92em; font-weight: 700; white-space: nowrap; }
+  .phones { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .phone-card { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: var(--sunken); }
+  .phone-card h3 { margin: 0 0 8px; font-size: 16px; }
+  .phone-card ol { margin: 0; padding-left: 20px; }
+  .ico { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); vertical-align: -5px; font-size: 13px; }
+  .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 4px; }
+  .timeline div { background: var(--sunken); border-radius: 12px; padding: 10px; text-align: center; font-size: 14px; }
+  .timeline b { display: block; font-size: 15px; }
+  .timeline .lock { background: var(--note); }
+  dl.faq dt { font-weight: 800; margin-top: 14px; }
+  dl.faq dd { margin: 2px 0 0; color: var(--ink-2); }
+  footer { text-align: center; color: var(--ink-3); font-size: 13px; padding-top: 12px; }
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 25px; }
+    .hero .qr { display: none; }
+    nav.toc ol { columns: 1; }
+    .shots { justify-content: center; }
+    figure, figure.solo { width: 82%; margin: 0 auto; }
+    .phones { grid-template-columns: 1fr; }
+    .timeline { grid-template-columns: 1fr 1fr; }
+    section.step { padding: 20px 16px; }
+  }
+  @media print {
+    :root { --bg: #fff; }
+    body { font-size: 12.5px; }
+    header.hero { padding: 24px 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    nav.toc { margin-top: 12px; box-shadow: none; }
+    section.step { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+    section.step.big { break-inside: auto; }
+    .row { flex-wrap: nowrap; gap: 16px; break-inside: avoid; page-break-inside: avoid; }
+    .row > .text { flex: 1 1 auto; }
+    .shots { flex-wrap: nowrap; gap: 10px; }
+    figure, figure.solo { width: 150px; }
+    figure img { border-width: 4px; border-radius: 16px; }
+    figure.wide { width: 100%; }
+    figure.wide.flat { max-width: 300px !important; flex: none; }
+    h3 { break-after: avoid; }
+    #feedback { break-before: page; page-break-before: always; }
+    .num, .chip, .tip, .warn, .timeline div, ol.steps li::before, ul.points li::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    a { text-decoration: none; }
+    .noprint { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <img class="hero-logo" src="../icon-192.png" alt="사닥다리종합건설 로고" />
+    <div>
+      <span class="chip">시범 운영</span>
+      <h1>주간보고 사용 설명서</h1>
+      <p>사닥다리종합건설 · 엑셀 대신 휴대폰·컴퓨터로 쓰는 주간보고</p>
+      <p style="margin-top:8px"><a href="https://photolee0220-cpu.github.io/photolee/" style="color:#fff;font-weight:700">photolee0220-cpu.github.io/photolee</a>
+        <span class="noprint"> · <a href="sadakdari-weekly-report-guide.pdf" download="주간보고_사용설명서.pdf" style="color:#fff">PDF로 받기</a></span></p>
+    </div>
+    <div class="qr"><img src="img/qr.svg" alt="접속 주소 QR 코드" />휴대폰으로 찍어서 접속</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="목차">
+    <ol>
+      <li><a href="#login">접속과 로그인</a></li>
+      <li><a href="#home">휴대폰 홈 화면에 추가</a></li>
+      <li><a href="#write">보고 쓰기</a></li>
+      <li><a href="#deadline">마감과 수정</a></li>
+      <li><a href="#feedback">피드백 확인·지시 처리</a></li>
+      <li><a href="#meeting">월요일 회의: 내 보고</a></li>
+      <li><a href="#notify">알림 받기</a></li>
+      <li><a href="#faq">자주 묻는 질문</a></li>
+    </ol>
+  </nav>
+
+  <section class="step" id="login">
+    <h2><span class="num">1</span>접속과 로그인</h2>
+    <p class="lead">주소로 들어가 개별로 받은 아이디와 임시 비밀번호로 로그인합니다.</p>
+    <div class="row">
+      <div class="text">
+        <ol class="steps">
+          <li>휴대폰이나 컴퓨터에서 <b>photolee0220-cpu.github.io/photolee</b> 로 접속합니다. (위 QR 코드를 찍어도 됩니다)</li>
+          <li>관리자에게 받은 <b>아이디</b>와 <b>임시 비밀번호</b>를 넣고 <span class="ui">로그인</span>을 누릅니다.</li>
+          <li>처음 로그인하면 본인이 쓸 <b>새 비밀번호(6자 이상)</b>를 정합니다.</li>
+        </ol>
+        <div class="warn"><b>아이디·비밀번호는 다른 사람과 공유하지 마세요.</b> 잊어버리면 관리자에게 초기화를 요청하면 됩니다.</div>
+      </div>
+      <figure class="solo"><a href="img/01-login.jpg"><img src="img/01-login.jpg" alt="로그인 화면" /></a><figcaption>로그인 화면</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step" id="home">
+    <h2><span class="num">2</span>휴대폰 홈 화면에 추가 <span style="font-size:14px;color:var(--ink-3);font-weight:600">(권장)</span></h2>
+    <p class="lead">한 번만 해두면 앱처럼 아이콘을 눌러 바로 열 수 있고, 알림도 받을 수 있습니다.</p>
+    <div class="phones">
+      <div class="phone-card">
+        <h3>아이폰 (사파리)</h3>
+        <ol>
+          <li>사파리로 주간보고 주소에 접속</li>
+          <li>아래쪽 <span class="ico">⬆︎</span> <b>공유</b> 버튼</li>
+          <li><b>홈 화면에 추가</b> → <b>추가</b></li>
+          <li>홈 화면의 <b>주간보고</b> 아이콘으로 열기</li>
+        </ol>
+      </div>
+      <div class="phone-card">
+        <h3>안드로이드 (크롬·삼성 인터넷)</h3>
+        <ol>
+          <li>크롬으로 주간보고 주소에 접속</li>
+          <li>오른쪽 위 <span class="ico">⋮</span> 메뉴</li>
+          <li><b>홈 화면에 추가</b> (또는 <b>앱 설치</b>)</li>
+          <li>홈 화면의 <b>주간보고</b> 아이콘으로 열기</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="step big" id="write">
+    <h2><span class="num">3</span>보고 쓰기</h2>
+    <p class="lead">메뉴 <span class="ui">이번 주 작성</span>에서 씁니다. 입력하면 <b>자동으로 저장</b>됩니다. 저장 버튼이 따로 없고, 칸 아래 <b>✓ 저장됨</b>이 보이면 저장된 것입니다.</p>
+
+    <h3 style="margin:18px 0 6px">현장 보고 부서 (공무·인테리어·CM·견적)</h3>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li>위쪽 <span class="ui">현장별 보고</span> <span class="ui">부서 업무보고</span> 두 탭으로 나뉩니다.</li>
+          <li>처음에는 <b>현장 이름만</b> 보입니다. 이름을 누르면 작성 칸이 열립니다.</li>
+          <li><b>우리 부서가 맡은 현장만</b> 쓰면 됩니다. 쓴 현장은 ✓ 표시로 바뀝니다.</li>
+          <li>현장 칸 아래에서 <b>사진</b>과 <b>파일</b>(PDF·엑셀·한글 등, 1개당 20MB까지)을 붙일 수 있습니다.</li>
+          <li><span class="ui">현장 전체 보기</span>를 누르면 그 현장에 다른 부서가 쓴 내용도 볼 수 있습니다. (열람 권한이 있는 부서만)</li>
+        </ul>
+      </div>
+      <div class="shots">
+        <figure><a href="img/03-sites-collapsed.jpg"><img src="img/03-sites-collapsed.jpg" alt="현장 목록" /></a><figcaption>현장 이름 목록</figcaption></figure>
+        <figure><a href="img/04-site-open.jpg"><img src="img/04-site-open.jpg" alt="현장 칸 작성" /></a><figcaption>이름을 누르면 작성 칸</figcaption></figure>
+      </div>
+    </div>
+
+    <h3 style="margin:22px 0 6px">부서 업무보고 · 대주제로 나눠 쓰기</h3>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li>내용이 많으면 <span class="ui">+ 대주제 추가</span>를 눌러 <b>대제목별로 칸을 나눠</b> 쓸 수 있습니다. (예: 공공입찰 / 민간입찰 / 협조 요청)</li>
+          <li>칸 오른쪽 화살표로 순서를 바꾸고, 휴지통으로 지울 수 있습니다.</li>
+          <li>칸이 비어 있으면 <span class="ui">지난주 내용 불러오기</span>로 지난주 글을 가져와 고쳐 쓰면 편합니다.</li>
+          <li>현장 보고를 하지 않는 부서는 <b>이 화면 하나만</b> 쓰면 됩니다.</li>
+        </ul>
+      </div>
+      <div class="shots">
+        <figure><a href="img/05-dept-sections.jpg"><img src="img/05-dept-sections.jpg" alt="대주제로 나눠 쓴 부서 업무보고" /></a><figcaption>대주제로 나눠 쓰기</figcaption></figure>
+        <figure><a href="img/13-general-dept.jpg"><img src="img/13-general-dept.jpg" alt="일반 부서 작성 화면" /></a><figcaption>현장 보고가 없는 부서</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="deadline">
+    <h2><span class="num">4</span>마감과 수정</h2>
+    <div class="timeline">
+      <div><b>월~금</b>이번 주 작성</div>
+      <div><b>토 오전 10시</b>작성 마감</div>
+      <div><b>~ 월요일</b>회의 전까지 수정 가능</div>
+      <div class="lock"><b>화요일부터</b>지난주 보고 잠김 🔒</div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="text">
+        <ul class="points">
+          <li>마감 후에도 <b>월요일까지</b>는 고칠 수 있습니다.</li>
+          <li><b>화요일 0시</b>부터 지난주 보고는 <b>보기만</b> 가능합니다. 고칠 내용이 있으면 관리자에게 요청해 주세요.</li>
+          <li>칸 아래 <span class="ui">수정 기록</span>을 누르면 이전 내용과 고친 사람을 볼 수 있습니다.</li>
+        </ul>
+      </div>
+      <figure class="wide flat" style="max-width:420px"><a href="img/11-locked-banner.jpg"><img src="img/11-locked-banner.jpg" alt="지난 주차 잠금 안내" /></a><figcaption>지난 주차를 열면 보이는 안내</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step big" id="feedback">
+    <h2><span class="num">5</span>피드백 확인 · 지시 처리</h2>
+    <p class="lead">대표님·본부장님이 남긴 피드백과 대표님 지시사항을 꼭 확인해 주세요.</p>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li>새 피드백이 있으면 화면 위에 <b>"피드백 n건이 확인을 기다립니다"</b>가 뜨고, 해당 현장 옆에 <b>피드백</b> 표시가 붙습니다.</li>
+          <li>내용을 읽고 <span class="ui">✓ 확인했습니다</span>를 눌러 주세요. 대표님 화면에 확인 여부가 바로 표시됩니다.</li>
+          <li>필요하면 <b>답글</b>을 달 수 있습니다.</li>
+          <li>대표님 지시사항 아래 <span class="ui">대기</span> <span class="ui">진행 중</span> <span class="ui">완료</span>를 눌러 <b>처리 상태</b>를 표시해 주세요.</li>
+        </ul>
+      </div>
+      <div class="shots">
+        <figure><a href="img/07-feedback-ack.jpg"><img src="img/07-feedback-ack.jpg" alt="피드백 확인 버튼" /></a><figcaption>피드백 → 확인했습니다</figcaption></figure>
+        <figure><a href="img/08-directive-status.jpg"><img src="img/08-directive-status.jpg" alt="지시 처리 상태" /></a><figcaption>지시 → 처리 상태 표시</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="step big" id="meeting">
+    <h2><span class="num">6</span>월요일 회의: 내 보고</h2>
+    <p class="lead">메뉴 <span class="ui">내 보고</span>를 엽니다. 회의 때는 휴대폰이나 태블릿으로 이 화면을 보면서 보고하세요.</p>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li>이번 주에 쓴 <b>현장별 보고가 차례로</b> 나오고, <b>맨 아래에 부서 업무보고</b>가 나옵니다.</li>
+          <li>위쪽 <b>현장 이름 버튼</b>을 누르면 그 현장으로 바로 넘어갑니다.</li>
+          <li>오른쪽 위 <span class="ui">가</span> <span class="ui">가</span> <span class="ui">가</span>로 <b>글자 크기</b>를 키울 수 있습니다.</li>
+          <li>'이번 주 작성' 화면의 <span class="ui">보고 화면</span> 버튼으로도 들어갈 수 있습니다.</li>
+        </ul>
+      </div>
+      <div class="shots">
+        <figure><a href="img/09-my-report.jpg"><img src="img/09-my-report.jpg" alt="내 보고 화면 - 현장별 보고" /></a><figcaption>현장별 보고</figcaption></figure>
+        <figure><a href="img/10-my-report-dept.jpg"><img src="img/10-my-report-dept.jpg" alt="내 보고 화면 - 부서 업무보고" /></a><figcaption>맨 아래 부서 업무보고</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="notify">
+    <h2><span class="num">7</span>알림 받기 <span style="font-size:14px;color:var(--ink-3);font-weight:600">(선택)</span></h2>
+    <div class="row">
+      <div class="text">
+        <ol class="steps">
+          <li>화면 위쪽(컴퓨터는 왼쪽 아래)의 <span class="ico">🔔</span> 버튼을 누릅니다.</li>
+          <li><span class="ui">이 기기에서 알림 켜기</span> → 브라우저가 물으면 <b>허용</b>.</li>
+          <li><span class="ui">시험 알림 보내기</span>로 잘 오는지 확인합니다.</li>
+        </ol>
+        <ul class="points">
+          <li><b>금요일 오후 3시, 토요일 오전 8시 30분</b>: 이번 주 보고를 아직 안 쓴 경우에만 알림</li>
+          <li>대표님·본부장님이 내 보고에 <b>피드백을 남겼을 때</b> 알림</li>
+        </ul>
+        <div class="tip">아이폰은 먼저 <b>2번 '홈 화면에 추가'</b>를 하고, 그 아이콘으로 연 다음 알림을 켜야 합니다. (iOS 16.4 이상)</div>
+      </div>
+      <figure class="solo"><a href="img/12-notify.jpg"><img src="img/12-notify.jpg" alt="알림 설정 창" /></a><figcaption>🔔 알림 설정</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step" id="faq">
+    <h2><span class="num">?</span>자주 묻는 질문</h2>
+    <dl class="faq">
+      <dt>저장 버튼이 없는데 저장이 되나요?</dt>
+      <dd>네. 입력하면 몇 초 안에 자동 저장되고 칸 아래 <b>✓ 저장됨</b>이 표시됩니다. 인터넷이 끊기면 저장 실패가 표시되니 다시 입력해 주세요.</dd>
+      <dt>컴퓨터에서 쓰고 휴대폰에서 이어서 써도 되나요?</dt>
+      <dd>네. 같은 아이디로 로그인하면 어디서든 같은 내용이 보입니다.</dd>
+      <dt>다른 부서 보고도 볼 수 있나요?</dt>
+      <dd>기본은 우리 부서 보고만 보입니다. 함께 보는 부서는 관리자가 열람 권한을 설정한 경우에만 '함께 보는 부서' 메뉴에 나옵니다.</dd>
+      <dt>실수로 내용을 지웠어요.</dt>
+      <dd>칸 아래 <b>수정 기록</b>에서 이전 내용을 보고 다시 붙여 넣을 수 있습니다.</dd>
+      <dt>지난주 보고를 고쳐야 해요.</dt>
+      <dd>화요일부터는 잠겨 있으니 관리자에게 요청해 주세요.</dd>
+      <dt>비밀번호를 잊었어요.</dt>
+      <dd>관리자에게 초기화를 요청하면 임시 비밀번호를 다시 받습니다.</dd>
+    </dl>
+  </section>
+
+  <section class="step">
+    <h2><span class="num">💻</span>컴퓨터 화면</h2>
+    <p class="lead">컴퓨터에서는 왼쪽에 메뉴가 있고, 쓰는 방법은 휴대폰과 같습니다.</p>
+    <figure class="wide"><a href="img/14-desktop.jpg"><img src="img/14-desktop.jpg" alt="컴퓨터 화면" /></a></figure>
+  </section>
+
+  <footer>
+    화면 예시의 이름·현장은 설명을 위한 가상의 내용입니다.<br />
+    문의: 관리자(취합 담당) · 사닥다리종합건설 주간보고
+  </footer>
+</div>
+</body>
+</html>

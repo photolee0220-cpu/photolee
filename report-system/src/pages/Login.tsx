@@ -43,6 +43,7 @@ export function Login({ onSignedIn }: { onSignedIn(m: Member): void }) {
           {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] font-semibold text-danger" role="alert">{error}</p>}
           <Button tone="primary" type="submit" className="!h-11 w-full" disabled={busy || !username || !password}><LogIn size={16} />로그인</Button>
           <p className="text-center text-[12px] text-ink-3">비밀번호를 잊었다면 관리자에게 초기화를 요청하세요</p>
+          <p className="text-center text-[12.5px]"><a href={`${import.meta.env.BASE_URL}guide/`} target="_blank" rel="noopener" className="font-semibold text-brand-ink hover:underline">처음 쓰시나요? 사용 설명서 보기</a></p>
         </form>
         {demoPick && (
           <div className="mt-6 rounded-2xl border border-note-line bg-note p-4">

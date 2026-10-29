@@ -1,5 +1,5 @@
 import {
-  CalendarRange, ChevronLeft, ChevronRight, FileText, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Table2, Users, Eye,
+  BookOpen, CalendarRange, ChevronLeft, ChevronRight, FileText, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Table2, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -206,15 +206,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {it.icon}{it.label}
               </button>
             ))}
+            <div className="mx-3 my-3 h-px bg-line" />
             {me.isAdmin && (
-              <>
-                <div className="mx-3 my-3 h-px bg-line" />
-                <button onClick={() => setView('admin')}
-                  className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
-                  <Settings size={18} />관리자 페이지
-                </button>
-              </>
+              <button onClick={() => setView('admin')}
+                className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
+                <Settings size={18} />관리자 페이지
+              </button>
             )}
+            <a href={`${import.meta.env.BASE_URL}guide/`} target="_blank" rel="noopener"
+              className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
+              <BookOpen size={18} />사용 설명서
+            </a>
           </nav>
           <div className="mt-auto border-t border-line p-3">
             <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
