@@ -4,9 +4,9 @@ import { canEditEntry, canViewDept } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
-  byId, has, memberDirective, personEntry, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork,
+  byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork,
 } from '../lib/derive';
-import { isBuildStage, type Department, type Entry, type Member } from '../lib/types';
+import { isBuildStage, type Comment, type Department, type Entry, type Member } from '../lib/types';
 import { formatDate, relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { AttachmentList } from './Attachments';
@@ -14,13 +14,15 @@ import { DiffText } from './DiffText';
 import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from './editors';
 import { PhotoStrip } from './Photos';
 import { dueInfo, isImminent } from './SiteCard';
-import { Avatar, Badge, cx, Progress, Sheet, Spinner, StageChip } from './ui';
+import { Avatar, Badge, cx, Progress, Segmented, Sheet, Spinner, StageChip } from './ui';
 
 export function DrawerHost() {
   const { drawer, openDrawer } = useStore();
   const close = () => openDrawer(null);
   if (!drawer) return null;
   if (drawer.type === 'site') return <SiteDrawer id={drawer.id} onClose={close} />;
+  if (drawer.type === 'writers') return <WritersDrawer onClose={close} />;
+  if (drawer.type === 'feedback') return <FeedbackDrawer onClose={close} />;
   return <PersonDrawer id={drawer.id} onClose={close} />;
 }
 
@@ -233,6 +235,116 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
           </Block>
         )}
       </div>
+    </Sheet>
+  );
+}
+
+/** 대시보드 '작성 현황': 이번 주 작성한 사람과 안 한 사람 */
+function WritersDrawer({ onClose }: { onClose(): void }) {
+  const { snap, weekId, openDrawer } = useStore();
+  if (!snap) return null;
+  const depts = byId(snap.departments);
+  const people = reporters(snap);
+  const lastWrite = (id: string) => snap.entries.filter((e) => e.updatedBy === id && has(e.content)).map((e) => e.updatedAt).sort().pop();
+  const done = people.filter((m) => hasWritten(snap, m.id));
+  const missing = people.filter((m) => !hasWritten(snap, m.id));
+  const row = (m: Member, at?: string) => (
+    <button key={m.id} type="button" onClick={() => openDrawer({ type: 'person', id: m.id })}
+      className="flex w-full items-center gap-3 border-b border-line px-4 py-2.5 text-left last:border-0 hover:bg-sunken/60">
+      <Avatar id={m.id} name={m.name} size={28} muted={!at} />
+      <span className="min-w-0 flex-1">
+        <span className="font-semibold">{m.name}</span> <span className="text-ink-3">{m.title}</span>
+        <span className="block truncate text-[12px] text-ink-3">{depts.get(m.departmentId!)?.name}</span>
+      </span>
+      <span className="shrink-0 text-[12px] text-ink-3">{at ? `${relativeTime(at)} 작성` : ''}</span>
+      <ChevronRight size={15} className="shrink-0 text-ink-3" />
+    </button>
+  );
+
+  return (
+    <Sheet open onClose={onClose} title="작성 현황" subtitle={`${weekLabel(weekId)} · ${done.length} / ${people.length}명 작성`} width={520}>
+      <div className="space-y-5">
+        <section>
+          <h3 className="mb-2 flex items-center gap-2 text-[14px] font-bold">미작성 <Badge tone={missing.length ? 'warn' : 'neutral'}>{missing.length}명</Badge></h3>
+          {missing.length ? <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">{missing.map((m) => row(m))}</div>
+            : <p className="text-[13px] font-semibold text-ok">모두 작성했습니다</p>}
+        </section>
+        <section>
+          <h3 className="mb-2 flex items-center gap-2 text-[14px] font-bold">작성 <Badge tone="brand">{done.length}명</Badge></h3>
+          {done.length ? <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">{done.map((m) => row(m, lastWrite(m.id)))}</div>
+            : <p className="text-[13px] text-ink-3">아직 작성한 사람이 없습니다</p>}
+        </section>
+      </div>
+    </Sheet>
+  );
+}
+
+type FeedbackFilter = 'all' | 'open' | 'done';
+
+/** 대시보드 '대표님 피드백': 누구에게 어떤 피드백을 남겼고 확인했는지 */
+function FeedbackDrawer({ onClose }: { onClose(): void }) {
+  const { snap, weekId, openDrawer } = useStore();
+  const [filter, setFilter] = useState<FeedbackFilter>('all');
+  if (!snap) return null;
+  const members = byId(snap.members);
+  const depts = byId(snap.departments);
+  const entries = byId(snap.entries);
+  const isCeo = (id: string) => !!members.get(id)?.isCeo;
+  const ceoComments = snap.comments.filter((c) => isCeo(c.authorId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const open = ceoComments.filter((c) => !c.acknowledgedAt);
+  const list = filter === 'open' ? open : filter === 'done' ? ceoComments.filter((c) => c.acknowledgedAt) : ceoComments;
+
+  const target = (e: Entry | undefined) => {
+    if (!e) return { label: '', run: () => undefined };
+    if (e.kind === 'site') {
+      const site = snap.sites.find((s) => s.id === e.siteId);
+      const who = snap.members.filter((m) => m.active && m.departmentId === e.departmentId).map((m) => m.name).join(', ');
+      return { label: `${site?.name ?? '현장'} · ${depts.get(e.departmentId)?.name ?? ''}${who ? ` (${who})` : ''}`, run: () => site && openDrawer({ type: 'site', id: site.id }) };
+    }
+    const m = members.get(e.authorId ?? '');
+    return { label: `${m?.name ?? ''} ${m?.title ?? ''} · 부서 업무보고`, run: () => m && openDrawer({ type: 'person', id: m.id }) };
+  };
+  // 같은 칸에서 이 피드백 뒤, 다음 대표 피드백 전까지 달린 직원 답글
+  const repliesOf = (c: Comment) => {
+    const thread = commentsFor(snap.comments, c.entryId);
+    const next = thread.find((x) => isCeo(x.authorId) && x.createdAt > c.createdAt);
+    return thread.filter((x) => !isCeo(x.authorId) && x.createdAt > c.createdAt && (!next || x.createdAt < next.createdAt));
+  };
+
+  return (
+    <Sheet open onClose={onClose} title="대표님 피드백" subtitle={`${weekLabel(weekId)} · ${ceoComments.length - open.length} / ${ceoComments.length}건 확인`} width={600}>
+      <Segmented<FeedbackFilter> value={filter} onChange={setFilter} className="mb-4" options={[
+        { id: 'all', label: `전체 ${ceoComments.length}` },
+        { id: 'open', label: `미확인 ${open.length}` },
+        { id: 'done', label: `확인 ${ceoComments.length - open.length}` },
+      ]} />
+      {list.length === 0 ? <p className="py-6 text-center text-[13px] text-ink-3">{ceoComments.length ? '해당하는 피드백이 없습니다' : '이번 주에 남긴 피드백이 없습니다'}</p> : (
+        <div className="space-y-3">
+          {list.map((c) => {
+            const t = target(entries.get(c.entryId));
+            const replies = repliesOf(c);
+            return (
+              <button key={c.id} type="button" onClick={t.run}
+                className="block w-full rounded-2xl border border-line bg-surface p-4 text-left shadow-card transition-colors hover:border-line-strong">
+                <div className="flex items-start gap-2">
+                  <p className="min-w-0 flex-1 text-[13px] font-bold text-brand-ink">{t.label}</p>
+                  {c.acknowledgedAt
+                    ? <Badge tone="ok">✓ {members.get(c.acknowledgedBy ?? '')?.name ?? ''} 확인 · {relativeTime(c.acknowledgedAt)}</Badge>
+                    : <Badge tone="warn">미확인</Badge>}
+                </div>
+                <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-[1.65]">{c.content}</p>
+                <p className="mt-1 text-[12px] text-ink-3">{relativeTime(c.createdAt)} 남김</p>
+                {replies.map((r) => (
+                  <div key={r.id} className="mt-2 rounded-lg bg-sunken px-3 py-2 text-[13px]">
+                    <span className="font-semibold">{members.get(r.authorId)?.name}</span> <span className="text-ink-3">{relativeTime(r.createdAt)}</span>
+                    <p className="mt-0.5 whitespace-pre-wrap leading-[1.6]">{r.content}</p>
+                  </div>
+                ))}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </Sheet>
   );
 }

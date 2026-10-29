@@ -5,7 +5,7 @@ import { currentWeekId } from '../lib/week';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
 export type View = 'dashboard' | 'table' | 'people' | 'mine' | 'shared' | 'history' | 'admin';
-export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | null;
+export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
 
 interface Store {

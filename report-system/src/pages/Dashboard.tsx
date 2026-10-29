@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Landmark, Lock, MessageSquareText, Users } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Download, Landmark, Lock, MessageSquareText, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { dueInfo, isImminent, SiteCard } from '../components/SiteCard';
@@ -61,14 +61,14 @@ export function Dashboard() {
 
       {/* 요약 */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Tile label="작성 현황" icon={<Users size={15} />}>
+        <Tile label="작성 현황" icon={<Users size={15} />} onClick={() => openDrawer({ type: 'writers' })}>
           <p className="text-[26px] font-extrabold tabular leading-none">{done.length}<span className="text-[15px] font-bold text-ink-3"> / {people.length}명</span></p>
           <Progress value={people.length ? (done.length / people.length) * 100 : 0} className="mt-2.5" />
           {missing.length > 0 ? (
             <div className="mt-2.5 flex flex-wrap items-center gap-1">
               <span className="mr-0.5 text-[12px] font-semibold text-ink-3">미작성</span>
               {missing.slice(0, 6).map((m) => (
-                <button key={m.id} onClick={() => openDrawer({ type: 'person', id: m.id })} className="rounded-md bg-sunken px-1.5 py-0.5 text-[12px] font-semibold text-ink-2 hover:bg-line">{m.name}</button>
+                <span key={m.id} className="rounded-md bg-sunken px-1.5 py-0.5 text-[12px] font-semibold text-ink-2">{m.name}</span>
               ))}
               {missing.length > 6 && <span className="text-[12px] text-ink-3">외 {missing.length - 6}명</span>}
             </div>
@@ -87,7 +87,7 @@ export function Dashboard() {
             {!imminent.length && !overdue.length && <p className="text-ink-3">임박한 준공이 없습니다</p>}
           </div>
         </Tile>
-        <Tile label="대표님 피드백" icon={<MessageSquareText size={15} />}>
+        <Tile label="대표님 피드백" icon={<MessageSquareText size={15} />} onClick={() => openDrawer({ type: 'feedback' })}>
           {ceoComments.length ? (
             <>
               <p className="text-[26px] font-extrabold tabular leading-none">{acked.length}<span className="text-[15px] font-bold text-ink-3"> / {ceoComments.length}건 확인</span></p>
@@ -188,10 +188,13 @@ function dueRank(s: Site): number {
   return d == null ? 5e5 + s.sort : d;
 }
 
-function Tile({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
+function Tile({ label, icon, children, onClick }: { label: string; icon: React.ReactNode; children: React.ReactNode; onClick?: () => void }) {
   return (
-    <Card className="p-4">
-      <p className="mb-2.5 flex items-center gap-1.5 text-[12.5px] font-bold text-ink-3">{icon}{label}</p>
+    <Card className="flex flex-col justify-start p-4" onClick={onClick}>
+      <p className="mb-2.5 flex items-center gap-1.5 text-[12.5px] font-bold text-ink-3">
+        {icon}{label}
+        {onClick && <span className="ml-auto inline-flex items-center text-[12px] font-semibold text-brand-ink">자세히<ChevronRight size={14} /></span>}
+      </p>
       {children}
     </Card>
   );
