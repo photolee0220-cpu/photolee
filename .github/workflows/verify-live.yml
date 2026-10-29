@@ -106,6 +106,26 @@ jobs:
           dr=$(curl -sS -X POST "$URL/rest/v1/rpc/delete_site" "${H[@]}" -H "Content-Type: application/json" -d "{\"p_site\":\"$TSID\"}")
           left=$(curl -sS "$URL/rest/v1/sites?select=id&id=eq.$TSID" "${H[@]}" | jq 'length')
           [ -n "$TSID" ] && [ "$left" = 0 ] && rec "관리자: 현장 삭제" 1 "점검용 현장 만들고 삭제 $(echo "$dr" | jq -c .)" || rec "관리자: 현장 삭제" 0 "id=$TSID dr=$(echo "$dr" | head -c 120) left=$left"
+          # 0007·0008: 잠금 기준 주차, 수정 기록, 지시 처리, 백업, 알림, 현장 요약, 본부장 권한
+          cw=$(curl -sS -X POST "$URL/rest/v1/rpc/current_week" "${H[@]}" -H "Content-Type: application/json" -d '{}' | jq -r '.')
+          [ -n "$cw" ] && [ "$cw" != null ] && rec "이번 보고일(잠금 기준)" 1 "$cw" || rec "이번 보고일(잠금 기준)" 0 "$cw"
+          for t in entry_history backups push_subscriptions site_summaries push_log; do
+            r=$(curl -sS "$URL/rest/v1/$t?select=*&limit=1" "${H[@]}")
+            echo "$r" | jq -e 'type == "array"' >/dev/null && rec "새 표: $t" 1 "읽기 가능(관리자)" || rec "새 표: $t" 0 "$(echo "$r" | head -c 150)"
+          done
+          r=$(curl -sS "$URL/rest/v1/directives?select=status&limit=1" "${H[@]}")
+          echo "$r" | jq -e 'type == "array"' >/dev/null && rec "지시 처리 상태 칸" 1 "$(echo "$r" | jq -c '.[0] // {}')" || rec "지시 처리 상태 칸" 0 "$(echo "$r" | head -c 150)"
+          r=$(curl -sS "$URL/rest/v1/members?select=is_executive&limit=1" "${H[@]}")
+          echo "$r" | jq -e 'type == "array" and (.[0] | has("is_executive"))' >/dev/null && rec "본부장(전체 열람·코멘트) 권한 칸" 1 "ok" || rec "본부장(전체 열람·코멘트) 권한 칸" 0 "$(echo "$r" | head -c 150)"
+          a=$(curl -sS "$URL/rest/v1/app_secrets?select=key" "${H[@]}")
+          echo "$a" | jq -e 'length == 0' >/dev/null && rec "서버 비밀값은 관리자도 못 읽음" 1 "0건" || rec "서버 비밀값은 관리자도 못 읽음" 0 "$(echo "$a" | head -c 120)"
+          b=$(curl -sS -X POST "$URL/rest/v1/rpc/create_backup" "${H[@]}" -H "Content-Type: application/json" -d '{}')
+          n=$(curl -sS "$URL/rest/v1/backups?select=id,size_bytes&order=created_at.desc&limit=1" "${H[@]}")
+          echo "$n" | jq -e '.[0].size_bytes > 1000' >/dev/null && rec "백업 만들기" 1 "최신 백업 $(echo "$n" | jq '.[0].size_bytes')바이트" || rec "백업 만들기" 0 "$(echo "$b" | head -c 120) / $(echo "$n" | head -c 120)"
+          k=$(curl -sS -X POST "$URL/functions/v1/notify" "${H[@]}" -H "Content-Type: application/json" -d '{"action":"public-key"}')
+          echo "$k" | jq -e '.publicKey | length > 80' >/dev/null && rec "알림 서버: 서명 키" 1 "ok" || rec "알림 서버: 서명 키" 0 "$(echo "$k" | head -c 150)"
+          c=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/notify" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"action":"deadline","secret":"wrong"}')
+          [ "$c" = 403 ] && rec "알림 서버: 예약 작업 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 예약 작업 비밀값 확인" 0 "HTTP $c"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()
