@@ -1,17 +1,20 @@
 import seed from '@seed';
-import { canEditEntry, canViewDept, canViewDirective } from './access';
+import { canEditEntry, canSetDirectiveStatus, canViewDept, canViewDirective, isWeekLocked } from './access';
 import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } from './api';
 import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
-import { askClaudeForSummary } from './summary';
+import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable } from './fileTypes';
-import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type Snapshot, type StageDef, type WeekId } from './types';
+import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
 const KEY = 'sadakdari-report-demo-v1';
 const SESSION = 'sadakdari-report-demo-session';
 const DEMO_PASSWORD = '1234';
+const LOCKED = '지난 주차 보고는 관리자만 수정할 수 있습니다.';
+/** 체험판의 '이번 주' */
+export const demoReportWeek: WeekId = (seed as Seed).reportDate;
 
 interface DemoState extends Seed {
   passwords: Record<string, string>;
@@ -19,6 +22,9 @@ interface DemoState extends Seed {
   attachments: Attachment[];
   stages: StageDef[];
   summaries: Record<WeekId, AiSummary>;
+  history: { entryId: string; content: string; editedBy: string | null; editedAt: string }[];
+  siteSummaries: Record<string, SiteSummary>;
+  backups: { id: number; createdAt: string; kind: 'auto' | 'manual'; data: string }[];
   settings: AppSettings;
 }
 
@@ -30,6 +36,15 @@ function safeSet(k: string, v: string | null): boolean {
 }
 
 /** 기타사항은 없어졌다: 쓴 사람의 부서 업무보고 끝에 '■ 기타사항' 대주제로 옮긴다 (서버 0005와 같은 규칙) */
+/** 예전 체험판 데이터에 새 항목을 채운다 */
+function normalize(st: DemoState): DemoState {
+  st.history ??= [];
+  st.siteSummaries ??= {};
+  st.backups ??= [];
+  st.directives.forEach((d) => { d.status ??= 'open'; d.statusBy ??= null; d.statusAt ??= null; });
+  return foldMisc(st);
+}
+
 function foldMisc(st: DemoState): DemoState {
   for (const misc of st.entries.filter((e) => e.kind === 'misc')) {
     const who = st.members.find((m) => m.id === misc.updatedBy) ?? st.members.find((m) => m.active && m.departmentId === misc.departmentId);
@@ -52,7 +67,7 @@ function foldMisc(st: DemoState): DemoState {
 
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return foldMisc({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
+  return normalize({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, history: [], siteSummaries: {}, backups: [], settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
 }
 
 let state: DemoState = (() => {
@@ -60,7 +75,7 @@ let state: DemoState = (() => {
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as DemoState;
-      if (parsed.reportDate === seed.reportDate) return foldMisc({ ...parsed, photos: parsed.photos ?? [], attachments: parsed.attachments ?? [], stages: parsed.stages ?? structuredClone(DEFAULT_STAGES), summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } });
+      if (parsed.reportDate === seed.reportDate) return normalize({ ...parsed, photos: parsed.photos ?? [], attachments: parsed.attachments ?? [], stages: parsed.stages ?? structuredClone(DEFAULT_STAGES), summaries: parsed.summaries ?? {}, settings: parsed.settings ?? { summaryModel: DEFAULT_SUMMARY_MODEL } });
     } catch { /* 손상된 데이터는 초기화 */ }
   }
   return fresh();
@@ -72,7 +87,7 @@ try {
   channel = new BroadcastChannel(KEY);
   channel.onmessage = () => {
     const raw = safeGet(KEY);
-    if (raw) { state = JSON.parse(raw); state.attachments ??= []; state.stages ??= structuredClone(DEFAULT_STAGES); }
+    if (raw) { state = JSON.parse(raw); state.attachments ??= []; state.stages ??= structuredClone(DEFAULT_STAGES); normalize(state); }
     listeners.forEach((l) => l());
   };
 } catch { channel = null; }
@@ -183,6 +198,7 @@ export const demoApi: Api = {
   async saveEntry(input) {
     const m = me();
     if (!canEditEntry(m, input)) throw new ApiError('이 칸을 수정할 권한이 없습니다.');
+    if (isWeekLocked(m, input.weekId)) throw new ApiError(LOCKED);
     let e = state.entries.find((x) => x.weekId === input.weekId && x.kind === input.kind && (
       input.kind === 'site' ? x.siteId === input.siteId && x.departmentId === input.departmentId
         : input.kind === 'dept' ? x.authorId === input.authorId
@@ -190,6 +206,11 @@ export const demoApi: Api = {
     if (!e) {
       e = { id: newId('e'), ...input, updatedAt: '', updatedBy: null };
       state.entries.push(e);
+    }
+    // 서버 keep_entry_history와 같은 규칙: 같은 사람이 10분 안에 이어 고친 것은 한 번으로
+    if (e.content !== input.content && e.content.trim()
+      && (e.updatedBy !== m.id || Date.now() - Date.parse(e.updatedAt) > 10 * 60 * 1000)) {
+      state.history.push({ entryId: e.id, content: e.content, editedBy: e.updatedBy, editedAt: e.updatedAt });
     }
     e.content = input.content;
     e.updatedAt = new Date().toISOString();
@@ -204,7 +225,7 @@ export const demoApi: Api = {
     let d = state.directives.find((x) => x.weekId === input.weekId && x.targetKind === input.targetKind
       && x.siteId === input.siteId && x.memberId === input.memberId && x.slot === input.slot);
     if (!d) {
-      d = { id: newId('dv'), ...input, updatedAt: '' };
+      d = { id: newId('dv'), ...input, updatedAt: '', status: 'open', statusBy: null, statusAt: null };
       state.directives.push(d);
     }
     d.content = input.content;
@@ -245,6 +266,7 @@ export const demoApi: Api = {
   async uploadPhoto(input) {
     const m = me();
     if (!canEditEntry(m, { kind: 'site', departmentId: input.departmentId, authorId: null })) throw new ApiError('이 현장 칸에 사진을 올릴 권한이 없습니다.');
+    if (isWeekLocked(m, input.weekId)) throw new ApiError(LOCKED);
     const photo: Photo = {
       id: newId('p'), weekId: input.weekId, siteId: input.siteId, departmentId: input.departmentId, uploadedBy: m.id,
       caption: input.caption, createdAt: new Date().toISOString(), width: input.width, height: input.height,
@@ -263,6 +285,7 @@ export const demoApi: Api = {
     const m = me();
     const p = state.photos.find((x) => x.id === id);
     if (!p || (p.uploadedBy !== m.id && !m.isAdmin)) throw new ApiError('올린 사람이나 관리자만 지울 수 있습니다.');
+    if (isWeekLocked(m, p.weekId)) throw new ApiError(LOCKED);
     state.photos = state.photos.filter((x) => x.id !== id);
     persist();
   },
@@ -270,6 +293,7 @@ export const demoApi: Api = {
   async uploadAttachment(input) {
     const m = me();
     if (!canEditEntry(m, input)) throw new ApiError('이 칸에 파일을 올릴 권한이 없습니다.');
+    if (isWeekLocked(m, input.weekId)) throw new ApiError(LOCKED);
     const bad = checkAttachable(input.file);
     if (bad) throw new ApiError(bad);
     if (input.file.size > 2 * 1024 * 1024) throw new ApiError('체험판은 브라우저 저장 공간이 작아 2MB까지만 올릴 수 있습니다. 실제 서버는 20MB까지 됩니다.');
@@ -291,6 +315,7 @@ export const demoApi: Api = {
     const m = me();
     const a = state.attachments.find((x) => x.id === id);
     if (!a || (a.uploadedBy !== m.id && !m.isAdmin)) throw new ApiError('올린 사람이나 관리자만 지울 수 있습니다.');
+    if (isWeekLocked(m, a.weekId)) throw new ApiError(LOCKED);
     state.attachments = state.attachments.filter((x) => x.id !== id);
     persist();
   },
@@ -319,6 +344,52 @@ export const demoApi: Api = {
     state.summaries[weekId] = summary;
     persist();
     return structuredClone(summary);
+  },
+
+  async setDirectiveStatus(id, status) {
+    const m = me();
+    const d = state.directives.find((x) => x.id === id);
+    if (!d) throw new ApiError('지시사항을 찾을 수 없습니다.');
+    const writesSites = !!state.departments.find((x) => x.id === m.departmentId)?.writesSites;
+    if (!canSetDirectiveStatus(m, d, writesSites)) throw new ApiError('이 지시사항의 처리 상태를 바꿀 권한이 없습니다.');
+    d.status = status;
+    d.statusBy = m.id;
+    d.statusAt = new Date().toISOString();
+    persist();
+    return structuredClone(d);
+  },
+
+  async entryHistory(entryId) {
+    const m = me();
+    const e = state.entries.find((x) => x.id === entryId);
+    if (!e || !canViewDept(m, e.departmentId, state.grants)) return [];
+    return delay(state.history.filter((h) => h.entryId === entryId).sort((a, b) => b.editedAt.localeCompare(a.editedAt))
+      .map((h) => ({ content: h.content, editedBy: h.editedBy, editedAt: h.editedAt })));
+  },
+
+  async getSiteSummary(siteId) {
+    const m = me();
+    if (!m.isCeo && !m.isAdmin) return null;
+    return delay(state.siteSummaries[siteId] ?? null);
+  },
+
+  async generateSiteSummary(siteId, months, prompt) {
+    const m = me();
+    if (!m.isCeo && !m.isAdmin) throw new ApiError('현장 기간 요약은 대표님과 관리자만 만들 수 있습니다.');
+    const model = summaryModel(state.settings.summaryModel);
+    const r = parseSiteSummary(await askClaudeJson(prompt, model));
+    const s: SiteSummary = { siteId, months, ...r, model: model.id, generatedAt: new Date().toISOString() };
+    state.siteSummaries[siteId] = s;
+    persist();
+    return structuredClone(s);
+  },
+
+  push: {
+    available: false,
+    async publicKey() { throw new ApiError('체험판에서는 알림을 쓸 수 없습니다.'); },
+    async save() { throw new ApiError('체험판에서는 알림을 쓸 수 없습니다.'); },
+    async remove() { /* 체험판은 저장하지 않음 */ },
+    async test() { throw new ApiError('체험판에서는 알림을 쓸 수 없습니다.'); },
   },
 
   async getSettings() {
@@ -435,6 +506,31 @@ export const demoApi: Api = {
       state.attachments = state.attachments.filter((a) => a.weekId >= before);
       persist();
       return { photos: oldPhotos.length, files: oldFiles.length, bytes };
+    },
+    async listBackups() {
+      requireAdmin();
+      return delay(state.backups.map((b) => ({ id: b.id, createdAt: b.createdAt, kind: b.kind, sizeBytes: b.data.length })).reverse());
+    },
+    async createBackup() {
+      const m = requireAdmin();
+      const { passwords: _pw, backups: _b, ...rest } = state;
+      void _pw; void _b;
+      state.backups.push({ id: Date.now(), createdAt: new Date().toISOString(), kind: 'manual', data: JSON.stringify({ version: 1, created_by: m.id, tables: rest }) });
+      state.backups = state.backups.slice(-12);
+      if (!persist()) { state.backups.pop(); persist(); throw new ApiError('체험판은 브라우저 저장 공간이 작아 백업을 더 만들 수 없습니다.'); }
+    },
+    async downloadBackup(b) {
+      requireAdmin();
+      const found = state.backups.find((x) => x.id === b.id);
+      if (!found) throw new ApiError('백업을 찾을 수 없습니다.');
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([found.data], { type: 'application/json' }));
+      link.download = `sadakdari-backup-${found.createdAt.slice(0, 10)}.json`;
+      link.click();
+    },
+    async pushMembers() {
+      requireAdmin();
+      return [];
     },
     async changeUsername(memberId, username) {
       requireAdmin();

@@ -86,3 +86,8 @@ export function siteWork(snap: Snapshot, memberId: string): Entry[] {
 export function siteStatusOf(snap: Snapshot, siteId: string, deptId: string) {
   return snap.siteStatus.find((x) => x.siteId === siteId && x.departmentId === deptId);
 }
+
+/** 처리 상태를 따지는 지시: 현장·개인 지시 중 내용이 있는 것 (예전 기타 칸 제외) */
+export function activeDirectives(list: Directive[]): Directive[] {
+  return list.filter((d) => (d.targetKind === 'site' || d.targetKind === 'member') && has(d.content));
+}

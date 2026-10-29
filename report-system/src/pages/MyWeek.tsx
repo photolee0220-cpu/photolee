@@ -1,5 +1,6 @@
-import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, MessageSquareText } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, Lock, MessageSquareText } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { isWeekLocked } from '../lib/access';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { AttachmentList, attachmentsFor, FileCount } from '../components/Attachments';
 import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from '../components/editors';
@@ -30,6 +31,7 @@ export function MyWeek() {
   const members = byId(snap.members);
   const mine = personEntry(snap.entries, me.id);
   const siteWriter = dept.writesSites;
+  const locked = isWeekLocked(me, weekId);
   const writtenSites = sites.filter((s) => has(siteEntry(snap.entries, s.id, dept.id)?.content));
   const newFeedback = snap.comments.filter((c) => !c.acknowledgedAt && members.get(c.authorId)?.isCeo
     && snap.entries.some((e) => e.id === c.entryId && (e.kind === 'dept' ? e.authorId === me.id : e.departmentId === dept.id)));
@@ -47,16 +49,21 @@ export function MyWeek() {
         {has(mine?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}
       </div>
       <div className="space-y-3">
-        <DirectiveBox value={memberDirective(snap.directives, me.id)?.content ?? ''} editable={false} onSave={async () => undefined} hideWhenEmpty={siteWriter} />
-        <SectionEditor
-          key={`${weekId}-me`}
-          value={mine?.content ?? ''}
-          prevContent={personEntry(snap.prevEntries, me.id)?.content}
-          placeholder={'1. 진행한 일\n2. 다음 주 예정\n3. 협조가 필요한 일'}
-          meta={mine && has(mine.content) ? `${relativeTime(mine.updatedAt)} 저장` : '입력하면 자동으로 저장됩니다'}
-          onSave={(content) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id, content })}
-        />
-        <AttachmentList target={{ kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id }} editable />
+        <DirectiveBox value={memberDirective(snap.directives, me.id)?.content ?? ''} editable={false} onSave={async () => undefined} hideWhenEmpty={siteWriter}
+          directive={memberDirective(snap.directives, me.id)} />
+        {locked ? (
+          <EntryEditor key={`${weekId}-me`} value={mine?.content ?? ''} editable={false} prevContent={personEntry(snap.prevEntries, me.id)?.content} onSave={async () => undefined} />
+        ) : (
+          <SectionEditor
+            key={`${weekId}-me`}
+            value={mine?.content ?? ''}
+            prevContent={personEntry(snap.prevEntries, me.id)?.content}
+            placeholder={'1. 진행한 일\n2. 다음 주 예정\n3. 협조가 필요한 일'}
+            meta={mine && has(mine.content) ? `${relativeTime(mine.updatedAt)} 저장` : '입력하면 자동으로 저장됩니다'}
+            onSave={(content) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id, content })}
+          />
+        )}
+        <AttachmentList target={{ kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id }} editable={!locked} />
         <Feedback entry={mine} />
       </div>
     </section>
@@ -71,6 +78,12 @@ export function MyWeek() {
         <DeadlineBadge />
         <Badge tone="neutral" className="!py-1">{dept.name}</Badge>
       </PageHeader>
+
+      {locked && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-line-strong bg-sunken px-4 py-3 text-[13.5px] font-semibold text-ink-2">
+          <Lock size={16} className="shrink-0" />지난 주차 보고입니다. 내용은 볼 수만 있고, 고칠 내용이 있으면 관리자에게 요청해 주세요.
+        </div>
+      )}
 
       {newFeedback.length > 0 && (
         <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-[13.5px] font-semibold text-brand-ink">
@@ -149,7 +162,8 @@ export function MyWeek() {
 }
 
 function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; deptId: string; open: boolean; onToggle(): void; first: boolean }) {
-  const { snap, weekId, saveEntry, openDrawer } = useStore();
+  const { snap, me, weekId, saveEntry, openDrawer } = useStore();
+  const locked = isWeekLocked(me, weekId);
   if (!snap) return null;
   const e = siteEntry(snap.entries, site.id, deptId);
   const directive = siteDirective(snap.directives, site.id);
@@ -194,12 +208,12 @@ function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; dep
               현장 전체 보기<ChevronRight size={14} />
             </button>
           </p>
-          {has(directive?.content) && <DirectiveBox value={directive!.content} editable={false} onSave={async () => undefined} />}
+          {has(directive?.content) && <DirectiveBox value={directive!.content} editable={false} onSave={async () => undefined} directive={directive} />}
           <EntryEditor
             key={`${weekId}-${site.id}`}
             compact
             value={e?.content ?? ''}
-            editable
+            editable={!locked}
             prevContent={prev?.content}
             onSave={(content) => saveEntry({ weekId, kind: 'site', siteId: site.id, departmentId: deptId, authorId: null, content })}
           />
@@ -209,8 +223,8 @@ function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; dep
               <TextBlock text={prev!.content} className="mt-1.5 !text-[13px] text-ink-2" />
             </details>
           )}
-          <PhotoStrip siteId={site.id} departmentId={deptId} editable />
-          <AttachmentList target={target} editable />
+          <PhotoStrip siteId={site.id} departmentId={deptId} editable={!locked} />
+          <AttachmentList target={target} editable={!locked} />
           <Feedback entry={e} />
         </div>
       )}

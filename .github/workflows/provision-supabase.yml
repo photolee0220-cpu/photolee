@@ -136,8 +136,10 @@ jobs:
         run: |
           . "$RUNNER_TEMP/note.sh"
           [ -f supabase/config.toml ] || printf 'project_id = "sadakdari-report"\n' > supabase/config.toml
-          for fn in admin-users weekly-summary; do
-            if out=$(supabase functions deploy "$fn" --project-ref "$PROJECT_REF" 2>&1); then note "function:$fn" deployed; else note "function:$fn" "deploy failed: $(echo "$out" | tail -c 400)"; exit 1; fi
+          for fn in admin-users weekly-summary notify; do
+            # notify는 예약 작업(서버)도 부르므로 함수 안에서 로그인·비밀값을 직접 확인한다
+            flags=""; [ "$fn" = notify ] && flags="--no-verify-jwt"
+            if out=$(supabase functions deploy "$fn" --project-ref "$PROJECT_REF" $flags 2>&1); then note "function:$fn" deployed; else note "function:$fn" "deploy failed: $(echo "$out" | tail -c 400)"; exit 1; fi
           done
           if [ -n "$ANTHROPIC_API_KEY" ]; then
             supabase secrets set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" --project-ref "$PROJECT_REF" >/dev/null && note secrets:anthropic set
@@ -154,6 +156,22 @@ jobs:
           [ -n "$anon" ] || { note keys "no public key found"; exit 1; }
           echo "ANON_KEY=$anon" >> "$GITHUB_ENV"
           note keys "public key ready"
+
+      - name: Notification settings
+        run: |
+          . "$RUNNER_TEMP/note.sh"
+          q() { api -X POST "$API/projects/$PROJECT_REF/database/query" -d "$(jq -n --arg q "$1" '{query:$q}')"; }
+          # 예약 알림(pg_cron → notify 함수)이 쓸 주소. 공개 값만 저장한다
+          if res=$(q "insert into public.app_secrets (key, value) values
+                 ('functions_url', 'https://$PROJECT_REF.supabase.co/functions/v1'),
+                 ('anon_key', '$ANON_KEY'),
+                 ('site_url', 'https://photolee0220-cpu.github.io/photolee/')
+               on conflict (key) do update set value = excluded.value"); then note notifications "settings saved"; else note notifications "settings failed: $(echo "$res" | head -c 300)"; fi
+          if res=$(q "select jobname, schedule from cron.job order by jobname"); then
+            note schedule "$(echo "$res" | jq -c 'map(.jobname + " " + .schedule)')"
+          else
+            note schedule "pg_cron unavailable: $(echo "$res" | head -c 200)"
+          fi
 
       - name: Connect website
         run: |

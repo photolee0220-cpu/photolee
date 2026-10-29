@@ -8,6 +8,7 @@ import { api } from '../lib/client';
 import { byId, has, personEntry } from '../lib/derive';
 import { currentWeekId, deadlineText, shiftWeek, weekLabel } from '../lib/week';
 import { useStore, type View } from '../state/store';
+import { NotificationButton } from './Notifications';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
 type NavItem = { id: View; label: string; icon: ReactNode };
@@ -218,6 +219,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <p className="truncate text-[13.5px] font-semibold">{me.name} <span className="font-normal text-ink-3">{me.title}</span></p>
                 <p className="truncate text-[12px] text-ink-3">{me.isCeo ? '대표' : dept?.name ?? (me.isAdmin ? '관리자' : '')}</p>
               </div>
+              <NotificationButton className="h-8 w-8" size={16} />
               <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle} className="h-8 w-8">{isDark ? <Sun size={16} /> : <Moon size={16} />}</IconButton>
               <IconButton label="로그아웃" onClick={() => void signOut()} className="h-8 w-8"><LogOut size={16} /></IconButton>
             </div>
@@ -229,6 +231,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Logo size={32} />
             <p className="flex-1 truncate text-[15.5px] font-bold">{items.find((i) => i.id === view)?.label ?? '관리자 페이지'}</p>
             <IconButton label="검색" onClick={() => setSearchOpen(true)}><Search size={18} /></IconButton>
+            <NotificationButton />
             <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle}>{isDark ? <Sun size={17} /> : <Moon size={17} />}</IconButton>
             {me.isAdmin && <IconButton label="관리자 페이지" onClick={() => setView('admin')}><Settings size={18} /></IconButton>}
             <IconButton label="로그아웃" onClick={() => void signOut()}><LogOut size={17} /></IconButton>

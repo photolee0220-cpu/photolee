@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/client';
-import type { Comment, Directive, Entry, Member, SaveDirectiveInput, SaveEntryInput, Snapshot, WeekId } from '../lib/types';
+import type { Comment, Directive, DirectiveStatus, Entry, Member, SaveDirectiveInput, SaveEntryInput, Snapshot, WeekId } from '../lib/types';
 import { currentWeekId } from '../lib/week';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
 export type View = 'dashboard' | 'table' | 'people' | 'mine' | 'shared' | 'history' | 'admin';
-export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | null;
+export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | { type: 'directives' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
 
 interface Store {
@@ -27,6 +27,7 @@ interface Store {
   toasts: Toast[];
   saveEntry(i: SaveEntryInput): Promise<Entry>;
   saveDirective(i: SaveDirectiveInput): Promise<Directive>;
+  setDirectiveStatus(id: string, status: DirectiveStatus): Promise<void>;
   addComment(entryId: string, content: string): Promise<Comment>;
   acknowledge(id: string): Promise<void>;
   deleteComment(id: string): Promise<void>;
@@ -123,6 +124,10 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
     drawer, openDrawer: setDrawer, searchOpen, setSearchOpen, diffMode, setDiffMode, toast, toasts,
     async saveEntry(i) { const e = await api.saveEntry(i); merge('entries', e); return e; },
     async saveDirective(i) { const d = await api.saveDirective(i); merge('directives', d); return d; },
+    async setDirectiveStatus(id, status) {
+      const d = await api.setDirectiveStatus(id, status);
+      setSnap((s) => s && { ...s, directives: s.directives.map((x) => (x.id === d.id ? d : x)), prevDirectives: s.prevDirectives.map((x) => (x.id === d.id ? d : x)) });
+    },
     async addComment(entryId, content) { const c = await api.addComment(entryId, content); merge('comments', c); return c; },
     async acknowledge(id) {
       await api.acknowledgeComment(id);

@@ -11,8 +11,17 @@ export function parseIsoDate(s: string): Date {
   return new Date(y, m - 1, d);
 }
 
+let fixedWeek: WeekId | null = null;
+
+/** 체험판은 견본 데이터의 주차를 '이번 주'로 고정한다 */
+export function fixCurrentWeek(w: WeekId) {
+  fixedWeek = w;
+}
+
 /** 이번 보고일: 오늘이 월요일이면 오늘, 아니면 다가오는 월요일 */
-export function currentWeekId(now = new Date()): WeekId {
+export function currentWeekId(now?: Date): WeekId {
+  if (fixedWeek && !now) return fixedWeek;
+  now ??= new Date();
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const add = (8 - d.getDay()) % 7;
   d.setDate(d.getDate() + add);

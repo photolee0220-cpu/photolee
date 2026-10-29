@@ -1,5 +1,5 @@
 import type {
-  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId,
+  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary,
 } from './types';
 
 export interface WeekSummary {
@@ -40,6 +40,21 @@ export interface Api {
   getAiSummary(weekId: WeekId): Promise<AiSummary | null>;
   generateAiSummary(weekId: WeekId, prompt: string, sourceUpdatedAt: string): Promise<AiSummary>;
   getSettings(): Promise<AppSettings>;
+  /** 지시사항 처리 상태 (담당자·대표·관리자) */
+  setDirectiveStatus(id: string, status: DirectiveStatus): Promise<Directive>;
+  /** 보고 칸의 예전 내용, 최신순 */
+  entryHistory(entryId: string): Promise<EntryVersion[]>;
+  /** 대표·관리자: 현장 기간 요약 */
+  getSiteSummary(siteId: string): Promise<SiteSummary | null>;
+  generateSiteSummary(siteId: string, months: number, prompt: string): Promise<SiteSummary>;
+  push: {
+    /** 이 브라우저에서 알림을 쓸 수 있는지 (체험판은 불가) */
+    available: boolean;
+    publicKey(): Promise<string>;
+    save(sub: PushSubscriptionJSON): Promise<void>;
+    remove(endpoint: string): Promise<void>;
+    test(): Promise<number>;
+  };
   /** 다른 사람이 바꾼 내용이 생기면 호출된다 */
   subscribe(onChange: () => void): () => void;
 
@@ -62,6 +77,11 @@ export interface Api {
     storageUsage(): Promise<StorageUsage>;
     /** 이 주차보다 오래된 사진·첨부파일을 지운다 (보고 글은 남김) */
     cleanupMedia(beforeWeekId: WeekId): Promise<{ photos: number; files: number; bytes: number }>;
+    listBackups(): Promise<BackupInfo[]>;
+    createBackup(): Promise<void>;
+    downloadBackup(b: BackupInfo): Promise<void>;
+    /** 알림을 켜 둔 사람 */
+    pushMembers(): Promise<string[]>;
   };
 
   /** 데모 전용: 계정 전환 */

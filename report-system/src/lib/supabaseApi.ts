@@ -3,7 +3,7 @@ import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf } from './fileTypes';
-import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, Snapshot, StageDef } from './types';
+import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
 
 const BUCKET = 'site-photos';
 const FILES = 'report-files';
@@ -29,7 +29,10 @@ const toEntry = (r: Row): Entry => ({
 });
 const toDirective = (r: Row): Directive => ({
   id: r.id, weekId: r.week_id, targetKind: r.target_kind, siteId: r.site_id, memberId: r.member_id, slot: r.slot,
-  content: r.content, updatedAt: r.updated_at,
+  content: r.content, updatedAt: r.updated_at, status: r.status ?? 'open', statusBy: r.status_by ?? null, statusAt: r.status_at ?? null,
+});
+const toSiteSummary = (r: Row): SiteSummary => ({
+  siteId: r.site_id, months: r.months, overview: r.overview, milestones: r.milestones ?? [], issues: r.issues ?? [], model: r.model ?? '', generatedAt: r.generated_at,
 });
 const toComment = (r: Row): Comment => ({
   id: r.id, entryId: r.entry_id, authorId: r.author_id, content: r.content, createdAt: r.created_at,
@@ -272,6 +275,55 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       return row;
     },
 
+    async setDirectiveStatus(id, status) {
+      return toDirective(check(await sb.rpc('set_directive_status', { p_directive: id, p_status: status })) as Row);
+    },
+
+    async entryHistory(entryId) {
+      const rows = check(await sb.from('entry_history').select('content, edited_by, edited_at').eq('entry_id', entryId).order('edited_at', { ascending: false }).limit(50)) as Row[];
+      return rows.map((r) => ({ content: r.content, editedBy: r.edited_by, editedAt: r.edited_at }));
+    },
+
+    async getSiteSummary(siteId) {
+      const r = check(await sb.from('site_summaries').select('*').eq('site_id', siteId).maybeSingle());
+      return r ? toSiteSummary(r) : null;
+    },
+
+    async generateSiteSummary(siteId, months, prompt) {
+      const { data, error } = await sb.functions.invoke('weekly-summary', { body: { mode: 'site', siteId, months, prompt } });
+      if (error) {
+        let msg = '요약을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        try { msg = (await (error as any).context.json()).error ?? msg; } catch { /* 기본 메시지 사용 */ }
+        throw new ApiError(msg);
+      }
+      return toSiteSummary(data.summary);
+    },
+
+    push: {
+      available: typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
+      async publicKey() {
+        const { data, error } = await sb.functions.invoke('notify', { body: { action: 'public-key' } });
+        if (error || !data?.publicKey) throw new ApiError('알림 설정을 불러오지 못했습니다.');
+        return data.publicKey as string;
+      },
+      async save(sub) {
+        const keys = sub.keys ?? {};
+        await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint!);
+        const { error } = await sb.from('push_subscriptions').insert({
+          endpoint: sub.endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: navigator.userAgent.slice(0, 200),
+        });
+        if (error) throw new ApiError(error.code === '23505' ? '이 기기는 다른 계정으로 알림이 켜져 있습니다. 그 계정에서 먼저 알림을 꺼주세요.' : error.message);
+      },
+      async remove(endpoint) {
+        await sb.from('push_subscriptions').delete().eq('endpoint', endpoint);
+      },
+      async test() {
+        const { data, error } = await sb.functions.invoke('notify', { body: { action: 'test' } });
+        if (error) throw new ApiError('시험 알림을 보내지 못했습니다.');
+        return Number(data?.sent ?? 0);
+      },
+    },
+
     async getSettings() {
       const r = check(await sb.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle());
       return { summaryModel: (r?.value as string) || DEFAULT_SUMMARY_MODEL };
@@ -388,6 +440,25 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           }
         }
         return { photos: photos.length, files: files.length, bytes };
+      },
+      async listBackups() {
+        const rows = check(await sb.from('backups').select('id, created_at, kind, size_bytes').order('created_at', { ascending: false })) as Row[];
+        return rows.map((r) => ({ id: Number(r.id), createdAt: r.created_at, kind: r.kind, sizeBytes: Number(r.size_bytes) }));
+      },
+      async createBackup() {
+        check(await sb.rpc('create_backup'));
+      },
+      async downloadBackup(b) {
+        const r = check(await sb.from('backups').select('data').eq('id', b.id).single());
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 1)], { type: 'application/json' }));
+        link.download = `sadakdari-backup-${b.createdAt.slice(0, 10)}.json`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+      },
+      async pushMembers() {
+        const rows = check(await sb.from('push_subscriptions').select('member_id')) as Row[];
+        return [...new Set(rows.map((r) => r.member_id as string))];
       },
       async changeUsername(memberId, username) {
         const r = await adminCall({ action: 'set_username', memberId, username: username.trim().toLowerCase() });

@@ -1,9 +1,9 @@
-import { ApiError } from './api';
+import { ApiError, type SiteHistoryItem } from './api';
 import {
   has, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites,
 } from './derive';
 import { lineDiff } from './diff';
-import { isBuildStage, type Snapshot } from './types';
+import { isBuildStage, type Site, type Snapshot } from './types';
 
 export interface SummaryResult {
   highlights: string[];
@@ -108,11 +108,15 @@ type SampleFn = { json(input: string, opts?: Record<string, unknown>): Promise<u
 
 /** 체험판(Claude 아티팩트)에서는 보는 사람의 Claude로 요약한다 */
 export async function askClaudeForSummary(prompt: string, model: { id: string; tier: string }): Promise<SummaryResult> {
+  return parseSummary(await askClaudeJson(prompt, model));
+}
+
+export async function askClaudeJson(prompt: string, model: { id: string; tier: string }): Promise<unknown> {
   const host = (window as unknown as { claude?: { use?(n: string): Promise<unknown> } }).claude;
   const sample = host?.use ? ((await host.use('sample').catch(() => null)) as SampleFn | null) : null;
   if (!sample) throw new ApiError('체험판에서는 Claude 안에서 열었을 때만 AI 요약을 만들 수 있습니다. 실제 서버에서는 대표님 화면에서 바로 됩니다.');
   try {
-    return parseSummary(await sample.json(prompt, { model: model.id, modelTier: model.tier, cache: false }));
+    return await sample.json(prompt, { model: model.id, modelTier: model.tier, cache: false });
   } catch (e) {
     const code = (e as { code?: string })?.code;
     if (code === 'not_granted' || code === 'sampling_disabled') throw new ApiError('Claude 사용이 허용되지 않아 요약을 만들 수 없습니다.');
@@ -120,4 +124,45 @@ export async function askClaudeForSummary(prompt: string, model: { id: string; t
     if (e instanceof ApiError) throw e;
     throw new ApiError('요약을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.');
   }
+}
+
+/* ───────────── 현장 기간 요약 ───────────── */
+
+export interface SiteSummaryResult {
+  overview: string;
+  milestones: { weekId: string; text: string }[];
+  issues: string[];
+}
+
+/** 현장 하나의 여러 주 기록을 시간 순서로 정리해 AI에게 보낼 글로 만든다 */
+export function buildSiteSummaryPrompt(site: Site, items: SiteHistoryItem[], deptName: (id: string) => string, months: number): string {
+  const out: string[] = [
+    `당신은 건설회사 대표에게 현장 하나의 지난 ${months}개월 진행을 보고하는 비서입니다.`,
+    '아래 주간보고 기록만 근거로, 지어내지 말고 정리하세요. 한국어 존댓말 대신 간결한 보고체(~함, ~됨)로 씁니다.',
+    '- overview: 지금 상황과 흐름을 3~5문장으로',
+    '- milestones: 주요 진행 사건을 시간 순서로 최대 8개 (weekId는 아래 기록의 주차 날짜 그대로)',
+    '- issues: 대표가 챙겨야 할 문제·결정·돈 관련 사항 최대 5개 (없으면 빈 배열)',
+    'JSON으로만 답하세요: {"overview": string, "milestones": [{"weekId": string, "text": string}], "issues": [string]}',
+    '',
+    `# 현장: ${site.name}${site.note ? ` (${site.note})` : ''}`,
+    [site.process, site.progress != null ? `공정율 ${site.progress}%` : site.scale, site.dueDate ? `예상일 ${site.dueDate}` : site.dueText].filter(Boolean).join(' | '),
+  ];
+  for (const h of [...items].sort((a, b) => a.weekId.localeCompare(b.weekId))) {
+    out.push('', `## ${h.weekId} 보고`);
+    if (h.directive?.content?.trim()) out.push(`대표 지시: ${h.directive.content.trim().replace(/\n/g, ' / ')}`);
+    for (const e of h.entries) if (e.content.trim()) out.push(`${deptName(e.departmentId)}: ${e.content.trim().replace(/\n/g, ' / ')}`);
+    if (h.photos.length) out.push(`(사진 ${h.photos.length}장)`);
+  }
+  return out.join('\n');
+}
+
+export function parseSiteSummary(value: unknown): SiteSummaryResult {
+  const v = value as Partial<SiteSummaryResult> | null;
+  const overview = typeof v?.overview === 'string' ? v.overview.trim() : '';
+  if (!overview) throw new ApiError('요약 결과를 읽지 못했습니다. 다시 만들어 주세요.');
+  return {
+    overview,
+    milestones: Array.isArray(v?.milestones) ? v!.milestones.filter((x) => x && typeof x === 'object').map((x) => ({ weekId: String(x.weekId), text: String(x.text) })).slice(0, 8) : [],
+    issues: Array.isArray(v?.issues) ? v!.issues.map(String).filter(Boolean).slice(0, 5) : [],
+  };
 }

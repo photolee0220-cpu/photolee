@@ -1,10 +1,11 @@
-import { AlertTriangle, ChevronRight, Download, Landmark, Lock, MessageSquareText, Users } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Download, Landmark, ListChecks, Lock, MessageSquareText, Presentation, Users } from 'lucide-react';
+import { MeetingView } from './Meeting';
 import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { dueInfo, isImminent, SiteCard } from '../components/SiteCard';
 import { Badge, Button, Card, cx, Empty, Progress, Segmented, Select, Spinner } from '../components/ui';
 import { canViewFinance } from '../lib/access';
-import { hasWritten, isCompleted, reporters, visibleSites } from '../lib/derive';
+import { activeDirectives, hasWritten, isCompleted, reporters, visibleSites } from '../lib/derive';
 import { isBuildStage, type Site, type Stage } from '../lib/types';
 import { dday } from '../lib/week';
 import { useStore } from '../state/store';
@@ -17,6 +18,7 @@ type SortKey = 'order' | 'progress' | 'due';
 
 export function Dashboard() {
   const { snap, loading, me, openDrawer, setView } = useStore();
+  const [meeting, setMeeting] = useState(false);
   const [stage, setStage] = useState<Stage | 'all'>('construction');
   const [sort, setSort] = useState<SortKey>('order');
   const [tag, setTag] = useState<string | null>(null);
@@ -34,6 +36,8 @@ export function Dashboard() {
   const avg = withProgress.length ? Math.round(withProgress.reduce((n, s) => n + s.progress!, 0) / withProgress.length) : null;
   const imminent = sites.filter(isImminent);
   const overdue = active.filter((s) => (dday(s.dueDate) ?? 0) < 0);
+  const directives = activeDirectives(snap.directives);
+  const prevOpen = activeDirectives(snap.prevDirectives).filter((d) => d.status !== 'done').length;
   const ceoComments = snap.comments.filter((c) => snap.members.find((m) => m.id === c.authorId)?.isCeo);
   const acked = ceoComments.filter((c) => c.acknowledgedAt);
   const tags = [...new Set(sites.flatMap((s) => s.tags))];
@@ -45,10 +49,12 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-[1400px]">
+      {meeting && <MeetingView onClose={() => setMeeting(false)} />}
       <PageHeader
         title={me.isCeo ? '대표님 대시보드' : '전체 현황'}
         right={<>
           <WeekSwitcher />
+          <Button onClick={() => setMeeting(true)}><Presentation size={16} />회의 화면</Button>
           <Button onClick={() => exportWeek(snap)}><Download size={16} />엑셀 내려받기</Button>
         </>}
       >
@@ -60,7 +66,7 @@ export function Dashboard() {
       {me.isCeo && <SummaryPanel />}
 
       {/* 요약 */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         <Tile label="작성 현황" icon={<Users size={15} />} onClick={() => openDrawer({ type: 'writers' })}>
           <p className="text-[26px] font-extrabold tabular leading-none">{done.length}<span className="text-[15px] font-bold text-ink-3"> / {people.length}명</span></p>
           <Progress value={people.length ? (done.length / people.length) * 100 : 0} className="mt-2.5" />
@@ -86,6 +92,16 @@ export function Dashboard() {
             {overdue.length > 0 && <p className="font-semibold text-danger">예정일 지난 현장 {overdue.length}곳</p>}
             {!imminent.length && !overdue.length && <p className="text-ink-3">임박한 준공이 없습니다</p>}
           </div>
+        </Tile>
+        <Tile label="지시 처리" icon={<ListChecks size={15} />} onClick={() => openDrawer({ type: 'directives' })}>
+          {directives.length ? (
+            <>
+              <p className="text-[26px] font-extrabold tabular leading-none">{directives.filter((d) => d.status === 'done').length}<span className="text-[15px] font-bold text-ink-3"> / {directives.length}건 완료</span></p>
+              <Progress value={(directives.filter((d) => d.status === 'done').length / directives.length) * 100} className="mt-2.5" />
+              <p className="mt-2 text-[12.5px] text-ink-3">진행 중 {directives.filter((d) => d.status === 'doing').length} · 대기 {directives.filter((d) => d.status === 'open').length}
+                {prevOpen > 0 && <b className="ml-1 text-warn">· 지난주 미완료 {prevOpen}</b>}</p>
+            </>
+          ) : <p className="text-[13px] leading-relaxed text-ink-3">이번 주 지시사항이 없습니다.{prevOpen > 0 && <b className="block text-warn">지난주 미완료 {prevOpen}건</b>}</p>}
         </Tile>
         <Tile label="대표님 피드백" icon={<MessageSquareText size={15} />} onClick={() => openDrawer({ type: 'feedback' })}>
           {ceoComments.length ? (

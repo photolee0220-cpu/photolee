@@ -1,13 +1,15 @@
 import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Plus, Send, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { canEditEntry } from '../lib/access';
+import { canEditEntry, canSetDirectiveStatus } from '../lib/access';
+import { api } from '../lib/client';
+import { lineDiff } from '../lib/diff';
 import { byId, commentsFor, has } from '../lib/derive';
-import type { Entry } from '../lib/types';
+import { DIRECTIVE_STATUS, type Directive, type DirectiveStatus, type Entry, type EntryVersion } from '../lib/types';
 import { hasSections, headingText, isHeading, parseSections, serializeSections, type Section } from '../lib/sections';
 import { relativeTime } from '../lib/week';
 import { useStore } from '../state/store';
 import { DiffText } from './DiffText';
-import { Button, cx, Spinner } from './ui';
+import { Button, cx, Modal, Spinner } from './ui';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -270,8 +272,10 @@ function ClampedText({ text }: { text: string }) {
 }
 
 /** 대표님 지시사항 메모 */
-export function DirectiveBox({ value, editable, onSave, label = '대표님 지시사항', hideWhenEmpty, prevContent }: {
+export function DirectiveBox({ value, editable, onSave, label = '대표님 지시사항', hideWhenEmpty, prevContent, directive }: {
   value: string; editable: boolean; onSave(v: string): Promise<unknown>; label?: string; hideWhenEmpty?: boolean; prevContent?: string;
+  /** 있으면 처리 상태(대기·진행 중·완료)를 보여주고 담당자가 바꿀 수 있다 */
+  directive?: Directive;
 }) {
   const a = useAutosave(value, onSave);
   if (!editable && hideWhenEmpty && !has(value)) return null;
@@ -300,7 +304,91 @@ export function DirectiveBox({ value, editable, onSave, label = '대표님 지�
       ) : (
         <ClampedText text={value} />
       )}
+      {directive && has(directive.content) && <DirectiveStatusBar directive={directive} />}
     </div>
+  );
+}
+
+const STATUS_TONE: Record<DirectiveStatus, string> = {
+  open: 'bg-surface text-ink-2 border-line-strong',
+  doing: 'bg-brand-soft text-brand-ink border-brand/40',
+  done: 'bg-ok/10 text-ok border-ok/40',
+};
+
+/** 지시사항 처리 상태. 담당자·대표·관리자는 눌러서 바꾼다 */
+export function DirectiveStatusBar({ directive }: { directive: Directive }) {
+  const { me, snap, setDirectiveStatus, toast } = useStore();
+  const [busy, setBusy] = useState(false);
+  if (!snap) return null;
+  const writesSites = !!snap.departments.find((d) => d.id === me.departmentId)?.writesSites;
+  const can = canSetDirectiveStatus(me, directive, writesSites);
+  const who = directive.statusBy ? snap.members.find((m) => m.id === directive.statusBy)?.name : null;
+  const set = async (s: DirectiveStatus) => {
+    if (s === directive.status || busy) return;
+    setBusy(true);
+    try { await setDirectiveStatus(directive.id, s); } catch (e) { toast(e instanceof Error ? e.message : '바꾸지 못했습니다.', 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-note-line pt-2.5">
+      <span className="mr-0.5 text-[12px] font-semibold text-note-ink">처리</span>
+      {can ? DIRECTIVE_STATUS.map((s) => (
+        <button key={s.id} type="button" disabled={busy} onClick={(e) => { e.stopPropagation(); void set(s.id); }}
+          className={cx('rounded-full border px-2.5 py-0.5 text-[12px] font-semibold transition-colors',
+            directive.status === s.id ? STATUS_TONE[s.id] : 'border-transparent text-ink-3 hover:text-ink')}>
+          {s.id === 'done' && directive.status === 'done' && <Check size={11} className="mr-0.5 inline" />}{s.label}
+        </button>
+      )) : <span className={cx('rounded-full border px-2.5 py-0.5 text-[12px] font-semibold', STATUS_TONE[directive.status])}>{DIRECTIVE_STATUS.find((s) => s.id === directive.status)?.label}</span>}
+      {who && directive.statusAt && <span className="text-[11.5px] text-ink-3">{who} · {relativeTime(directive.statusAt)}</span>}
+    </div>
+  );
+}
+
+/** 보고 칸의 예전 내용 보기 */
+export function EntryHistoryLink({ entry }: { entry: Entry }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-3 hover:text-ink">
+        <History size={12} />수정 기록
+      </button>
+      {open && <EntryHistoryModal entry={entry} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function EntryHistoryModal({ entry, onClose }: { entry: Entry; onClose(): void }) {
+  const { snap } = useStore();
+  const [versions, setVersions] = useState<EntryVersion[] | null>(null);
+  useEffect(() => { api.entryHistory(entry.id).then(setVersions).catch(() => setVersions([])); }, [entry.id]);
+  const name = (id: string | null) => (id ? snap?.members.find((m) => m.id === id)?.name ?? '' : '');
+  const all: (EntryVersion & { current?: boolean })[] = [{ content: entry.content, editedBy: entry.updatedBy, editedAt: entry.updatedAt, current: true }, ...(versions ?? [])];
+
+  return (
+    <Modal open onClose={onClose} title="수정 기록" width={620} footer={<Button onClick={onClose}>닫기</Button>}>
+      {versions == null ? <div className="flex justify-center py-6"><Spinner /></div> : (
+        <div className="space-y-3">
+          {versions.length === 0 && <p className="text-[13px] text-ink-3">이전에 고친 기록이 없습니다. 처음 쓴 내용 그대로입니다.</p>}
+          {all.map((v, i) => {
+            const older = all[i + 1];
+            const d = older ? lineDiff(v.content, older.content) : null;
+            return (
+              <div key={`${v.editedAt}-${i}`} className={cx('rounded-xl border px-3.5 py-3', v.current ? 'border-brand/40 bg-brand-soft/40' : 'border-line bg-surface')}>
+                <p className="mb-1.5 flex flex-wrap items-center gap-2 text-[12.5px]">
+                  <b>{v.current ? '지금 내용' : i === 1 ? '직전 내용' : `${i}번 전 내용`}</b>
+                  <span className="text-ink-3">{name(v.editedBy)} · {v.editedAt ? relativeTime(v.editedAt) : ''}</span>
+                  {d && !d.same && <span className="text-[12px] font-semibold text-brand-ink">바뀐 줄 {d.addedCount}</span>}
+                </p>
+                <div className="text-[13.5px] leading-[1.65]">
+                  {(d ? d.lines : v.content.split('\n').map((t) => ({ text: t, added: false }))).map((l, j) => (
+                    <p key={j} className={cx('whitespace-pre-wrap', l.added && 'rounded bg-brand-soft px-1 -mx-1')}>{l.text || '\u00a0'}</p>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -314,7 +402,8 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
   const list = commentsFor(snap.comments, entry.id);
   const canWrite = me.isCeo || canEditEntry(me, entry);
   const owner = !me.isCeo && (entry.kind === 'dept' ? entry.authorId === me.id : me.departmentId === entry.departmentId);
-  if (!list.length && !canWrite) return null;
+  const history = <div className="flex justify-end"><EntryHistoryLink entry={entry} /></div>;
+  if (!list.length && !canWrite) return <div className="mt-2">{history}</div>;
 
   const send = async () => {
     if (!draft.trim()) return;
@@ -331,6 +420,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
 
   return (
     <div className="mt-3 space-y-2">
+      {history}
       {list.map((c) => {
         const author = members.get(c.authorId);
         const fromCeo = author?.isCeo;

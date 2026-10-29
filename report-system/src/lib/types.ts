@@ -113,6 +113,42 @@ export interface Directive {
   slot: MiscSlot | null;
   content: string;
   updatedAt: string;
+  /** 처리 상태: 대기 · 진행 중 · 완료 */
+  status: DirectiveStatus;
+  statusBy: string | null;
+  statusAt: string | null;
+}
+
+export type DirectiveStatus = 'open' | 'doing' | 'done';
+export const DIRECTIVE_STATUS: { id: DirectiveStatus; label: string }[] = [
+  { id: 'open', label: '대기' },
+  { id: 'doing', label: '진행 중' },
+  { id: 'done', label: '완료' },
+];
+
+/** 보고 칸의 예전 내용 (수정 기록) */
+export interface EntryVersion {
+  content: string;
+  editedBy: string | null;
+  editedAt: string;
+}
+
+export interface BackupInfo {
+  id: number;
+  createdAt: string;
+  kind: 'auto' | 'manual';
+  sizeBytes: number;
+}
+
+/** 현장 여러 달 기록의 AI 요약 */
+export interface SiteSummary {
+  siteId: string;
+  months: number;
+  overview: string;
+  milestones: { weekId: WeekId; text: string }[];
+  issues: string[];
+  model: string;
+  generatedAt: string;
 }
 
 export interface Comment {

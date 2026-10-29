@@ -1,6 +1,7 @@
 import type { Api } from './api';
-import { demoApi } from './demoApi';
+import { demoApi, demoReportWeek } from './demoApi';
 import { createSupabaseApi } from './supabaseApi';
+import { fixCurrentWeek } from './week';
 
 type RuntimeConfig = { supabaseUrl?: string; supabaseAnonKey?: string; loginEmailDomain?: string };
 const runtime = (window as unknown as { __SADAK_CONFIG__?: RuntimeConfig }).__SADAK_CONFIG__ ?? {};
@@ -13,3 +14,5 @@ const domain = runtime.loginEmailDomain || (import.meta.env.VITE_LOGIN_EMAIL_DOM
 export const missingServerConfig = !__FORCE_DEMO__ && import.meta.env.PROD && !(url && key);
 
 export const api: Api = !__FORCE_DEMO__ && url && key ? createSupabaseApi(url, key, domain) : demoApi;
+
+if (api.mode === 'demo') fixCurrentWeek(demoReportWeek);

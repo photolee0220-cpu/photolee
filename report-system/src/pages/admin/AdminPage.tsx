@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, Download, HardDrive, KeyRound, Layers, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
+  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Bell, Building2, CheckCircle2, DatabaseBackup, Download, HardDrive, KeyRound, Layers, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
@@ -10,7 +10,7 @@ import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes } from '../../lib/fileTypes';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { isBuildStage, SITE_TAGS, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
+import { isBuildStage, SITE_TAGS, type BackupInfo, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
 import { currentWeekId, shiftWeek, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
@@ -356,6 +356,8 @@ function MembersAdmin() {
   const [resetting, setResetting] = useState<Member | null>(null);
   const [addAdmin, setAddAdmin] = useState('');
   const [q, setQ] = useState('');
+  const [pushOn, setPushOn] = useState<Set<string>>(() => new Set());
+  useEffect(() => { api.admin.pushMembers().then((ids) => setPushOn(new Set(ids))).catch(() => undefined); }, []);
   if (!snap) return <Spinner />;
   const depts = new Map(snap.departments.map((d) => [d.id, d]));
   const admins = snap.members.filter((m) => m.isAdmin && m.active);
@@ -423,7 +425,8 @@ function MembersAdmin() {
                   <td className="px-3 py-2.5 font-mono text-[12.5px] text-ink-2">{m.username}</td>
                   <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}</td>
                   <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && <span className="text-ink-3">직원</span>}</span></td>
-                  <td className="px-3 py-2.5">{m.active ? (m.mustChangePassword ? <Badge tone="note">첫 로그인 전</Badge> : <Badge tone="ok">사용 중</Badge>) : <Badge>중지</Badge>}</td>
+                  <td className="px-3 py-2.5"><span className="flex items-center gap-1.5">{m.active ? (m.mustChangePassword ? <Badge tone="note">첫 로그인 전</Badge> : <Badge tone="ok">사용 중</Badge>) : <Badge>중지</Badge>}
+                    {pushOn.has(m.id) && <span title="알림 켬" className="text-brand-ink"><Bell size={14} /></span>}</span></td>
                   <td className="px-3 py-2.5">
                     <div className="flex justify-end gap-1">
                       <IconButton label="비밀번호 초기화" onClick={() => setResetting(m)}><KeyRound size={16} /></IconButton>
@@ -669,6 +672,7 @@ function WeeksAdmin() {
           ))}
         </div>
       )}
+      <BackupsCard />
     </div>
   );
 }
@@ -745,6 +749,48 @@ function StorageAdmin() {
         <p className="text-[14px] leading-[1.7]"><b>{weekLabelLong(cutoff)}</b>보다 이전 주차의 현장 사진과 첨부파일을 모두 지웁니다. 보고 글은 남고, 지운 파일은 되살릴 수 없습니다.</p>
       </Modal>
     </div>
+  );
+}
+
+/* ───────────── 백업 ───────────── */
+
+function BackupsCard() {
+  const { toast } = useStore();
+  const { run, busy } = useRun();
+  const [list, setList] = useState<BackupInfo[] | null>(null);
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const load = () => api.admin.listBackups().then(setList).catch(() => setList([]));
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Card className="mt-8 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[16px] font-bold">자동 백업</h2>
+          <p className="mt-1 text-[13px] leading-[1.6] text-ink-3">매주 월요일 오전 8시에 보고 글·지시·피드백·현장·인원 정보를 통째로 백업합니다. 최근 12개를 남기며, 사진·첨부파일은 저장 공간에 그대로 있습니다.
+            서버에 문제가 생길 때를 대비해 <b className="text-ink-2">한 달에 한 번 정도 내려받아 회사 컴퓨터에 보관</b>해 두세요.</p>
+        </div>
+        <Button onClick={async () => { if (await run(() => api.admin.createBackup(), '지금 백업했습니다')) void load(); }} disabled={busy}>
+          {busy ? <Spinner /> : <DatabaseBackup size={15} />}지금 백업
+        </Button>
+      </div>
+      {list == null ? <div className="mt-4"><Spinner /></div> : list.length === 0 ? <p className="mt-4 text-[13px] text-ink-3">아직 백업이 없습니다. 첫 자동 백업은 다음 월요일 오전에 만들어집니다.</p> : (
+        <div className="mt-4 overflow-hidden rounded-xl border border-line">
+          {list.map((b) => (
+            <div key={b.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-0">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold tabular">{new Date(b.createdAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                <p className="text-[12px] text-ink-3">{b.kind === 'auto' ? '자동' : '직접'} · {formatBytes(b.sizeBytes)}</p>
+              </div>
+              <Button size="sm" disabled={downloading === b.id} onClick={async () => {
+                setDownloading(b.id);
+                try { await api.admin.downloadBackup(b); } catch (e) { toast(e instanceof Error ? e.message : '내려받지 못했습니다.', 'error'); } finally { setDownloading(null); }
+              }}>{downloading === b.id ? <Spinner /> : <Download size={14} />}내려받기</Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 

@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { colorFor, initials } from '../lib/derive';
 import type { Stage } from '../lib/types';
@@ -160,7 +161,8 @@ export function Sheet({ open, onClose, title, subtitle, children, width = 640, h
 }) {
   useEscape(onClose);
   if (!open) return null;
-  return (
+  // 흐림 효과가 있는 머리글 안에서 열어도 화면 전체를 덮도록 body에 붙인다
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30 animate-fade-in" onClick={onClose} />
       <section
@@ -179,7 +181,8 @@ export function Sheet({ open, onClose, title, subtitle, children, width = 640, h
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -188,7 +191,8 @@ export function Modal({ open, onClose, title, children, footer, width = 520 }: {
 }) {
   useEscape(onClose);
   if (!open) return null;
-  return (
+  // 흐림 효과가 있는 머리글 안에서 열어도 화면 전체를 덮도록 body에 붙인다
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/30 animate-fade-in" onClick={onClose} />
       <section role="dialog" aria-modal="true" className="relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-surface shadow-pop animate-pop-in sm:rounded-2xl" style={{ maxWidth: width }}>
@@ -199,7 +203,8 @@ export function Modal({ open, onClose, title, children, footer, width = 520 }: {
         <div className="min-h-0 overflow-y-auto px-5 py-4">{children}</div>
         {footer && <footer className="flex justify-end gap-2 border-t border-line px-5 py-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}>{footer}</footer>}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
