@@ -153,7 +153,7 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const prevDirective = memberDirective(snap.prevDirectives, person.id);
   const editable = !isReviewer(me) && !isWeekLocked(me, weekId) && canEditEntry(me, { kind: 'dept', departmentId: person.departmentId ?? '', authorId: person.id });
   const work = dept?.writesSites ? siteWork(snap, person.id) : [];
-  const showPersonal = !dept?.writesSites || has(e?.content) || editable;
+  const showPersonal = !dept?.writesSites || has(e?.content) || editable || commentsFor(snap.comments, e?.id).length > 0;
   const saveMine = (content: string) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: person.departmentId!, authorId: person.id, content });
 
   return (

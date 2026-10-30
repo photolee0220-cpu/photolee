@@ -397,10 +397,12 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
   const { me, snap, addComment, acknowledge, deleteComment, toast } = useStore();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!snap || !entry || !has(entry.content)) return null;
+  if (!snap || !entry) return null;
   const members = byId(snap.members);
   const list = commentsFor(snap.comments, entry.id);
-  const canWrite = isReviewer(me) || canEditEntry(me, entry);
+  // 보고 글을 지운 뒤에도 이미 달린 피드백은 보여서 확인·삭제할 수 있어야 한다. 새로 쓰는 칸만 글이 있을 때
+  if (!has(entry.content) && !list.length) return null;
+  const canWrite = has(entry.content) && (isReviewer(me) || canEditEntry(me, entry));
   const owner = !isReviewer(me) && (entry.kind === 'dept' ? entry.authorId === me.id : me.departmentId === entry.departmentId);
   const history = <div className="flex justify-end"><EntryHistoryLink entry={entry} /></div>;
   if (!list.length && !canWrite) return <div className="mt-2">{history}</div>;
