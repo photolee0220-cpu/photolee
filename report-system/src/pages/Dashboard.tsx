@@ -1,5 +1,4 @@
-import { AlertTriangle, ChevronRight, Download, Landmark, ListChecks, Lock, MessageSquareText, Presentation, Users } from 'lucide-react';
-import { MeetingView } from './Meeting';
+import { AlertTriangle, ChevronRight, Download, Landmark, ListChecks, Lock, MessageSquareText, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { dueInfo, isImminent, SiteCard } from '../components/SiteCard';
@@ -18,7 +17,6 @@ type SortKey = 'order' | 'progress' | 'due';
 
 export function Dashboard() {
   const { snap, loading, me, openDrawer, setView } = useStore();
-  const [meeting, setMeeting] = useState(false);
   const [stage, setStage] = useState<Stage | 'all'>('construction');
   const [sort, setSort] = useState<SortKey>('order');
   const [tag, setTag] = useState<string | null>(null);
@@ -49,12 +47,10 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      {meeting && <MeetingView onClose={() => setMeeting(false)} />}
       <PageHeader
         title={me.isCeo ? '대표님 대시보드' : '전체 현황'}
         right={<>
           <WeekSwitcher />
-          <Button onClick={() => setMeeting(true)}><Presentation size={16} />회의 화면</Button>
           <Button onClick={() => exportWeek(snap)}><Download size={16} />엑셀 내려받기</Button>
         </>}
       >
@@ -143,7 +139,6 @@ export function Dashboard() {
             <option value="progress">공정율 높은순</option>
             <option value="due">준공 임박순</option>
           </Select>
-          <button onClick={() => setView('table')} className="ml-auto text-[13px] font-semibold text-brand-ink hover:underline">엑셀처럼 표로 보기</button>
         </div>
         {tags.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-1.5">

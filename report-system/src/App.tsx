@@ -12,7 +12,6 @@ import { MyReport } from './pages/MyReport';
 import { MyWeek } from './pages/MyWeek';
 import { People } from './pages/People';
 import { Shared } from './pages/Shared';
-import { TableView } from './pages/TableView';
 import { StoreProvider, useStore } from './state/store';
 
 const LOGGED_OUT = 'sadakdari-demo-logged-out';
@@ -55,7 +54,6 @@ function Routes() {
   return (
     <AppShell>
       {view === 'dashboard' && <Dashboard />}
-      {view === 'table' && <TableView />}
       {view === 'people' && <People />}
       {view === 'mine' && <MyWeek />}
       {view === 'shared' && <Shared />}

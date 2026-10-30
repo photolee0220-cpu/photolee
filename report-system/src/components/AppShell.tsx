@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarRange, ChevronLeft, ChevronRight, FileText, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Table2, Users, Eye,
+  BookOpen, CalendarRange, ChevronLeft, ChevronRight, FileText, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -22,7 +22,6 @@ export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boole
   }
   if (canSeeAll(me)) {
     items.push({ id: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={18} /> });
-    items.push({ id: 'table', label: '표 보기', icon: <Table2 size={18} /> });
     items.push({ id: 'people', label: '부서 보고', icon: <Users size={18} /> });
   }
   if (hasShared && !canSeeAll(me)) items.push({ id: 'shared', label: '함께 보는 부서', icon: <Eye size={18} /> });
