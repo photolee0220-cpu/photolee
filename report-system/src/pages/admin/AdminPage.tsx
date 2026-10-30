@@ -453,7 +453,18 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
     departmentId: member?.departmentId ?? '', isAdmin: member?.isAdmin ?? false, isCeo: member?.isCeo ?? false, isExecutive: member?.isExecutive ?? false, active: member?.active ?? true,
   });
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null);
+  const [newDept, setNewDept] = useState<{ name: string; writesSites: boolean } | null>(null);
   if (!snap) return null;
+  const addDept = async () => {
+    const name = newDept?.name.trim();
+    if (!name) return;
+    if (snap.departments.some((d) => d.name === name)) { up('departmentId', snap.departments.find((d) => d.name === name)!.id); setNewDept(null); return; }
+    let saved: Department | null = null;
+    const ok = await run(async () => {
+      saved = await api.admin.saveDepartment({ id: newId('new'), name, sort: Math.max(0, ...snap.departments.map((d) => d.sort)) + 1, writesSites: newDept!.writesSites, active: true });
+    }, `'${name}' 부서를 추가했습니다`);
+    if (ok && saved) { up('departmentId', (saved as Department).id); setNewDept(null); }
+  };
   const up = <K extends keyof typeof m>(k: K, v: (typeof m)[K]) => set((x) => ({ ...x, [k]: v }));
   const isSelf = member?.id === me.id;
   const validUser = /^[a-z0-9._-]{3,30}$/.test(m.username);
@@ -504,6 +515,22 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
               <option value="">부서 없음 (대표, 취합 담당 등)</option>
               {activeDepartments(snap).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Select>
+            {newDept == null ? (
+              <button type="button" onClick={() => setNewDept({ name: '', writesSites: false })} className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-ink hover:underline">
+                <Plus size={13} />부서 추가
+              </button>
+            ) : (
+              <div className="mt-2 space-y-2 rounded-xl border border-line bg-sunken p-3">
+                <div className="flex gap-1.5">
+                  <Input id="new-dept" value={newDept.name} onChange={(e) => setNewDept({ ...newDept, name: e.target.value })} placeholder="새 부서 이름 (예: 품질관리부)" autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addDept(); } if (e.key === 'Escape') { e.stopPropagation(); setNewDept(null); } }} />
+                  <Button size="sm" tone="primary" onClick={addDept} disabled={busy || !newDept.name.trim()}>추가</Button>
+                  <Button size="sm" tone="ghost" onClick={() => setNewDept(null)}>취소</Button>
+                </div>
+                <Toggle checked={newDept.writesSites} onChange={(v) => setNewDept({ ...newDept, writesSites: v })}
+                  label={<>현장별 보고 부서 <span className="text-ink-3">공무·인테리어처럼 현장마다 칸을 쓰는 부서</span></>} />
+              </div>
+            )}
           </Field>
         </div>
         <div className="space-y-3 sm:col-span-2">
