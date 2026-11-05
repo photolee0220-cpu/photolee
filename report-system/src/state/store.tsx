@@ -4,7 +4,7 @@ import type { Comment, Directive, DirectiveStatus, Entry, Member, SaveDirectiveI
 import { currentWeekId } from '../lib/week';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
-export type View = 'dashboard' | 'people' | 'mine' | 'report' | 'shared' | 'history' | 'admin';
+export type View = 'dashboard' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
 export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | { type: 'directives' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
 
@@ -27,7 +27,7 @@ interface Store {
   toasts: Toast[];
   saveEntry(i: SaveEntryInput): Promise<Entry>;
   saveDirective(i: SaveDirectiveInput): Promise<Directive>;
-  setDirectiveStatus(id: string, status: DirectiveStatus): Promise<void>;
+  setDirectiveStatus(id: string, status: DirectiveStatus): Promise<Directive>;
   addComment(entryId: string, content: string): Promise<Comment>;
   acknowledge(id: string): Promise<void>;
   deleteComment(id: string): Promise<void>;
@@ -127,6 +127,7 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
     async setDirectiveStatus(id, status) {
       const d = await api.setDirectiveStatus(id, status);
       setSnap((s) => s && { ...s, directives: s.directives.map((x) => (x.id === d.id ? d : x)), prevDirectives: s.prevDirectives.map((x) => (x.id === d.id ? d : x)) });
+      return d;
     },
     async addComment(entryId, content) { const c = await api.addComment(entryId, content); merge('comments', c); return c; },
     async acknowledge(id) {

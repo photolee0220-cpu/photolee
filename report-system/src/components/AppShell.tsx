@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarRange, ChevronLeft, ChevronRight, FileText, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
+  BookOpen, CalendarRange, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -20,9 +20,11 @@ export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boole
     items.push({ id: 'mine', label: '이번 주 작성', icon: <PenLine size={18} /> });
     items.push({ id: 'report', label: '내 보고', icon: <FileText size={18} /> });
   }
+  if (!canSeeAll(me) && me.departmentId) items.push({ id: 'directives', label: '지시사항', icon: <ListChecks size={18} /> });
   if (canSeeAll(me)) {
     items.push({ id: 'dashboard', label: '대시보드', icon: <LayoutDashboard size={18} /> });
     items.push({ id: 'people', label: '부서 보고', icon: <Users size={18} /> });
+    items.push({ id: 'directives', label: '지시사항', icon: <ListChecks size={18} /> });
   }
   if (hasShared && !canSeeAll(me)) items.push({ id: 'shared', label: '함께 보는 부서', icon: <Eye size={18} /> });
   items.push({ id: 'history', label: '지난 보고', icon: <History size={18} /> });

@@ -8,6 +8,7 @@ import { AdminPage } from './pages/admin/AdminPage';
 import { Dashboard } from './pages/Dashboard';
 import { HistoryPage } from './pages/History';
 import { ChangePassword, Login } from './pages/Login';
+import { DirectivesPage } from './pages/Directives';
 import { MyReport } from './pages/MyReport';
 import { MyWeek } from './pages/MyWeek';
 import { People } from './pages/People';
@@ -58,6 +59,7 @@ function Routes() {
       {view === 'mine' && <MyWeek />}
       {view === 'shared' && <Shared />}
       {view === 'report' && <MyReport />}
+      {view === 'directives' && <DirectivesPage />}
       {view === 'history' && <HistoryPage />}
       <DrawerHost />
     </AppShell>

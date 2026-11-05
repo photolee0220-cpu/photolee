@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Bell, Building2, CheckCircle2, DatabaseBackup, Download, HardDrive, KeyRound, Layers, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
+  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Bell, Building2, CheckCircle2, DatabaseBackup, Download, HardDrive, KeyRound, Layers, ListPlus, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
@@ -9,8 +9,9 @@ import { newId, type SiteHistoryItem, type WeekSummary } from '../../lib/api';
 import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes } from '../../lib/fileTypes';
+import { buildMediaZip, zipFileName } from '../../lib/mediaZip';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { isBuildStage, SITE_TAGS, type BackupInfo, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
+import { isBuildStage, SITE_TAGS, type BackupInfo, type SiteField, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
 import { currentWeekId, shiftWeek, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
@@ -89,6 +90,7 @@ function SitesAdmin() {
   const [filter, setFilter] = useState<Stage | 'archived'>('construction');
   const [editing, setEditing] = useState<Site | null>(null);
   const [managing, setManaging] = useState(false);
+  const [managingFields, setManagingFields] = useState(false);
   const [deleting, setDeleting] = useState<Site | null>(null);
   if (!snap) return <Spinner />;
   const all = [...snap.sites].sort((a, b) => a.sort - b.sort);
@@ -107,7 +109,7 @@ function SitesAdmin() {
 
   const blank = (): Site => ({
     id: newId('new'), name: '', note: '', stage: filter === 'archived' ? 'sales' : filter, dueDate: null, dueText: '미정', process: '',
-    progress: null, scale: '', tags: [], sort: Math.max(0, ...all.map((s) => s.sort)) + 1, archived: false, completedAt: null,
+    progress: null, scale: '', tags: [], sort: Math.max(0, ...all.map((s) => s.sort)) + 1, archived: false, completedAt: null, extra: {},
   });
 
   return (
@@ -118,6 +120,7 @@ function SitesAdmin() {
           <p className="text-[13px] text-ink-3">현장 추가, 단계 이동(영업 → CM → 공사진행), 공정율·준공일 수정, 준공 처리를 합니다. 보관한 현장의 기록은 그대로 남습니다.</p>
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => setManagingFields(true)}><ListPlus size={16} />현장 설명 항목</Button>
           <Button onClick={() => setManaging(true)}><Layers size={16} />단계 관리</Button>
           <Button tone="primary" onClick={() => setEditing(blank())}><Plus size={16} />현장 추가</Button>
         </div>
@@ -164,6 +167,7 @@ function SitesAdmin() {
       )}
       {editing && <SiteForm site={editing} onClose={() => setEditing(null)} />}
       {managing && <StagesModal onClose={() => setManaging(false)} />}
+      {managingFields && <SiteFieldsModal onClose={() => setManagingFields(false)} />}
       {deleting && <DeleteSiteModal site={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
@@ -199,6 +203,64 @@ function DeleteSiteModal({ site, onClose }: { site: Site; onClose(): void }) {
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={site.name} autoFocus />
         </Field>
       </div>
+    </Modal>
+  );
+}
+
+/** 현장 설명 항목(연면적, 도급금액 등) 추가·이름 변경·순서·삭제 */
+function SiteFieldsModal({ onClose }: { onClose(): void }) {
+  const { snap } = useStore();
+  const { run, busy } = useRun();
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [newName, setNewName] = useState('');
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  if (!snap) return null;
+  const fields = snap.siteFields;
+  const used = (id: string) => snap.sites.filter((x) => (x.extra?.[id] ?? '').trim()).length;
+  const nameOf = (f: SiteField) => names[f.id] ?? f.label;
+  const rename = (f: SiteField) => {
+    const label = nameOf(f).trim();
+    if (!label || label === f.label) return;
+    void run(() => api.admin.saveSiteField({ ...f, label }), '항목 이름을 바꿨습니다');
+  };
+  const move = (i: number, d: -1 | 1) => {
+    const a = fields[i];
+    const b = fields[i + d];
+    void run(async () => { await api.admin.saveSiteField({ ...a, sort: b.sort }); await api.admin.saveSiteField({ ...b, sort: a.sort }); });
+  };
+  const add = async () => {
+    const label = newName.trim();
+    if (!label) return;
+    if (await run(() => api.admin.saveSiteField({ id: newId('f'), label, sort: Math.max(0, ...fields.map((x) => x.sort)) + 1 }), `'${label}' 항목을 추가했습니다`)) setNewName('');
+  };
+
+  return (
+    <Modal open onClose={onClose} title="현장 설명 항목" width={520} footer={<Button onClick={onClose}>닫기</Button>}>
+      <p className="mb-3 text-[13px] text-ink-3">연면적, 도급금액, 발주처처럼 현장마다 적어 둘 항목입니다. 값은 현장 추가·수정 창에서 넣고, 모든 직원이 현장 화면에서 봅니다.</p>
+      <div className="overflow-hidden rounded-xl border border-line">
+        {fields.length === 0 && <p className="px-3 py-4 text-center text-[13px] text-ink-3">항목이 없습니다. 아래에서 추가해 주세요.</p>}
+        {fields.map((f, i) => (
+          <div key={f.id} className="flex items-center gap-2 border-b border-line px-3 py-2 last:border-0">
+            <div className="flex flex-col">
+              <button aria-label="위로" disabled={i === 0 || busy} onClick={() => move(i, -1)} className="text-ink-3 hover:text-ink disabled:opacity-25"><ArrowUp size={14} /></button>
+              <button aria-label="아래로" disabled={i === fields.length - 1 || busy} onClick={() => move(i, 1)} className="text-ink-3 hover:text-ink disabled:opacity-25"><ArrowDown size={14} /></button>
+            </div>
+            <Input value={nameOf(f)} onChange={(e) => setNames((n) => ({ ...n, [f.id]: e.target.value }))} onBlur={() => rename(f)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} className="flex-1" aria-label="항목 이름" />
+            <span className="w-16 shrink-0 text-right text-[12.5px] text-ink-3">입력 {used(f.id)}곳</span>
+            {confirmDel === f.id ? (
+              <Button size="sm" tone="danger" onClick={() => { setConfirmDel(null); void run(() => api.admin.deleteSiteField(f.id), `'${f.label}' 항목을 지웠습니다`); }}>지우기</Button>
+            ) : (
+              <IconButton label="항목 삭제" disabled={busy} onClick={() => (used(f.id) ? setConfirmDel(f.id) : run(() => api.admin.deleteSiteField(f.id), `'${f.label}' 항목을 지웠습니다`))}><Trash2 size={15} /></IconButton>
+            )}
+          </div>
+        ))}
+      </div>
+      {confirmDel && <p className="mt-2 text-[12.5px] text-danger">값이 들어 있는 항목입니다. 지우면 현장 화면에서 이 항목이 사라집니다. 한 번 더 '지우기'를 누르세요.</p>}
+      <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+        <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="새 항목 (예: 설계사무소, 착공일)" />
+        <Button tone="primary" type="submit" disabled={!newName.trim() || busy}><Plus size={15} />추가</Button>
+      </form>
     </Modal>
   );
 }
@@ -263,8 +325,15 @@ function SiteForm({ site, onClose }: { site: Site; onClose(): void }) {
   const [s, set] = useState<Site>(site);
   const [customTag, setCustomTag] = useState('');
   const [addingStage, setAddingStage] = useState<string | null>(null);
+  const [addingField, setAddingField] = useState<string | null>(null);
   const { snap } = useStore();
   const isNew = site.id.startsWith('new_');
+  const addField = async () => {
+    const label = (addingField ?? '').trim();
+    if (!label) return;
+    const f: SiteField = { id: newId('f'), label, sort: Math.max(0, ...(snap?.siteFields ?? []).map((x) => x.sort)) + 1 };
+    if (await run(() => api.admin.saveSiteField(f), `'${label}' 항목을 추가했습니다`)) setAddingField(null);
+  };
   const addStage = async () => {
     const name = (addingStage ?? '').trim();
     if (!name) return;
@@ -319,6 +388,26 @@ function SiteForm({ site, onClose }: { site: Site; onClose(): void }) {
           <Input id="site-progress" type="number" min={0} max={100} value={s.progress ?? ''} onChange={(e) => up('progress', e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))))} />
         </Field>
         <Field label="규모·연면적" hint="공정율 대신 보일 내용"><Input id="site-scale" value={s.scale} onChange={(e) => up('scale', e.target.value)} placeholder="예: 약 2,700평, 리모델링" /></Field>
+        <div className="rounded-xl border border-line bg-sunken p-3.5 sm:col-span-2">
+          <p className="mb-2.5 flex items-center justify-between text-[13px] font-bold">현장 설명 <span className="text-[12px] font-normal text-ink-3">현장 화면의 현장명 아래에 보입니다 · 비우면 표시 안 함</span></p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {(snap?.siteFields ?? []).map((f) => (
+              <label key={f.id} className="block text-[12.5px] font-semibold text-ink-2">{f.label}
+                <Input value={s.extra?.[f.id] ?? ''} onChange={(e) => up('extra', { ...(s.extra ?? {}), [f.id]: e.target.value })} className="mt-1" />
+              </label>
+            ))}
+          </div>
+          {addingField == null ? (
+            <button type="button" onClick={() => setAddingField('')} className="mt-2.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-ink hover:underline"><Plus size={13} />항목 추가</button>
+          ) : (
+            <div className="mt-2.5 flex gap-1.5">
+              <Input id="new-site-field" value={addingField} onChange={(e) => setAddingField(e.target.value)} placeholder="예: 설계사무소, 착공일, 층수" autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addField(); } if (e.key === 'Escape') { e.stopPropagation(); setAddingField(null); } }} />
+              <Button size="sm" tone="primary" onClick={addField} disabled={!addingField.trim()}>추가</Button>
+              <Button size="sm" tone="ghost" onClick={() => setAddingField(null)}>취소</Button>
+            </div>
+          )}
+        </div>
         <div className="sm:col-span-2">
           <Field label="이슈 표시" hint="대표님 대시보드 '이슈별 현장'에 묶여서 보입니다">
             <div className="flex flex-wrap gap-1.5">
@@ -711,7 +800,9 @@ function WeeksAdmin() {
 const STORAGE_LIMIT = 1024 * 1024 * 1024;
 
 function StorageAdmin() {
-  const { reload, toast } = useStore();
+  const { snap, reload, toast } = useStore();
+  const [zipping, setZipping] = useState<{ done: number; total: number } | null>(null);
+  const [downloadedFor, setDownloadedFor] = useState<string | null>(null);
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [months, setMonths] = useState('6');
   const [confirm, setConfirm] = useState(false);
@@ -722,6 +813,28 @@ function StorageAdmin() {
   const cutoff = shiftWeek(currentWeekId(), -Math.round((Number(months) * 52) / 12));
   const used = usage ? usage.photoBytes + usage.fileBytes : 0;
   const pct = Math.min(100, (used / STORAGE_LIMIT) * 100);
+
+  // 정리하기 전에 같은 기간의 사진·파일을 '주차 / 부서 / 현장' 폴더로 묶어 받는다
+  const download = async () => {
+    if (!snap) return;
+    setZipping({ done: 0, total: 0 });
+    try {
+      const items = await api.admin.listMedia(null, cutoff);
+      if (!items.length) { toast('이 기간에는 내려받을 사진·파일이 없습니다'); setDownloadedFor(cutoff); return; }
+      const { blob, count, failed } = await buildMediaZip(items, snap, (done, total) => setZipping({ done, total }));
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = zipFileName(null, cutoff);
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+      setDownloadedFor(cutoff);
+      toast(failed ? `${count}개를 받았고 ${failed}개는 받지 못했습니다` : `사진·파일 ${count}개를 ZIP으로 받았습니다 (${formatBytes(blob.size)})`, failed ? 'error' : 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '내려받지 못했습니다.', 'error');
+    } finally {
+      setZipping(null);
+    }
+  };
 
   const cleanup = async () => {
     setBusy(true);
@@ -768,13 +881,30 @@ function StorageAdmin() {
             <option value="24">2년 지난</option>
           </Select>
           <span className="text-[13px] text-ink-2">사진·파일 ({weekLabelLong(cutoff)} 이전)</span>
-          <Button tone="danger" className="ml-auto" onClick={() => setConfirm(true)}><Trash2 size={15} />정리하기</Button>
         </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <Button onClick={download} disabled={!!zipping} className="!h-auto !justify-start py-2.5 text-left">
+            {zipping ? <Spinner /> : <Download size={16} />}
+            <span><b>① 먼저 내려받기 (ZIP)</b><span className="block text-[12px] font-normal text-ink-3">
+              {zipping ? (zipping.total ? `받는 중 ${zipping.done} / ${zipping.total}` : '목록 준비 중…') : downloadedFor === cutoff ? '✓ 이 기간은 내려받았습니다' : '주차 / 부서 / 현장 폴더로 정리'}
+            </span></span>
+          </Button>
+          <Button tone="danger" onClick={() => setConfirm(true)} disabled={!!zipping} className="!h-auto !justify-start py-2.5 text-left">
+            <Trash2 size={16} /><span><b>② 정리하기</b><span className="block text-[12px] font-normal opacity-80">서버에서 지워 공간 확보</span></span>
+          </Button>
+        </div>
+        <p className="mt-2 text-[12px] text-ink-3">사진·파일이 많으면 ZIP이 커집니다. 컴퓨터에서 받으시고, 너무 크면 기간을 짧게 나눠 받으세요.</p>
       </Card>
 
       <Modal open={confirm} onClose={() => !busy && setConfirm(false)} title="오래된 사진·파일 정리"
         footer={<><Button onClick={() => setConfirm(false)} disabled={busy}>취소</Button><Button tone="danger" onClick={cleanup} disabled={busy}>{busy ? <Spinner /> : <Trash2 size={15} />}지우기</Button></>}>
         <p className="text-[14px] leading-[1.7]"><b>{weekLabelLong(cutoff)}</b>보다 이전 주차의 현장 사진과 첨부파일을 모두 지웁니다. 보고 글은 남고, 지운 파일은 되살릴 수 없습니다.</p>
+        {downloadedFor !== cutoff && (
+          <div className="mt-3 rounded-xl border border-note-line bg-note px-3.5 py-3 text-[13.5px]">
+            <b className="text-note-ink">아직 이 기간을 내려받지 않았습니다.</b> 지우기 전에 받아두시길 권합니다.
+            <Button size="sm" className="mt-2" onClick={download} disabled={!!zipping}>{zipping ? <Spinner /> : <Download size={14} />}먼저 내려받기</Button>
+          </div>
+        )}
       </Modal>
     </div>
   );

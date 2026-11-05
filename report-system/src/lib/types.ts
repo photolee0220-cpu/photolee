@@ -10,6 +10,31 @@ export interface StageDef {
   sort: number;
 }
 
+/** 현장 설명 항목 (연면적, 도급금액처럼 관리자가 추가·삭제) */
+export interface SiteField {
+  id: string;
+  label: string;
+  sort: number;
+}
+
+/** 확인 전인 대표·본부장 피드백과 그 보고 칸 (지난 주차 포함) */
+export interface PendingFeedback {
+  comment: Comment;
+  entry: Entry;
+}
+
+/** 내려받기용 사진·첨부파일 목록 */
+export interface MediaItem {
+  kind: 'photo' | 'file';
+  weekId: WeekId;
+  departmentId: string;
+  siteId: string | null;
+  authorId: string | null;
+  fileName: string;
+  sizeBytes: number;
+  url: string;
+}
+
 export const DEFAULT_STAGES: StageDef[] = [
   { id: 'construction', label: '공사진행현장', short: '공사진행', sort: 1 },
   { id: 'cm', label: 'CM진행현장', short: 'CM', sort: 2 },
@@ -72,6 +97,8 @@ export interface Site {
   sort: number;
   archived: boolean;
   completedAt: string | null;
+  /** 관리자가 정한 현장 설명 항목의 값 (항목 id → 값) */
+  extra: Record<string, string>;
 }
 
 export interface Grant {
@@ -258,6 +285,7 @@ export interface Snapshot {
   members: Member[];
   sites: Site[];
   stages: StageDef[];
+  siteFields: SiteField[];
   grants: Grant[];
   entries: Entry[];
   directives: Directive[];

@@ -316,7 +316,7 @@ const STATUS_TONE: Record<DirectiveStatus, string> = {
 };
 
 /** 지시사항 처리 상태. 담당자·대표·관리자는 눌러서 바꾼다 */
-export function DirectiveStatusBar({ directive }: { directive: Directive }) {
+export function DirectiveStatusBar({ directive, onChanged }: { directive: Directive; onChanged?: (d: Directive) => void }) {
   const { me, snap, setDirectiveStatus, toast } = useStore();
   const [busy, setBusy] = useState(false);
   if (!snap) return null;
@@ -326,7 +326,7 @@ export function DirectiveStatusBar({ directive }: { directive: Directive }) {
   const set = async (s: DirectiveStatus) => {
     if (s === directive.status || busy) return;
     setBusy(true);
-    try { await setDirectiveStatus(directive.id, s); } catch (e) { toast(e instanceof Error ? e.message : '바꾸지 못했습니다.', 'error'); } finally { setBusy(false); }
+    try { onChanged?.(await setDirectiveStatus(directive.id, s)); } catch (e) { toast(e instanceof Error ? e.message : '바꾸지 못했습니다.', 'error'); } finally { setBusy(false); }
   };
   return (
     <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-note-line pt-2.5">

@@ -5,7 +5,7 @@ import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable } from './fileTypes';
-import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
+import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -13,6 +13,12 @@ const KEY = 'sadakdari-report-demo-v1';
 const SESSION = 'sadakdari-report-demo-session';
 const DEMO_PASSWORD = '1234';
 const LOCKED = '지난 주차 보고는 관리자만 수정할 수 있습니다.';
+/** 처음 보여줄 현장 설명 항목 (서버 0009와 같음, 관리자가 지우거나 바꿀 수 있다) */
+const DEFAULT_SITE_FIELDS: SiteField[] = [
+  { id: 'contract_amount', label: '도급금액', sort: 1 },
+  { id: 'client', label: '발주처', sort: 2 },
+  { id: 'floor_area', label: '연면적', sort: 3 },
+];
 /** 체험판의 '이번 주' */
 export const demoReportWeek: WeekId = (seed as Seed).reportDate;
 
@@ -21,6 +27,7 @@ interface DemoState extends Seed {
   photos: Photo[];
   attachments: Attachment[];
   stages: StageDef[];
+  siteFields: SiteField[];
   summaries: Record<WeekId, AiSummary>;
   history: { entryId: string; content: string; editedBy: string | null; editedAt: string }[];
   siteSummaries: Record<string, SiteSummary>;
@@ -39,6 +46,8 @@ function safeSet(k: string, v: string | null): boolean {
 /** 예전 체험판 데이터에 새 항목을 채운다 */
 function normalize(st: DemoState): DemoState {
   st.history ??= [];
+  st.siteFields ??= structuredClone(DEFAULT_SITE_FIELDS);
+  st.sites.forEach((s) => { s.extra ??= {}; });
   st.members.forEach((m) => { m.isExecutive ??= false; });
   st.siteSummaries ??= {};
   st.backups ??= [];
@@ -68,7 +77,7 @@ function foldMisc(st: DemoState): DemoState {
 
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return normalize({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, history: [], siteSummaries: {}, backups: [], settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
+  return normalize({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, history: [], siteSummaries: {}, backups: [], siteFields: structuredClone(DEFAULT_SITE_FIELDS), settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
 }
 
 let state: DemoState = (() => {
@@ -159,6 +168,7 @@ export const demoApi: Api = {
       members: state.members,
       sites: state.sites,
       stages: [...state.stages].sort((a, b) => a.sort - b.sort),
+      siteFields: [...state.siteFields].sort((a, b) => a.sort - b.sort),
       grants: state.grants,
       entries: visibleEntries(m, state.entries.filter((e) => e.weekId === weekId)),
       directives: visibleDirectives(m, state.directives.filter((d) => d.weekId === weekId)),
@@ -360,6 +370,25 @@ export const demoApi: Api = {
     return structuredClone(d);
   },
 
+  async directiveHistory() {
+    const m = me();
+    return delay(visibleDirectives(m, state.directives.filter((d) => (d.targetKind === 'site' || d.targetKind === 'member') && d.content.trim()))
+      .sort((a, b) => b.weekId.localeCompare(a.weekId)).map((d) => structuredClone(d)));
+  },
+
+  async pendingFeedback() {
+    const m = me();
+    if (isReviewer(m)) return [];
+    const reviewers = new Set(state.members.filter(isReviewer).map((x) => x.id));
+    const entries = new Map(state.entries.map((e) => [e.id, e]));
+    return delay(state.comments
+      .filter((c) => !c.acknowledgedAt && reviewers.has(c.authorId))
+      .map((c) => ({ comment: c, entry: entries.get(c.entryId)! }))
+      .filter(({ entry }) => entry && (entry.kind === 'dept' ? entry.authorId === m.id : entry.departmentId === m.departmentId))
+      .sort((a, b) => b.comment.createdAt.localeCompare(a.comment.createdAt))
+      .map((x) => structuredClone(x)));
+  },
+
   async entryHistory(entryId) {
     const m = me();
     const e = state.entries.find((x) => x.id === entryId);
@@ -421,6 +450,35 @@ export const demoApi: Api = {
       state.attachments = state.attachments.filter((a) => a.siteId !== id);
       state.sites = state.sites.filter((s) => s.id !== id);
       persist();
+    },
+    async saveSiteField(f) {
+      requireAdmin();
+      if (!f.label.trim()) throw new ApiError('항목 이름을 입력해 주세요.');
+      const next = { ...f, label: f.label.trim() };
+      const i = state.siteFields.findIndex((x) => x.id === f.id);
+      if (i >= 0) state.siteFields[i] = next; else state.siteFields.push(next);
+      persist();
+      return structuredClone(next);
+    },
+    async deleteSiteField(id) {
+      requireAdmin();
+      state.siteFields = state.siteFields.filter((x) => x.id !== id);
+      state.sites.forEach((s) => { delete s.extra[id]; });
+      persist();
+    },
+    async listMedia(from, before) {
+      requireAdmin();
+      const inRange = (w: string) => w < before && (!from || w >= from);
+      return delay([
+        ...state.photos.filter((p) => inRange(p.weekId)).map((p) => ({
+          kind: 'photo' as const, weekId: p.weekId, departmentId: p.departmentId, siteId: p.siteId, authorId: null,
+          fileName: `사진.jpg`, sizeBytes: Math.round((p.url.length * 3) / 4), url: p.url,
+        })),
+        ...state.attachments.filter((a) => inRange(a.weekId)).map((a) => ({
+          kind: 'file' as const, weekId: a.weekId, departmentId: a.departmentId, siteId: a.siteId, authorId: a.authorId,
+          fileName: a.fileName, sizeBytes: a.sizeBytes, url: a.dataUrl ?? '',
+        })),
+      ]);
     },
     async saveStage(st) {
       requireAdmin();

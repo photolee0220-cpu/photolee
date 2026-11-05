@@ -1,5 +1,5 @@
 import type {
-  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary,
+  AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary, SiteField, PendingFeedback, MediaItem,
 } from './types';
 
 export interface WeekSummary {
@@ -42,6 +42,10 @@ export interface Api {
   getSettings(): Promise<AppSettings>;
   /** 지시사항 처리 상태 (담당자·대표·관리자) */
   setDirectiveStatus(id: string, status: DirectiveStatus): Promise<Directive>;
+  /** 지난 주차까지 모든 지시사항 (볼 수 있는 것만), 최신 주차부터 */
+  directiveHistory(): Promise<Directive[]>;
+  /** 확인 전인 대표·본부장 피드백 (지난 주차 포함) */
+  pendingFeedback(): Promise<PendingFeedback[]>;
   /** 보고 칸의 예전 내용, 최신순 */
   entryHistory(entryId: string): Promise<EntryVersion[]>;
   /** 대표·관리자: 현장 기간 요약 */
@@ -62,6 +66,11 @@ export interface Api {
     saveSite(site: Site): Promise<Site>;
     /** 현장과 그 현장의 모든 주차 기록(보고·지시·피드백·사진·첨부)을 영구 삭제 */
     deleteSite(id: string): Promise<void>;
+    saveSiteField(f: SiteField): Promise<SiteField>;
+    /** 항목을 지우면 현장마다 넣은 값도 화면에서 사라진다 */
+    deleteSiteField(id: string): Promise<void>;
+    /** 기간의 사진·첨부파일 목록과 내려받기 주소 (fromWeek 이상, beforeWeek 미만) */
+    listMedia(fromWeek: WeekId | null, beforeWeek: WeekId): Promise<MediaItem[]>;
     saveStage(stage: StageDef): Promise<StageDef>;
     /** 현장이 남아 있는 단계는 지울 수 없다 */
     deleteStage(id: string): Promise<void>;

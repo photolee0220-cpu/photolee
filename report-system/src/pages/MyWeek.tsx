@@ -1,13 +1,14 @@
 import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, FileText, Lock, MessageSquareText } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { isReviewer, isWeekLocked } from '../lib/access';
+import { isWeekLocked } from '../lib/access';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
+import { PendingFeedbackBanner } from '../components/PendingFeedback';
 import { AttachmentList, attachmentsFor, FileCount } from '../components/Attachments';
 import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from '../components/editors';
 import { dueInfo } from '../components/SiteCard';
 import { Badge, Button, cx, Progress, Segmented, Spinner, StageChip } from '../components/ui';
 import {
-  byId, commentsFor, has, isCompleted, memberDirective, personEntry, siteDirective, siteEntry, visibleSites,
+  commentsFor, has, isCompleted, memberDirective, personEntry, siteDirective, siteEntry, visibleSites,
 } from '../lib/derive';
 import { isBuildStage, type Site } from '../lib/types';
 import { relativeTime, weekLabel } from '../lib/week';
@@ -28,13 +29,10 @@ export function MyWeek() {
   const sites = useMemo(() => (snap ? visibleSites(snap) : []), [snap]);
   if (!snap || !dept) return <div className="flex justify-center py-20"><Spinner /></div>;
 
-  const members = byId(snap.members);
   const mine = personEntry(snap.entries, me.id);
   const siteWriter = dept.writesSites;
   const locked = isWeekLocked(me, weekId);
   const writtenSites = sites.filter((s) => has(siteEntry(snap.entries, s.id, dept.id)?.content));
-  const newFeedback = snap.comments.filter((c) => !c.acknowledgedAt && isReviewer(members.get(c.authorId))
-    && snap.entries.some((e) => e.id === c.entryId && (e.kind === 'dept' ? e.authorId === me.id : e.departmentId === dept.id)));
 
   const filtered = sites.filter((s) => {
     if (filter === 'directive') return has(siteDirective(snap.directives, s.id)?.content);
@@ -86,11 +84,7 @@ export function MyWeek() {
         </div>
       )}
 
-      {newFeedback.length > 0 && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-[13.5px] font-semibold text-brand-ink">
-          <MessageSquareText size={18} />피드백 {newFeedback.length}건이 확인을 기다립니다. 해당 칸 아래에서 확인해 주세요.
-        </div>
-      )}
+      <PendingFeedbackBanner />
 
       {!siteWriter && personal}
 

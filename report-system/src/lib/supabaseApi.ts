@@ -19,7 +19,7 @@ const toMember = (r: Row): Member => ({
 const toSite = (r: Row): Site => ({
   id: r.id, name: r.name, note: r.note, stage: r.stage, dueDate: r.due_date, dueText: r.due_text, process: r.process,
   progress: r.progress == null ? null : Number(r.progress), scale: r.scale, tags: r.tags ?? [], sort: r.sort,
-  archived: r.archived, completedAt: r.completed_at,
+  archived: r.archived, completedAt: r.completed_at, extra: r.extra ?? {},
 });
 const toStage = (r: Row): StageDef => ({ id: r.id, label: r.label, short: r.short, sort: r.sort });
 const toGrant = (r: Row): Grant => ({ viewerDepartmentId: r.viewer_department_id, targetDepartmentId: r.target_department_id });
@@ -116,7 +116,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       const prev = await sb.from('weeks').select('id').lt('id', weekId).order('id', { ascending: false }).limit(1);
       const prevWeekId: string | null = prev.data?.[0]?.id ?? null;
       const weekIds = prevWeekId ? [weekId, prevWeekId] : [weekId];
-      const [d, m, s, g, e, dv, ph, at, st, ss] = await Promise.all([
+      const [d, m, s, g, e, dv, ph, at, st, ss, sf] = await Promise.all([
         sb.from('departments').select('*').order('sort'),
         sb.from('members').select('*').order('name'),
         sb.from('sites').select('*').order('sort'),
@@ -127,6 +127,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         sb.from('attachments').select('*').eq('week_id', weekId).order('created_at'),
         sb.from('stages').select('*').order('sort'),
         sb.rpc('site_report_status', { p_week: weekId }),
+        sb.from('site_fields').select('*').order('sort'),
       ]);
       const entries = (check(e) as Row[]).map(toEntry);
       const directives = (check(dv) as Row[]).map(toDirective);
@@ -140,6 +141,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         members: (check(m) as Row[]).map(toMember),
         sites: (check(s) as Row[]).map(toSite),
         stages: (check(st) as Row[]).map(toStage),
+        siteFields: (check(sf) as Row[]).map((r) => ({ id: r.id, label: r.label, sort: r.sort })),
         grants: (check(g) as Row[]).map(toGrant),
         entries: current,
         directives: directives.filter((x) => x.weekId === weekId),
@@ -279,6 +281,24 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       return toDirective(check(await sb.rpc('set_directive_status', { p_directive: id, p_status: status })) as Row);
     },
 
+    async directiveHistory() {
+      const rows = check(await sb.from('directives').select('*').in('target_kind', ['site', 'member']).neq('content', '')
+        .order('week_id', { ascending: false }).limit(2000)) as Row[];
+      return rows.map(toDirective);
+    },
+
+    async pendingFeedback() {
+      const me = await currentMember();
+      if (!me || me.isCeo || me.isExecutive) return [];
+      const reviewers = check(await sb.from('members').select('id').or('is_ceo.eq.true,is_executive.eq.true')) as Row[];
+      if (!reviewers.length) return [];
+      const rows = check(await sb.from('comments').select('*, entry:entries!inner(*)').is('acknowledged_at', null)
+        .in('author_id', reviewers.map((r) => r.id)).order('created_at', { ascending: false }).limit(200)) as Row[];
+      return rows
+        .map((r) => ({ comment: toComment(r), entry: toEntry(r.entry) }))
+        .filter(({ entry }) => (entry.kind === 'dept' ? entry.authorId === me.id : entry.departmentId === me.departmentId));
+    },
+
     async entryHistory(entryId) {
       const rows = check(await sb.from('entry_history').select('content, edited_by, edited_at').eq('entry_id', entryId).order('edited_at', { ascending: false }).limit(50)) as Row[];
       return rows.map((r) => ({ content: r.content, editedBy: r.edited_by, editedAt: r.edited_at }));
@@ -345,7 +365,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         const row = {
           name: site.name, note: site.note, stage: site.stage, due_date: site.dueDate, due_text: site.dueText,
           process: site.process, progress: site.progress, scale: site.scale, tags: site.tags, sort: site.sort,
-          archived: site.archived, completed_at: site.completedAt, updated_at: new Date().toISOString(),
+          archived: site.archived, completed_at: site.completedAt, extra: site.extra ?? {}, updated_at: new Date().toISOString(),
         };
         const isNew = site.id.startsWith('new_');
         const r = isNew
@@ -366,6 +386,35 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           }
         }
         check(await sb.rpc('delete_site', { p_site: id }));
+      },
+      async saveSiteField(f) {
+        const r = await sb.from('site_fields').upsert({ id: f.id, label: f.label.trim(), sort: f.sort }).select().single();
+        if (r.error) throw new ApiError(r.error.message);
+        return { id: r.data.id, label: r.data.label, sort: r.data.sort };
+      },
+      async deleteSiteField(id) {
+        check(await sb.from('site_fields').delete().eq('id', id));
+      },
+      async listMedia(from, before) {
+        let pq = sb.from('photos').select('week_id, site_id, department_id, storage_path, created_at').lt('week_id', before);
+        let aq = sb.from('attachments').select('week_id, site_id, department_id, author_id, storage_path, file_name, size_bytes').lt('week_id', before);
+        if (from) { pq = pq.gte('week_id', from); aq = aq.gte('week_id', from); }
+        const [ph, at] = await Promise.all([pq.order('created_at'), aq.order('created_at')]);
+        const photos = check(ph) as Row[];
+        const files = check(at) as Row[];
+        const sign = async (bucket: string, paths: string[]) => {
+          const out = new Map<string, string>();
+          for (let i = 0; i < paths.length; i += 100) {
+            const r = await sb.storage.from(bucket).createSignedUrls(paths.slice(i, i + 100), 60 * 60);
+            (r.data ?? []).forEach((x) => { if (x.path && x.signedUrl) out.set(x.path, x.signedUrl); });
+          }
+          return out;
+        };
+        const [pu, fu] = await Promise.all([sign(BUCKET, photos.map((r) => r.storage_path)), sign(FILES, files.map((r) => r.storage_path))]);
+        return [
+          ...photos.map((r) => ({ kind: 'photo' as const, weekId: r.week_id, departmentId: r.department_id, siteId: r.site_id, authorId: null, fileName: '사진.jpg', sizeBytes: 0, url: pu.get(r.storage_path) ?? '' })),
+          ...files.map((r) => ({ kind: 'file' as const, weekId: r.week_id, departmentId: r.department_id, siteId: r.site_id, authorId: r.author_id, fileName: r.file_name, sizeBytes: Number(r.size_bytes), url: fu.get(r.storage_path) ?? '' })),
+        ].filter((x) => x.url);
       },
       async saveStage(st) {
         const row = { id: st.id, short: st.short.trim(), label: st.label.trim() || st.short.trim(), sort: st.sort };

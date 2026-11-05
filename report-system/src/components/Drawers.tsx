@@ -70,6 +70,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
       subtitle={<span className="flex flex-wrap items-center gap-1.5"><StageChip stage={site.stage} />{[site.note, site.process].filter(Boolean).join(' · ')}</span>}
     >
       <div className="space-y-4">
+        <SiteInfo site={site} />
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card sm:grid-cols-3">
           <div className="col-span-2 sm:col-span-1">
             <p className="text-[12px] font-semibold text-ink-3">{site.progress != null ? '공정율' : '규모'}</p>
@@ -329,7 +330,7 @@ type DirectiveFilter = 'all' | DirectiveStatus;
 
 /** 대시보드 '지시 처리': 이번 주 지시의 처리 상태와 지난주 미완료 지시 */
 function DirectivesDrawer({ onClose }: { onClose(): void }) {
-  const { snap, weekId, openDrawer } = useStore();
+  const { snap, weekId, openDrawer, setView } = useStore();
   const [filter, setFilter] = useState<DirectiveFilter>('all');
   if (!snap) return null;
   const now = activeDirectives(snap.directives);
@@ -363,6 +364,10 @@ function DirectivesDrawer({ onClose }: { onClose(): void }) {
       ]} />
       {list.length === 0 ? <p className="py-6 text-center text-[13px] text-ink-3">{now.length ? '해당하는 지시가 없습니다' : '이번 주 지시사항이 없습니다'}</p>
         : <div className="space-y-3">{list.map(card)}</div>}
+      <button type="button" onClick={() => { onClose(); setView('directives'); }}
+        className="mt-5 flex w-full items-center justify-center gap-1 rounded-xl border border-line bg-surface py-2.5 text-[13.5px] font-semibold text-brand-ink hover:bg-sunken">
+        지난 지시 전체 보기 (기간·상태별)<ChevronRight size={15} />
+      </button>
       {prevOpen.length > 0 && filter !== 'done' && (
         <section className="mt-6">
           <h3 className="mb-2 flex items-center gap-2 text-[14px] font-bold">지난주 미완료 지시 <Badge tone="warn">{prevOpen.length}건</Badge></h3>
@@ -480,5 +485,22 @@ function SiteTimeline({ site }: { site: Site }) {
         </div>
       )}
     </>
+  );
+}
+
+/** 관리자가 정한 현장 설명 항목 (연면적, 도급금액 등). 값이 있는 것만 */
+function SiteInfo({ site }: { site: Site }) {
+  const { snap } = useStore();
+  const rows = (snap?.siteFields ?? []).map((f) => ({ f, v: (site.extra?.[f.id] ?? '').trim() })).filter((x) => x.v);
+  if (!rows.length) return null;
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5 shadow-card sm:grid-cols-3">
+      {rows.map(({ f, v }) => (
+        <div key={f.id} className="min-w-0">
+          <dt className="text-[12px] font-semibold text-ink-3">{f.label}</dt>
+          <dd className="mt-0.5 whitespace-pre-wrap break-words text-[14px] font-semibold">{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
