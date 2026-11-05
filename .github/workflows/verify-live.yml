@@ -126,6 +126,15 @@ jobs:
           echo "$k" | jq -e '.publicKey | length > 80' >/dev/null && rec "알림 서버: 서명 키" 1 "ok" || rec "알림 서버: 서명 키" 0 "$(echo "$k" | head -c 150)"
           c=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/notify" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"action":"deadline","secret":"wrong"}')
           [ "$c" = 403 ] && rec "알림 서버: 예약 작업 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 예약 작업 비밀값 확인" 0 "HTTP $c"
+          # 0009: 현장 설명 항목, 지난 지시·피드백 조회
+          r=$(curl -sS "$URL/rest/v1/site_fields?select=label&order=sort" "${H[@]}")
+          echo "$r" | jq -e 'type == "array"' >/dev/null && rec "현장 설명 항목" 1 "$(echo "$r" | jq -c 'map(.label)')" || rec "현장 설명 항목" 0 "$(echo "$r" | head -c 150)"
+          r=$(curl -sS "$URL/rest/v1/sites?select=extra&limit=1" "${H[@]}")
+          echo "$r" | jq -e '.[0] | has("extra")' >/dev/null && rec "현장 설명 값 칸" 1 "ok" || rec "현장 설명 값 칸" 0 "$(echo "$r" | head -c 150)"
+          r=$(curl -sS "$URL/rest/v1/directives?select=week_id&target_kind=in.(site,member)&content=neq.&order=week_id.desc&limit=2000" "${H[@]}")
+          echo "$r" | jq -e 'type == "array"' >/dev/null && rec "지시사항 모아보기(전체 주차)" 1 "$(echo "$r" | jq 'length')건 · $(echo "$r" | jq -c '[.[].week_id] | unique')" || rec "지시사항 모아보기(전체 주차)" 0 "$(echo "$r" | head -c 150)"
+          r=$(curl -sS "$URL/rest/v1/comments?select=id,entry:entries!inner(week_id)&acknowledged_at=is.null&limit=5" "${H[@]}")
+          echo "$r" | jq -e 'type == "array"' >/dev/null && rec "확인 전 피드백 조회(주차 무관)" 1 "$(echo "$r" | jq 'length')건(최대 5)" || rec "확인 전 피드백 조회(주차 무관)" 0 "$(echo "$r" | head -c 150)"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()
