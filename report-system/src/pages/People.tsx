@@ -1,4 +1,6 @@
 import { MapPin, MessageSquareText } from 'lucide-react';
+import { stripMarks } from '../lib/marks';
+import { RichLines } from '../components/RichText';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { Avatar, Badge, Card, cx, Empty, Spinner } from '../components/ui';
 import { canViewDept } from '../lib/access';
@@ -29,7 +31,7 @@ export function PeopleGrid({ compact, onlyDepartments }: { compact?: boolean; on
 /** 첫 줄 미리보기. 대주제 줄은 제목만 */
 function previewLine(text: string): string {
   const line = text.split('\n').find((l) => l.trim()) ?? '';
-  return isHeading(line) ? headingText(line) : line.trim();
+  return stripMarks(isHeading(line) ? headingText(line) : line.trim());
 }
 
 const SITE_ROWS = 5;
@@ -87,7 +89,7 @@ function PersonCard({ member, deptName, siteWriter, onOpen }: { member: Member; 
       </div>
       {has(directive?.content) && (
         <p className="mt-3 shrink-0 rounded-lg bg-note px-2.5 py-1.5 text-[12.5px] leading-[1.55]">
-          <span className="line-clamp-2 whitespace-pre-line"><span className="mr-1 font-bold text-note-ink">지시</span>{firstLines(directive!.content, 2)}</span>
+          <span className="line-clamp-2 whitespace-pre-line"><span className="mr-1 font-bold text-note-ink">지시</span><RichLines text={firstLines(directive!.content, 2)} /></span>
         </p>
       )}
       <div className="relative mt-3 min-h-0 flex-1 overflow-hidden">

@@ -3,6 +3,7 @@ import {
   has, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites,
 } from './derive';
 import { lineDiff } from './diff';
+import { stripMarks } from './marks';
 import { isBuildStage, type Site, type Snapshot } from './types';
 
 export interface SummaryResult {
@@ -91,7 +92,8 @@ export function buildSummaryPrompt(snap: Snapshot): { prompt: string; changed: C
     cell('업무', e?.content, personEntry(snap.prevEntries, m.id)?.content);
   }
 
-  return { prompt: out.join('\n'), changed, sourceUpdatedAt: latestUpdate(snap) };
+  // 강조 표시([b] 등)는 AI에게 필요 없어 빼고 보낸다
+  return { prompt: stripMarks(out.join('\n')), changed, sourceUpdatedAt: latestUpdate(snap) };
 }
 
 export function parseSummary(value: unknown): SummaryResult {
@@ -153,7 +155,7 @@ export function buildSiteSummaryPrompt(site: Site, items: SiteHistoryItem[], dep
     for (const e of h.entries) if (e.content.trim()) out.push(`${deptName(e.departmentId)}: ${e.content.trim().replace(/\n/g, ' / ')}`);
     if (h.photos.length) out.push(`(사진 ${h.photos.length}장)`);
   }
-  return out.join('\n');
+  return stripMarks(out.join('\n'));
 }
 
 export function parseSiteSummary(value: unknown): SiteSummaryResult {

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { stripMarks } from '../lib/marks';
+import { renderInline, RichLines } from './RichText';
 import { has } from '../lib/derive';
 import { lineDiff } from '../lib/diff';
 import { hasSections, headingText, isHeading } from '../lib/sections';
@@ -21,7 +23,7 @@ export function DiffText({ text, prev, className, clamp, empty = '작성된 내�
   const comparable = diffMode !== 'off' && !!snap?.prevWeekId;
   if (!comparable && hasSections(text) && !clamp) return <TextBlock text={text} className={className} />;
   if (!comparable) {
-    return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7]', !!clamp && 'overflow-hidden', className)} style={clamp ? { WebkitLineClamp: clamp, display: '-webkit-box', WebkitBoxOrient: 'vertical' } : undefined}>{text}</p>;
+    return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7]', !!clamp && 'overflow-hidden', className)} style={clamp ? { WebkitLineClamp: clamp, display: '-webkit-box', WebkitBoxOrient: 'vertical' } : undefined}><RichLines text={text!} /></p>;
   }
   const d = lineDiff(text!, prev);
   const only = diffMode === 'only' && !d.fresh;
@@ -33,7 +35,7 @@ export function DiffText({ text, prev, className, clamp, empty = '작성된 내�
     if (hidden) { rows.push(<p key={`h${i}`} className="text-[12px] text-ink-3">· 지난주와 같은 내용 {hidden}줄</p>); hidden = 0; }
     rows.push(heading
       ? <SectionHeading key={i} text={headingText(l.text)} className={cx(l.added && !d.fresh && 'rounded bg-brand-soft px-1 -mx-1')} />
-      : <p key={i} className={cx('whitespace-pre-wrap', l.added && !d.fresh && 'rounded bg-brand-soft px-1 -mx-1 text-ink')}>{l.text || '\u00a0'}</p>,
+      : <p key={i} className={cx('whitespace-pre-wrap', l.added && !d.fresh && 'rounded bg-brand-soft px-1 -mx-1 text-ink')}>{l.text ? renderInline(l.text) : '\u00a0'}</p>,
     );
   });
   if (hidden) rows.push(<p key="tail" className="text-[12px] text-ink-3">· 지난주와 같은 내용 {hidden}줄</p>);
@@ -61,7 +63,7 @@ export function DiffText({ text, prev, className, clamp, empty = '작성된 내�
       </div>
       {showRemoved && (
         <div className="mt-2 rounded-md bg-sunken px-2.5 py-1.5 text-[12.5px] text-ink-3">
-          {d.removed.map((r, i) => <p key={i} className="whitespace-pre-wrap line-through decoration-ink-3/50">{r}</p>)}
+          {d.removed.map((r, i) => <p key={i} className="whitespace-pre-wrap line-through decoration-ink-3/50">{stripMarks(r)}</p>)}
         </div>
       )}
     </div>

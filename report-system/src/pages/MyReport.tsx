@@ -1,4 +1,5 @@
 import { CalendarClock, FileText, MapPin, MessageSquareText, Paperclip, Camera } from 'lucide-react';
+import { renderInline, RichLines } from '../components/RichText';
 import { useState } from 'react';
 import { PageHeader, WeekSwitcher } from '../components/AppShell';
 import { attachmentsFor } from '../components/Attachments';
@@ -125,9 +126,9 @@ function ReportText({ text, className }: { text: string; className?: string }) {
     <div className={cx('leading-[1.75] text-ink', className)} style={{ fontSize: 'var(--rf)' }}>
       {text.split('\n').map((line, i) => isHeading(line) ? (
         <p key={i} className="mb-1 mt-4 flex items-center gap-2 font-extrabold first:mt-0" style={{ fontSize: 'calc(var(--rf) * 1.08)' }}>
-          <span className="h-2 w-2 shrink-0 rounded-sm bg-brand" aria-hidden />{headingText(line)}
+          <span className="h-2 w-2 shrink-0 rounded-sm bg-brand" aria-hidden />{renderInline(headingText(line))}
         </p>
-      ) : <p key={i} className="whitespace-pre-wrap">{line || ' '}</p>)}
+      ) : <p key={i} className="whitespace-pre-wrap">{line ? renderInline(line) : '\u00a0'}</p>)}
     </div>
   );
 }
@@ -138,7 +139,7 @@ function DirectiveLine({ d }: { d: Directive | undefined }) {
   return (
     <div className="mt-3 rounded-xl border border-note-line bg-note px-4 py-3">
       <p className="mb-1 flex items-center gap-2 text-[12.5px] font-bold text-note-ink">대표님 지시 <Badge tone={d!.status === 'done' ? 'ok' : d!.status === 'doing' ? 'brand' : 'neutral'}>{status?.label}</Badge></p>
-      <p className="whitespace-pre-wrap leading-[1.65]" style={{ fontSize: 'calc(var(--rf) * 0.92)' }}>{d!.content}</p>
+      <p className="whitespace-pre-wrap leading-[1.65]" style={{ fontSize: 'calc(var(--rf) * 0.92)' }}><RichLines text={d!.content} /></p>
     </div>
   );
 }
@@ -157,7 +158,7 @@ function Comments({ entry }: { entry: Entry }) {
           <p key={c.id} className={cx('rounded-lg px-3 py-2 text-[13.5px] leading-[1.6]', isReviewer(a) ? 'bg-brand-soft' : 'bg-sunken')}>
             <span className="font-bold">{isReviewer(a) && <MessageSquareText size={13} className="mr-1 inline text-brand-ink" />}{a?.isCeo ? '대표님' : `${a?.name ?? ''}${isReviewer(a) && a?.title ? ` ${a.title}` : ''}`}</span>
             <span className="ml-1.5 text-[12px] text-ink-3">{relativeTime(c.createdAt)}{isReviewer(a) && (c.acknowledgedAt ? ' · 확인함' : ' · 확인 전')}</span>
-            <span className="mt-0.5 block whitespace-pre-wrap">{c.content}</span>
+            <span className="mt-0.5 block whitespace-pre-wrap"><RichLines text={c.content} /></span>
           </p>
         );
       })}

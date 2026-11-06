@@ -1,4 +1,6 @@
 import { ChevronDown, ChevronRight, Download, History, Lock, Sparkles } from 'lucide-react';
+import { stripMarks } from '../lib/marks';
+import { RichLines } from './RichText';
 import { useEffect, useState, type ReactNode } from 'react';
 import { canEditEntry, canViewDept, isReviewer, isWeekLocked } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
@@ -210,7 +212,7 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
         {has(prev?.content) && (
           <Block title={`지난주 (${weekLabel(snap.prevWeekId!)})`} right={
             <button onClick={() => setShowPrev((v) => !v)} className="text-[13px] font-semibold text-brand-ink">{showPrev ? '접기' : '펼치기'}</button>}>
-            {showPrev ? <TextBlock text={prev!.content} className="text-ink-2" /> : <p className="line-clamp-2 whitespace-pre-line text-[13px] text-ink-3">{prev!.content}</p>}
+            {showPrev ? <TextBlock text={prev!.content} className="text-ink-2" /> : <p className="line-clamp-2 whitespace-pre-line text-[13px] text-ink-3">{stripMarks(prev!.content)}</p>}
           </Block>
         )}
       </div>
@@ -311,12 +313,12 @@ function FeedbackDrawer({ onClose }: { onClose(): void }) {
                     ? <Badge tone="ok">✓ {members.get(c.acknowledgedBy ?? '')?.name ?? ''} 확인 · {relativeTime(c.acknowledgedAt)}</Badge>
                     : <Badge tone="warn">미확인</Badge>}
                 </div>
-                <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-[1.65]">{c.content}</p>
+                <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-[1.65]"><RichLines text={c.content} /></p>
                 <p className="mt-1 text-[12px] text-ink-3">{members.get(c.authorId)?.isCeo ? '대표님' : `${members.get(c.authorId)?.name ?? ''} ${members.get(c.authorId)?.title ?? ''}`} · {relativeTime(c.createdAt)} 남김</p>
                 {replies.map((r) => (
                   <div key={r.id} className="mt-2 rounded-lg bg-sunken px-3 py-2 text-[13px]">
                     <span className="font-semibold">{members.get(r.authorId)?.name}</span> <span className="text-ink-3">{relativeTime(r.createdAt)}</span>
-                    <p className="mt-0.5 whitespace-pre-wrap leading-[1.6]">{r.content}</p>
+                    <p className="mt-0.5 whitespace-pre-wrap leading-[1.6]"><RichLines text={r.content} /></p>
                   </div>
                 ))}
               </button>
@@ -350,7 +352,7 @@ function DirectivesDrawer({ onClose }: { onClose(): void }) {
           className="mb-1 inline-flex items-center gap-0.5 text-[13px] font-bold text-brand-ink hover:underline">
           {label}<ChevronRight size={14} />
         </button>
-        <p className="line-clamp-4 whitespace-pre-wrap text-[14px] leading-[1.65]">{d.content}</p>
+        <p className="line-clamp-4 whitespace-pre-wrap text-[14px] leading-[1.65]"><RichLines text={d.content} /></p>
         <div className="-mx-1"><DirectiveStatusBar directive={d} /></div>
       </div>
     );
@@ -469,7 +471,7 @@ function SiteTimeline({ site }: { site: Site }) {
                       <p className="text-[13.5px] font-bold">{weekLabel(h.weekId)}</p>
                       {has(h.directive?.content) && (
                         <div className="mt-1.5 rounded-lg bg-note px-3 py-2 text-[13px]">
-                          <p className="whitespace-pre-wrap"><b className="text-note-ink">지시 </b>{h.directive!.content}</p>
+                          <p className="whitespace-pre-wrap"><b className="text-note-ink">지시 </b><RichLines text={h.directive!.content} /></p>
                           {h.directive!.status && <p className="mt-1 text-[12px] font-semibold text-note-ink">처리: {DIRECTIVE_STATUS.find((s) => s.id === h.directive!.status)?.label}</p>}
                         </div>
                       )}

@@ -1,4 +1,5 @@
 import { CalendarClock, MessageSquareText } from 'lucide-react';
+import { RichLines } from './RichText';
 import { commentsFor, firstLines, has, isCompleted, siteDepartments, siteDirective, siteEntry, siteStatusOf } from '../lib/derive';
 import { isBuildStage, type Site, type Snapshot } from '../lib/types';
 import { dday, formatDate } from '../lib/week';
@@ -77,7 +78,7 @@ export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; o
 
       {has(directive?.content) && (
         <p className="mt-3 line-clamp-2 whitespace-pre-line rounded-lg bg-note px-2.5 py-2 text-[12.5px] leading-[1.55] text-ink">
-          <span className="mr-1 font-bold text-note-ink">지시</span>{firstLines(directive!.content, 2)}
+          <span className="mr-1 font-bold text-note-ink">지시</span><RichLines text={firstLines(directive!.content, 2)} />
         </p>
       )}
 

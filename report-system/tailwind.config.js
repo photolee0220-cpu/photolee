@@ -28,6 +28,9 @@ export default {
         warn: v('warn'),
         'warn-soft': v('warn-soft'),
         danger: v('danger'),
+        'em-red': v('em-red'),
+        'em-blue': v('em-blue'),
+        'em-hl': v('em-hl'),
         'danger-soft': v('danger-soft'),
       },
       boxShadow: {

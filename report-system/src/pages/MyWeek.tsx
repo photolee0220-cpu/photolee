@@ -1,4 +1,5 @@
 import { CalendarClock, Check, ChevronDown, ChevronRight, ChevronsDownUp, Download, FileText, Lock, MessageSquareText } from 'lucide-react';
+import { stripMarks } from '../lib/marks';
 import { useMemo, useState } from 'react';
 import { isWeekLocked } from '../lib/access';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
@@ -169,7 +170,7 @@ function SiteWriteRow({ site, deptId, open, onToggle, first }: { site: Site; dep
   const photoCount = snap.photos.filter((p) => p.siteId === site.id && p.departmentId === deptId).length;
   const target = { kind: 'site' as const, siteId: site.id, departmentId: deptId, authorId: null };
   const fileCount = attachmentsFor(snap.attachments, target).length;
-  const preview = written ? e!.content.split('\n').find((l) => l.trim()) : undefined;
+  const preview = written ? stripMarks(e!.content.split('\n').find((l) => l.trim()) ?? '') : undefined;
 
   return (
     <article className={cx(!first && 'border-t border-line', open && 'bg-sunken/40')}>

@@ -1,7 +1,30 @@
 import { canSeeAll, canViewDept } from './access';
 import { byId, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, visibleSites } from './derive';
 import { isBuildStage, type Member, type Snapshot } from './types';
+import { hasMarks, parseLine, type Mark } from './marks';
 import { parseIsoDate } from './week';
+
+const MARK_FONT: Record<Mark, { bold: boolean; color?: { argb: string } }> = {
+  b: { bold: true },
+  red: { bold: true, color: { argb: 'FFC81E1E' } },
+  blue: { bold: true, color: { argb: 'FF1D4ED8' } },
+  // 엑셀 글자에는 형광펜이 없어 굵은 주황 글씨로 대신한다
+  hl: { bold: true, color: { argb: 'FFB45309' } },
+};
+
+/** 강조 표시가 있는 칸을 엑셀 서식 글자(굵게·색)로 바꾼다. 칸의 글꼴·크기는 그대로 둔다 */
+function applyMarks(sheet: import('exceljs').Worksheet) {
+  sheet.eachRow((row) => row.eachCell((cell) => {
+    if (typeof cell.value !== 'string' || !hasMarks(cell.value)) return;
+    const base = { ...(cell.font ?? {}) };
+    const runs: { text: string; font: Record<string, unknown> }[] = [];
+    cell.value.split('\n').forEach((line, i) => {
+      if (i > 0) runs.push({ text: '\n', font: base });
+      for (const r of parseLine(line)) runs.push({ text: r.text, font: Object.assign({}, base, ...r.marks.map((m) => MARK_FONT[m])) });
+    });
+    cell.value = { richText: runs };
+  }));
+}
 
 const fileNote = (n: number) => (n ? `(첨부파일 ${n}개 · 시스템에서 확인)` : '');
 
@@ -124,6 +147,7 @@ export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{
   ws.getCell(r + 1, 1).value = `내려받은 사람: ${members.get(me.id)?.name ?? me.name} · ${new Date().toLocaleString('ko-KR')}`;
   ws.getCell(r + 1, 1).font = { name: '맑은 고딕', size: 8, color: { argb: 'FF888888' } };
 
+  wb.eachSheet((sheet) => applyMarks(sheet));
   const buf = await wb.xlsx.writeBuffer();
   const scope = canSeeAll(me) ? '전체' : snap.departments.find((x) => x.id === me.departmentId)?.name.replace(/[\\/]/g, '·') ?? '';
   return {

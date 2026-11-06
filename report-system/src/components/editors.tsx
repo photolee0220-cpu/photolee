@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Plus, Send, Trash2 } from 'lucide-react';
+import { MarkPreview, MarkToolbar, renderInline, RichLines } from './RichText';
 import { useEffect, useRef, useState } from 'react';
 import { canEditEntry, canSetDirectiveStatus, isReviewer } from '../lib/access';
 import { api } from '../lib/client';
@@ -80,19 +81,19 @@ export function SectionHeading({ text, className }: { text: string; className?: 
   if (!text) return null;
   return (
     <p className={cx('mt-3 flex items-center gap-2 text-[14.5px] font-bold text-ink first:mt-0', className)}>
-      <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-brand" aria-hidden />{text}
+      <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-brand" aria-hidden />{renderInline(text)}
     </p>
   );
 }
 
 export function TextBlock({ text, empty = '작성된 내용이 없습니다', className }: { text: string | undefined; empty?: string; className?: string }) {
   if (!has(text)) return <p className={cx('text-[13px] text-ink-3', className)}>{empty}</p>;
-  if (!hasSections(text)) return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7] text-ink', className)}>{text}</p>;
+  if (!hasSections(text)) return <p className={cx('whitespace-pre-wrap text-[14px] leading-[1.7] text-ink', className)}><RichLines text={text!} /></p>;
   return (
     <div className={cx('text-[14px] leading-[1.7] text-ink', className)}>
       {text!.split('\n').map((line, i) => isHeading(line)
         ? <SectionHeading key={i} text={headingText(line)} />
-        : <p key={i} className="whitespace-pre-wrap">{line || '\u00a0'}</p>)}
+        : <p key={i} className="whitespace-pre-wrap">{line ? renderInline(line) : '\u00a0'}</p>)}
     </div>
   );
 }
@@ -108,6 +109,7 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
   compact?: boolean;
 }) {
   const a = useAutosave(value, onSave);
+  const ref = useRef<HTMLTextAreaElement>(null);
   if (!editable) {
     return (
       <div>
@@ -118,7 +120,9 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
   }
   return (
     <div>
+      <MarkToolbar target={ref} value={a.text} onChange={a.change} className="mb-1" />
       <textarea
+        ref={ref}
         value={a.text}
         onChange={(e) => a.change(e.target.value)}
         onFocus={a.focus}
@@ -130,6 +134,7 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
           compact ? 'min-h-[88px]' : 'min-h-[120px]',
         )}
       />
+      <MarkPreview text={a.text} />
       <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center justify-between gap-2 text-[12px]">
         <div className="text-ink-3">{meta}</div>
         <div className="flex items-center gap-3">
@@ -162,6 +167,7 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
   const [confirmDel, setConfirmDel] = useState<number | null>(null);
   const [forced, setForced] = useState(false);
   const written = useRef(a.text);
+  const bodies = useRef(new Map<number, HTMLTextAreaElement>());
 
   useEffect(() => {
     if (a.text !== written.current) {
@@ -211,6 +217,7 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
                   placeholder={i === 0 ? '대제목 (선택)' : '대제목 (예: 공공입찰)'}
                   className={cx(field, 'flex-1 text-[15px] font-bold text-ink')}
                 />
+                <MarkToolbar target={{ current: bodies.current.get(b.key) ?? null }} value={b.body} onChange={(body) => patch(i, { body })} className="shrink-0 border-r border-line pr-1" />
                 <div className="flex shrink-0 items-center text-ink-3">
                   <button type="button" aria-label="위로" disabled={i === 0} onClick={() => move(i, -1)} className="rounded p-1 hover:bg-sunken hover:text-ink disabled:opacity-25"><ArrowUp size={14} /></button>
                   <button type="button" aria-label="아래로" disabled={i === blocks.length - 1} onClick={() => move(i, 1)} className="rounded p-1 hover:bg-sunken hover:text-ink disabled:opacity-25"><ArrowDown size={14} /></button>
@@ -222,7 +229,9 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
                 </div>
               </div>
             )}
+            {!sectioned && <MarkToolbar target={{ current: bodies.current.get(b.key) ?? null }} value={b.body} onChange={(body) => patch(i, { body })} className="mb-1" />}
             <textarea
+              ref={(el) => { if (el) bodies.current.set(b.key, el); else bodies.current.delete(b.key); }}
               id={`section-body-${b.key}`}
               value={b.body}
               onChange={(e) => patch(i, { body: e.target.value })}
@@ -235,6 +244,7 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
                 sectioned ? 'min-h-[72px] py-2' : 'min-h-[120px] rounded-xl border border-line bg-surface px-3.5 py-3 transition-colors hover:border-line-strong focus:border-brand focus:ring-4 focus:ring-brand/10',
               )}
             />
+            <MarkPreview text={b.body} className={sectioned ? 'mb-2' : ''} />
           </div>
         ))}
       </div>
@@ -278,16 +288,18 @@ export function DirectiveBox({ value, editable, onSave, label = '대표님 지�
   directive?: Directive;
 }) {
   const a = useAutosave(value, onSave);
+  const ref = useRef<HTMLTextAreaElement>(null);
   if (!editable && hideWhenEmpty && !has(value)) return null;
   return (
     <div className="rounded-xl border border-note-line bg-note px-3.5 py-3">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-[12px] font-bold tracking-wide text-note-ink">{label}</span>
-        {editable && <span className="text-[12px]"><SaveIndicator state={a.state} savedAt={a.savedAt} /></span>}
+        {editable && <span className="flex items-center gap-2 text-[12px]"><MarkToolbar target={ref} value={a.text} onChange={a.change} /><SaveIndicator state={a.state} savedAt={a.savedAt} /></span>}
       </div>
       {editable ? (
         <>
           <textarea
+            ref={ref}
             value={a.text}
             onChange={(e) => a.change(e.target.value)}
             onFocus={a.focus}
@@ -295,6 +307,7 @@ export function DirectiveBox({ value, editable, onSave, label = '대표님 지�
             placeholder="지시사항을 입력하면 담당자에게 바로 보입니다"
             className="block min-h-[64px] w-full resize-y rounded-md bg-transparent text-[14px] leading-[1.65] text-ink placeholder:text-note-ink/60 focus:outline-none"
           />
+          <MarkPreview text={a.text} className="bg-surface/60" />
           {has(prevContent) && !has(a.text) && (
             <button type="button" onClick={() => a.replace(prevContent!)} className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-note-ink hover:underline">
               <History size={13} />지난주 지시 불러오기
@@ -380,7 +393,7 @@ function EntryHistoryModal({ entry, onClose }: { entry: Entry; onClose(): void }
                 </p>
                 <div className="text-[13.5px] leading-[1.65]">
                   {(d ? d.lines : v.content.split('\n').map((t) => ({ text: t, added: false }))).map((l, j) => (
-                    <p key={j} className={cx('whitespace-pre-wrap', l.added && 'rounded bg-brand-soft px-1 -mx-1')}>{l.text || '\u00a0'}</p>
+                    <p key={j} className={cx('whitespace-pre-wrap', l.added && 'rounded bg-brand-soft px-1 -mx-1')}>{l.text ? renderInline(l.text) : '\u00a0'}</p>
                   ))}
                 </div>
               </div>
@@ -397,6 +410,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
   const { me, snap, addComment, acknowledge, deleteComment, toast } = useStore();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const box = useRef<HTMLTextAreaElement>(null);
   if (!snap || !entry) return null;
   const members = byId(snap.members);
   const list = commentsFor(snap.comments, entry.id);
@@ -438,7 +452,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
                   <button onClick={() => deleteComment(c.id).catch(() => toast('지우지 못했습니다.', 'error'))} className="ml-auto text-ink-3 hover:text-danger" aria-label="삭제"><Trash2 size={13} /></button>
                 )}
               </div>
-              <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.6]">{c.content}</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.6]"><RichLines text={c.content} /></p>
               {fromCeo && (
                 c.acknowledgedAt ? (
                   <p className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-ok"><Check size={13} />{members.get(c.acknowledgedBy ?? '')?.name ?? ''} 확인 · {relativeTime(c.acknowledgedAt)}</p>
@@ -455,8 +469,10 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
         );
       })}
       {canWrite && (
+        <>
         <div className="flex items-end gap-2">
           <textarea
+            ref={box}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send(); }}
@@ -468,6 +484,8 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
             <Send size={15} />
           </Button>
         </div>
+        {draft.trim() && <><MarkToolbar target={box} value={draft} onChange={setDraft} /><MarkPreview text={draft} className="!mt-0" /></>}
+        </>
       )}
     </div>
   );

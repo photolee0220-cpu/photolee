@@ -1,4 +1,5 @@
 import { ChevronRight, Search } from 'lucide-react';
+import { RichLines } from '../components/RichText';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../components/AppShell';
 import { DirectiveStatusBar } from '../components/editors';
@@ -91,7 +92,7 @@ export function DirectivesPage() {
                         </button>
                         {site ? <StageChip stage={site.stage} /> : <span className="text-[12px] font-semibold text-note-ink">개인 지시</span>}
                       </div>
-                      <p className="whitespace-pre-wrap text-[14px] leading-[1.65]">{d.content}</p>
+                      <p className="whitespace-pre-wrap text-[14px] leading-[1.65]"><RichLines text={d.content} /></p>
                       <DirectiveStatusBar directive={d} onChanged={replace} />
                     </article>
                   );

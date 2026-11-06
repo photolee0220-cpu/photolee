@@ -1,4 +1,5 @@
 import { Check, ChevronRight, MessageSquareText, Send } from 'lucide-react';
+import { RichLines } from './RichText';
 import { useCallback, useEffect, useState } from 'react';
 import { isReviewer } from '../lib/access';
 import { api } from '../lib/client';
@@ -82,7 +83,7 @@ function PendingFeedbackSheet({ list, onChange, onClose }: { list: PendingFeedba
                     {where(x)}<ChevronRight size={14} />
                   </button>
                 </div>
-                <p className="whitespace-pre-wrap text-[14.5px] leading-[1.65]">{x.comment.content}</p>
+                <p className="whitespace-pre-wrap text-[14.5px] leading-[1.65]"><RichLines text={x.comment.content} /></p>
                 <p className="mt-1 text-[12px] text-ink-3">{a?.isCeo ? '대표님' : `${a?.name ?? ''} ${a?.title ?? ''}`} · {relativeTime(x.comment.createdAt)}</p>
                 <div className="mt-3 flex items-end gap-2">
                   <textarea value={drafts[x.comment.id] ?? ''} onChange={(e) => setDrafts((d) => ({ ...d, [x.comment.id]: e.target.value }))} rows={1}

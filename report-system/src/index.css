@@ -26,6 +26,9 @@
   --warn-soft: 253 243 222;
   --danger: 200 48 48;
   --danger-soft: 252 233 233;
+  --em-red: 200 30 30;
+  --em-blue: 29 78 216;
+  --em-hl: 254 230 138;
   --shadow: 23 30 40;
   color-scheme: light;
 }
@@ -52,6 +55,9 @@
     --warn-soft: 54 40 16;
     --danger: 240 112 112;
     --danger-soft: 58 25 25;
+    --em-red: 248 113 113;
+    --em-blue: 125 170 255;
+    --em-hl: 120 95 20;
     --shadow: 0 0 0;
     color-scheme: dark;
   }
@@ -78,6 +84,9 @@
   --warn-soft: 54 40 16;
   --danger: 240 112 112;
   --danger-soft: 58 25 25;
+  --em-red: 248 113 113;
+  --em-blue: 125 170 255;
+  --em-hl: 120 95 20;
   --shadow: 0 0 0;
   color-scheme: dark;
 }
