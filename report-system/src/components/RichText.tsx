@@ -1,6 +1,6 @@
 import { Bold, Highlighter } from 'lucide-react';
-import { Fragment, type ReactNode, type RefObject } from 'react';
-import { hasMarks, parseLine, toggleMark, type Mark } from '../lib/marks';
+import { Fragment, type ReactNode } from 'react';
+import { hasMarks, parseLine, type Mark } from '../lib/marks';
 import { cx } from './ui';
 
 const STYLE: Record<Mark, string> = {
@@ -30,32 +30,14 @@ const BUTTONS: { mark: Mark; label: string; icon: ReactNode }[] = [
   { mark: 'hl', label: '형광펜 (결정 필요)', icon: <Highlighter size={14} /> },
 ];
 
-/** 강조 버튼 줄. 글자를 선택하고 누르면 감싸고, 다시 누르면 푼다 */
-export function MarkToolbar({ target, value, onChange, className }: {
-  target: RefObject<HTMLTextAreaElement | null>;
-  value: string;
-  onChange(next: string): void;
-  className?: string;
-}) {
-  const apply = (mark: Mark) => {
-    const el = target.current;
-    const start = el?.selectionStart ?? value.length;
-    const end = el?.selectionEnd ?? value.length;
-    const r = toggleMark(value, start, end, mark);
-    onChange(r.text);
-    requestAnimationFrame(() => {
-      const t = target.current;
-      if (!t) return;
-      t.focus();
-      t.setSelectionRange(r.start, r.end);
-    });
-  };
+/** 강조 버튼 줄. 글자를 선택하고 누르면 강조, 다시 누르면 풀린다 */
+export function MarkToolbar({ onApply, className }: { onApply(mark: Mark): void; className?: string }) {
   return (
     <div className={cx('flex items-center gap-0.5', className)} role="toolbar" aria-label="글자 강조">
       {BUTTONS.map((b) => (
         <button key={b.mark} type="button" title={b.label} aria-label={b.label}
           // 버튼을 눌러도 입력 칸의 선택이 풀리지 않게
-          onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(b.mark)}
+          onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => onApply(b.mark)}
           className="flex h-7 w-7 items-center justify-center rounded-md text-ink-2 hover:bg-sunken hover:text-ink">
           {b.icon}
         </button>

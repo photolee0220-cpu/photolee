@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Plus, Send, Trash2 } from 'lucide-react';
-import { MarkPreview, MarkToolbar, renderInline, RichLines } from './RichText';
+import { RichEditor, type RichEditorHandle } from './RichEditor';
+import { MarkToolbar, renderInline, RichLines } from './RichText';
 import { useEffect, useRef, useState } from 'react';
 import { canEditEntry, canSetDirectiveStatus, isReviewer } from '../lib/access';
 import { api } from '../lib/client';
@@ -109,7 +110,7 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
   compact?: boolean;
 }) {
   const a = useAutosave(value, onSave);
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<RichEditorHandle>(null);
   if (!editable) {
     return (
       <div>
@@ -120,21 +121,20 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
   }
   return (
     <div>
-      <MarkToolbar target={ref} value={a.text} onChange={a.change} className="mb-1" />
-      <textarea
+      <MarkToolbar onApply={(m) => ref.current?.applyMark(m)} className="mb-1" />
+      <RichEditor
         ref={ref}
         value={a.text}
-        onChange={(e) => a.change(e.target.value)}
+        onChange={a.change}
         onFocus={a.focus}
         onBlur={a.blur}
         placeholder={placeholder ?? '이번 주 진행 내용을 적어주세요'}
         className={cx(
-          'block w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-3 text-[14.5px] leading-[1.75] text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong',
-          'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10',
+          'block w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-[14.5px] leading-[1.75] text-ink transition-colors hover:border-line-strong',
+          'focus:border-brand focus:ring-4 focus:ring-brand/10',
           compact ? 'min-h-[88px]' : 'min-h-[120px]',
         )}
       />
-      <MarkPreview text={a.text} />
       <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center justify-between gap-2 text-[12px]">
         <div className="text-ink-3">{meta}</div>
         <div className="flex items-center gap-3">
@@ -167,7 +167,7 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
   const [confirmDel, setConfirmDel] = useState<number | null>(null);
   const [forced, setForced] = useState(false);
   const written = useRef(a.text);
-  const bodies = useRef(new Map<number, HTMLTextAreaElement>());
+  const bodies = useRef(new Map<number, RichEditorHandle>());
 
   useEffect(() => {
     if (a.text !== written.current) {
@@ -217,7 +217,7 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
                   placeholder={i === 0 ? '대제목 (선택)' : '대제목 (예: 공공입찰)'}
                   className={cx(field, 'flex-1 text-[15px] font-bold text-ink')}
                 />
-                <MarkToolbar target={{ current: bodies.current.get(b.key) ?? null }} value={b.body} onChange={(body) => patch(i, { body })} className="shrink-0 border-r border-line pr-1" />
+                <MarkToolbar onApply={(m) => bodies.current.get(b.key)?.applyMark(m)} className="shrink-0 border-r border-line pr-1" />
                 <div className="flex shrink-0 items-center text-ink-3">
                   <button type="button" aria-label="위로" disabled={i === 0} onClick={() => move(i, -1)} className="rounded p-1 hover:bg-sunken hover:text-ink disabled:opacity-25"><ArrowUp size={14} /></button>
                   <button type="button" aria-label="아래로" disabled={i === blocks.length - 1} onClick={() => move(i, 1)} className="rounded p-1 hover:bg-sunken hover:text-ink disabled:opacity-25"><ArrowDown size={14} /></button>
@@ -229,22 +229,21 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
                 </div>
               </div>
             )}
-            {!sectioned && <MarkToolbar target={{ current: bodies.current.get(b.key) ?? null }} value={b.body} onChange={(body) => patch(i, { body })} className="mb-1" />}
-            <textarea
-              ref={(el) => { if (el) bodies.current.set(b.key, el); else bodies.current.delete(b.key); }}
+            {!sectioned && <MarkToolbar onApply={(m) => bodies.current.get(b.key)?.applyMark(m)} className="mb-1" />}
+            <RichEditor
+              ref={(h) => { if (h) bodies.current.set(b.key, h); else bodies.current.delete(b.key); }}
               id={`section-body-${b.key}`}
               value={b.body}
-              onChange={(e) => patch(i, { body: e.target.value })}
+              onChange={(body) => patch(i, { body })}
               onFocus={a.focus}
               onBlur={a.blur}
               placeholder={sectioned ? '내용' : placeholder ?? '이번 주 진행 내용을 적어주세요'}
               className={cx(
                 field,
-                'resize-y text-[14.5px] leading-[1.75] text-ink',
+                'text-[14.5px] leading-[1.75] text-ink',
                 sectioned ? 'min-h-[72px] py-2' : 'min-h-[120px] rounded-xl border border-line bg-surface px-3.5 py-3 transition-colors hover:border-line-strong focus:border-brand focus:ring-4 focus:ring-brand/10',
               )}
             />
-            <MarkPreview text={b.body} className={sectioned ? 'mb-2' : ''} />
           </div>
         ))}
       </div>
@@ -288,26 +287,25 @@ export function DirectiveBox({ value, editable, onSave, label = '대표님 지�
   directive?: Directive;
 }) {
   const a = useAutosave(value, onSave);
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<RichEditorHandle>(null);
   if (!editable && hideWhenEmpty && !has(value)) return null;
   return (
     <div className="rounded-xl border border-note-line bg-note px-3.5 py-3">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-[12px] font-bold tracking-wide text-note-ink">{label}</span>
-        {editable && <span className="flex items-center gap-2 text-[12px]"><MarkToolbar target={ref} value={a.text} onChange={a.change} /><SaveIndicator state={a.state} savedAt={a.savedAt} /></span>}
+        {editable && <span className="flex items-center gap-2 text-[12px]"><MarkToolbar onApply={(m) => ref.current?.applyMark(m)} /><SaveIndicator state={a.state} savedAt={a.savedAt} /></span>}
       </div>
       {editable ? (
         <>
-          <textarea
+          <RichEditor
             ref={ref}
             value={a.text}
-            onChange={(e) => a.change(e.target.value)}
+            onChange={a.change}
             onFocus={a.focus}
             onBlur={a.blur}
             placeholder="지시사항을 입력하면 담당자에게 바로 보입니다"
-            className="block min-h-[64px] w-full resize-y rounded-md bg-transparent text-[14px] leading-[1.65] text-ink placeholder:text-note-ink/60 focus:outline-none"
+            className="block min-h-[64px] w-full rounded-md bg-transparent text-[14px] leading-[1.65] text-ink"
           />
-          <MarkPreview text={a.text} className="bg-surface/60" />
           {has(prevContent) && !has(a.text) && (
             <button type="button" onClick={() => a.replace(prevContent!)} className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-note-ink hover:underline">
               <History size={13} />지난주 지시 불러오기
@@ -410,7 +408,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
   const { me, snap, addComment, acknowledge, deleteComment, toast } = useStore();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const box = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<RichEditorHandle>(null);
   if (!snap || !entry) return null;
   const members = byId(snap.members);
   const list = commentsFor(snap.comments, entry.id);
@@ -471,20 +469,21 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
       {canWrite && (
         <>
         <div className="flex items-end gap-2">
-          <textarea
-            ref={box}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send(); }}
-            placeholder={me.isCeo ? '이 내용에 피드백 남기기' : isReviewer(me) ? '이 내용에 코멘트 남기기' : '답글 남기기'}
-            rows={1}
-            className="min-h-[40px] flex-1 resize-none rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] placeholder:text-ink-3 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-          />
+          <div className="min-w-0 flex-1">
+            <RichEditor
+              ref={box}
+              value={draft}
+              onChange={setDraft}
+              onSubmit={() => void send()}
+              placeholder={me.isCeo ? '이 내용에 피드백 남기기' : isReviewer(me) ? '이 내용에 코멘트 남기기' : '답글 남기기'}
+              className="min-h-[40px] rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] leading-[1.5] focus:border-brand focus:ring-2 focus:ring-brand/20"
+            />
+          </div>
           <Button tone="primary" size="md" onClick={send} disabled={busy || !draft.trim()} aria-label="보내기">
             <Send size={15} />
           </Button>
         </div>
-        {draft.trim() && <><MarkToolbar target={box} value={draft} onChange={setDraft} /><MarkPreview text={draft} className="!mt-0" /></>}
+        {draft.trim() && <MarkToolbar onApply={(m) => box.current?.applyMark(m)} />}
         </>
       )}
     </div>
