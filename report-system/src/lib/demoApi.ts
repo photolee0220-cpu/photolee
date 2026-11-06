@@ -4,7 +4,7 @@ import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } fro
 import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
-import { checkAttachable } from './fileTypes';
+import { checkAttachable, triggerDownload } from './fileTypes';
 import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
@@ -334,10 +334,7 @@ export const demoApi: Api = {
   async downloadAttachment(a) {
     const full = state.attachments.find((x) => x.id === a.id);
     if (!full?.dataUrl) throw new ApiError('파일을 찾을 수 없습니다.');
-    const link = document.createElement('a');
-    link.href = full.dataUrl;
-    link.download = full.fileName;
-    link.click();
+    triggerDownload(full.dataUrl, full.fileName);
   },
 
   async getAiSummary(weekId) {
@@ -582,10 +579,7 @@ export const demoApi: Api = {
       requireAdmin();
       const found = state.backups.find((x) => x.id === b.id);
       if (!found) throw new ApiError('백업을 찾을 수 없습니다.');
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(new Blob([found.data], { type: 'application/json' }));
-      link.download = `sadakdari-backup-${found.createdAt.slice(0, 10)}.json`;
-      link.click();
+      triggerDownload(URL.createObjectURL(new Blob([found.data], { type: 'application/json' })), `sadakdari-backup-${found.createdAt.slice(0, 10)}.json`);
     },
     async pushMembers() {
       requireAdmin();

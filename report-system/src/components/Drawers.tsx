@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, History, Lock, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, History, Lock, Sparkles } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { canEditEntry, canViewDept, isReviewer, isWeekLocked } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
@@ -7,7 +7,8 @@ import {
   activeDirectives, byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork,
 } from '../lib/derive';
 import { DIRECTIVE_STATUS, isBuildStage, type Comment, type Site, type SiteSummary, type Department, type Directive, type DirectiveStatus, type Entry, type Member } from '../lib/types';
-import { formatDate, relativeTime, toIsoDate, weekLabel } from '../lib/week';
+import { currentWeekId, formatDate, relativeTime, shiftWeek, toIsoDate, weekLabel } from '../lib/week';
+import { downloadMediaZip } from '../lib/mediaZip';
 import { summaryModel } from '../lib/models';
 import { buildSiteSummaryPrompt } from '../lib/summary';
 import { useStore } from '../state/store';
@@ -68,6 +69,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
       onClose={onClose}
       title={site.name}
       subtitle={<span className="flex flex-wrap items-center gap-1.5"><StageChip stage={site.stage} />{[site.note, site.process].filter(Boolean).join(' · ')}</span>}
+      headerRight={me.isAdmin ? <SiteMediaButton site={site} /> : undefined}
     >
       <div className="space-y-4">
         <SiteInfo site={site} />
@@ -502,5 +504,30 @@ function SiteInfo({ site }: { site: Site }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/** 관리자: 이 현장의 모든 주차 사진·첨부파일을 '주차/부서/현장' 폴더 ZIP으로 */
+function SiteMediaButton({ site }: { site: Site }) {
+  const { snap, toast } = useStore();
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  if (!snap) return null;
+  const run = async () => {
+    setProgress({ done: 0, total: 0 });
+    try {
+      const items = (await api.admin.listMedia(null, shiftWeek(currentWeekId(), 1))).filter((x) => x.siteId === site.id);
+      if (!items.length) { toast('이 현장에는 아직 사진·파일이 없습니다'); return; }
+      const r = await downloadMediaZip(items, snap, `사닥다리_${site.name}_사진파일`, (done, total) => setProgress({ done, total }));
+      toast(r.failed ? `${r.count}개를 받았고 ${r.failed}개는 받지 못했습니다` : `사진·파일 ${r.count}개를 받았습니다`, r.failed ? 'error' : 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '내려받지 못했습니다.', 'error');
+    } finally {
+      setProgress(null);
+    }
+  };
+  return (
+    <Button size="sm" onClick={run} disabled={!!progress} title="이 현장의 모든 주차 사진·파일을 ZIP으로 받기 (관리자)">
+      {progress ? <><Spinner />{progress.total ? `${progress.done}/${progress.total}` : '준비 중'}</> : <><Download size={14} />사진·파일 받기</>}
+    </Button>
   );
 }

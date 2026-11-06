@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
-import { checkAttachable, extOf } from './fileTypes';
+import { checkAttachable, extOf, triggerDownload } from './fileTypes';
 import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
 
 const BUCKET = 'site-photos';
@@ -255,9 +255,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       if (!row) throw new ApiError('파일을 찾을 수 없습니다.');
       const { data, error } = await sb.storage.from(FILES).createSignedUrl(row.storage_path, 60, { download: a.fileName });
       if (error || !data) throw new ApiError('파일을 내려받지 못했습니다.');
-      const link = document.createElement('a');
-      link.href = data.signedUrl;
-      link.click();
+      triggerDownload(data.signedUrl);
     },
 
     async getAiSummary(weekId) {
@@ -499,11 +497,9 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       },
       async downloadBackup(b) {
         const r = check(await sb.from('backups').select('data').eq('id', b.id).single());
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 1)], { type: 'application/json' }));
-        link.download = `sadakdari-backup-${b.createdAt.slice(0, 10)}.json`;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+        const url = URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 1)], { type: 'application/json' }));
+        triggerDownload(url, `sadakdari-backup-${b.createdAt.slice(0, 10)}.json`);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
       },
       async pushMembers() {
         const rows = check(await sb.from('push_subscriptions').select('member_id')) as Row[];

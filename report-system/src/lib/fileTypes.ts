@@ -31,3 +31,15 @@ export function fileKind(name: string): 'pdf' | 'sheet' | 'doc' | 'hwp' | 'slide
   if (e === 'zip') return 'zip';
   return 'other';
 }
+
+/** 링크를 문서에 붙였다가 눌러야 브라우저가 정한 파일 이름(download)을 지킨다 */
+export function triggerDownload(href: string, fileName?: string) {
+  const link = document.createElement('a');
+  link.href = href;
+  if (fileName) link.download = fileName;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}

@@ -1,3 +1,4 @@
+import { triggerDownload } from './fileTypes';
 import type { MediaItem, Snapshot, WeekId } from './types';
 
 /** 폴더·파일 이름에 쓸 수 없는 글자를 바꾼다 */
@@ -58,4 +59,18 @@ export async function buildMediaZip(items: MediaItem[], snap: Snapshot, onProgre
 
 export function zipFileName(from: WeekId | null, before: WeekId): string {
   return `사닥다리_사진파일_${from ?? '처음'}~${before}_이전.zip`;
+}
+
+/** ZIP을 만들어 바로 내려받게 한다 */
+export async function downloadMediaZip(items: MediaItem[], snap: Snapshot, fileName: string, onProgress: (done: number, total: number) => void) {
+  const r = await buildMediaZip(items, snap, onProgress);
+  const url = URL.createObjectURL(r.blob);
+  triggerDownload(url, safe(fileName.replace(/\.zip$/, '')) + '.zip');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return r;
+}
+
+/** 사진 크기는 서버에 기록이 없어 한 장에 약 350KB로 어림한다 */
+export function estimateBytes(items: MediaItem[]): number {
+  return items.reduce((n, x) => n + (x.kind === 'photo' ? 350 * 1024 : x.sizeBytes), 0);
 }

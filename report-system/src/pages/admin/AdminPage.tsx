@@ -8,11 +8,11 @@ import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal
 import { newId, type SiteHistoryItem, type WeekSummary } from '../../lib/api';
 import { api } from '../../lib/client';
 import { activeDepartments, isCompleted } from '../../lib/derive';
-import { formatBytes } from '../../lib/fileTypes';
-import { buildMediaZip, zipFileName } from '../../lib/mediaZip';
+import { formatBytes, triggerDownload } from '../../lib/fileTypes';
+import { buildMediaZip, downloadMediaZip, estimateBytes, zipFileName } from '../../lib/mediaZip';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { isBuildStage, SITE_TAGS, type BackupInfo, type SiteField, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
-import { currentWeekId, shiftWeek, weekLabelLong } from '../../lib/week';
+import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
+import { currentWeekId, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
 
@@ -822,11 +822,9 @@ function StorageAdmin() {
       const items = await api.admin.listMedia(null, cutoff);
       if (!items.length) { toast('이 기간에는 내려받을 사진·파일이 없습니다'); setDownloadedFor(cutoff); return; }
       const { blob, count, failed } = await buildMediaZip(items, snap, (done, total) => setZipping({ done, total }));
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = zipFileName(null, cutoff);
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, zipFileName(null, cutoff));
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
       setDownloadedFor(cutoff);
       toast(failed ? `${count}개를 받았고 ${failed}개는 받지 못했습니다` : `사진·파일 ${count}개를 ZIP으로 받았습니다 (${formatBytes(blob.size)})`, failed ? 'error' : 'ok');
     } catch (e) {
@@ -870,6 +868,8 @@ function StorageAdmin() {
         </Card>
       )}
 
+      <MediaDownloadCard />
+
       <Card className="mt-4 p-5">
         <h2 className="text-[16px] font-bold">오래된 사진·파일 정리</h2>
         <p className="mt-1 text-[13px] leading-[1.6] text-ink-3">공간이 부족해지면 오래된 사진과 첨부파일만 지워서 다시 쓸 수 있습니다. <b className="text-ink-2">보고 글, 지시사항, 피드백은 그대로 남습니다.</b> 지운 파일은 되살릴 수 없으니 필요한 파일은 먼저 내려받아 두세요.</p>
@@ -907,6 +907,110 @@ function StorageAdmin() {
         )}
       </Modal>
     </div>
+  );
+}
+
+type Preset = 'week' | 'lastweek' | 'month' | 'lastmonth' | '3m' | 'all' | 'custom';
+
+/** 사진·파일 내려받기: 기간·부서·현장을 골라 '주차/부서/현장' 폴더 ZIP으로 (관리자 전용) */
+function MediaDownloadCard() {
+  const { snap, toast } = useStore();
+  const cur = currentWeekId();
+  const [preset, setPreset] = useState<Preset>('month');
+  const [start, setStart] = useState(shiftWeek(cur, -4));
+  const [end, setEnd] = useState(cur);
+  const [dept, setDept] = useState('');
+  const [site, setSite] = useState('');
+  const [items, setItems] = useState<MediaItem[] | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const first = (d: Date) => toIsoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+  const now = new Date();
+  // [from 이상, before 미만]. 주차는 월요일 날짜라 문자열로 비교된다
+  const range: { from: WeekId | null; before: WeekId; label: string } = (() => {
+    switch (preset) {
+      case 'week': return { from: cur, before: shiftWeek(cur, 1), label: weekLabel(cur) };
+      case 'lastweek': return { from: shiftWeek(cur, -1), before: cur, label: weekLabel(shiftWeek(cur, -1)) };
+      case 'month': return { from: first(now), before: shiftWeek(cur, 1), label: `${now.getMonth() + 1}월` };
+      case 'lastmonth': {
+        const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return { from: first(lm), before: first(now), label: `${lm.getMonth() + 1}월` };
+      }
+      case '3m': return { from: toIsoDate(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())), before: shiftWeek(cur, 1), label: '최근 3개월' };
+      case 'all': return { from: null, before: shiftWeek(cur, 1), label: '전체' };
+      default: return { from: start, before: toIsoDate(new Date(parseIsoDate(end).getTime() + 86400000)), label: `${start}~${end}` };
+    }
+  })();
+  const key = `${range.from}|${range.before}`;
+  useEffect(() => {
+    let alive = true;
+    setItems(null);
+    if (preset === 'custom' && start > end) { setItems([]); return; }
+    api.admin.listMedia(range.from, range.before).then((x) => alive && setItems(x)).catch(() => alive && setItems([]));
+    return () => { alive = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!snap) return null;
+
+  const shown = (items ?? []).filter((x) => (!dept || x.departmentId === dept) && (!site || x.siteId === site));
+  const photos = shown.filter((x) => x.kind === 'photo').length;
+  const files = shown.length - photos;
+  const deptName = snap.departments.find((d) => d.id === dept)?.name;
+  const siteName = snap.sites.find((s) => s.id === site)?.name;
+  const sites = [...snap.sites].sort((a, b) => Number(a.archived) - Number(b.archived) || a.sort - b.sort);
+
+  const download = async () => {
+    setProgress({ done: 0, total: shown.length });
+    try {
+      const name = ['사닥다리_사진파일', range.label, deptName, siteName].filter(Boolean).join('_');
+      const r = await downloadMediaZip(shown, snap, name, (done, total) => setProgress({ done, total }));
+      toast(r.failed ? `${r.count}개를 받았고 ${r.failed}개는 받지 못했습니다` : `사진·파일 ${r.count}개를 받았습니다 (${formatBytes(r.blob.size)})`, r.failed ? 'error' : 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '내려받지 못했습니다.', 'error');
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  return (
+    <Card className="mt-4 p-5">
+      <h2 className="text-[16px] font-bold">사진·파일 내려받기</h2>
+      <p className="mt-1 text-[13px] text-ink-3">기간을 골라 언제든 받을 수 있습니다. ZIP 안은 <b className="text-ink-2">보고 주차 / 부서 / 현장</b> 폴더로 정리됩니다. (관리자 전용)</p>
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {([['week', '이번 주'], ['lastweek', '지난주'], ['month', '이번 달'], ['lastmonth', '지난달'], ['3m', '최근 3개월'], ['all', '전체'], ['custom', '직접 선택']] as const).map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setPreset(id)}
+            className={cx('rounded-full border px-3 py-1 text-[13px] font-semibold', preset === id ? 'border-brand bg-brand text-on-brand' : 'border-line bg-surface text-ink-2 hover:border-line-strong')}>{label}</button>
+        ))}
+      </div>
+      {preset === 'custom' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
+          <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="!w-auto" aria-label="시작 보고일" />
+          <span className="text-ink-3">~</span>
+          <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="!w-auto" aria-label="끝 보고일" />
+          <span className="text-ink-3">보고일(월요일) 기준</span>
+        </div>
+      )}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <Select value={dept} onChange={(e) => setDept(e.target.value)} aria-label="부서">
+          <option value="">모든 부서</option>
+          {activeDepartments(snap).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </Select>
+        <Select value={site} onChange={(e) => setSite(e.target.value)} aria-label="현장">
+          <option value="">모든 현장 (부서 업무보고 첨부 포함)</option>
+          {sites.map((x) => <option key={x.id} value={x.id}>{x.name}{x.archived ? ' (보관함)' : ''}</option>)}
+        </Select>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-sunken px-4 py-3">
+        <p className="flex-1 text-[13.5px]">
+          {items == null ? <span className="inline-flex items-center gap-2 text-ink-3"><Spinner />확인 중…</span>
+            : shown.length === 0 ? <span className="text-ink-3">이 조건에는 사진·파일이 없습니다</span>
+              : <><b>사진 {photos}장 · 파일 {files}개</b> <span className="text-ink-3">· 약 {formatBytes(estimateBytes(shown))}</span></>}
+        </p>
+        <Button tone="primary" onClick={download} disabled={!shown.length || !!progress}>
+          {progress ? <><Spinner />받는 중 {progress.done}/{progress.total}</> : <><Download size={15} />ZIP 내려받기</>}
+        </Button>
+      </div>
+      {estimateBytes(shown) > 500 * 1024 * 1024 && <p className="mt-2 text-[12px] text-warn">용량이 큽니다. 컴퓨터에서 받으시고, 받다가 멈추면 기간을 나눠서 받아 주세요.</p>}
+    </Card>
   );
 }
 
