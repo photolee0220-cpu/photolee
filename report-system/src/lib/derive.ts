@@ -42,8 +42,15 @@ export function reporters(snap: Snapshot): Member[] {
     .sort((a, b) => (order.get(a.departmentId!) ?? 0) - (order.get(b.departmentId!) ?? 0));
 }
 
+/** 이 사람이 이 칸을 썼는지: 부서 업무보고는 본인 칸, 현장 칸은 마지막 저장자뿐 아니라 함께 쓴 사람 모두 */
+export function wroteEntry(e: Entry, memberId: string): boolean {
+  if (!has(e.content)) return false;
+  if (e.kind === 'dept') return e.authorId === memberId;
+  return e.updatedBy === memberId || !!e.writers?.includes(memberId);
+}
+
 export function hasWritten(snap: Snapshot, memberId: string): boolean {
-  return snap.entries.some((e) => e.updatedBy === memberId && has(e.content));
+  return snap.entries.some((e) => wroteEntry(e, memberId));
 }
 
 export function commentsFor(list: Comment[], entryId: string | undefined): Comment[] {
@@ -78,7 +85,7 @@ export function firstLines(text: string, n = 3): string {
 export function siteWork(snap: Snapshot, memberId: string): Entry[] {
   const order = new Map(snap.sites.map((s, i) => [s.id, i]));
   return snap.entries
-    .filter((e) => e.kind === 'site' && e.updatedBy === memberId && has(e.content))
+    .filter((e) => e.kind === 'site' && wroteEntry(e, memberId))
     .sort((a, b) => (order.get(a.siteId!) ?? 0) - (order.get(b.siteId!) ?? 0));
 }
 

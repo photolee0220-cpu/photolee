@@ -25,7 +25,7 @@ const toStage = (r: Row): StageDef => ({ id: r.id, label: r.label, short: r.shor
 const toGrant = (r: Row): Grant => ({ viewerDepartmentId: r.viewer_department_id, targetDepartmentId: r.target_department_id });
 const toEntry = (r: Row): Entry => ({
   id: r.id, weekId: r.week_id, kind: r.kind, siteId: r.site_id, departmentId: r.department_id, authorId: r.author_id,
-  content: r.content, updatedAt: r.updated_at, updatedBy: r.updated_by,
+  content: r.content, updatedAt: r.updated_at, updatedBy: r.updated_by, writers: r.writers ?? [],
 });
 const toDirective = (r: Row): Directive => ({
   id: r.id, weekId: r.week_id, targetKind: r.target_kind, siteId: r.site_id, memberId: r.member_id, slot: r.slot,

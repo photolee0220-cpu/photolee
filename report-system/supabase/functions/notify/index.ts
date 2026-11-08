@@ -85,9 +85,10 @@ Deno.serve(async (req) => {
 
     if (action === 'deadline') {
       const week = currentWeek();
-      const { data: members } = await db.from('members').select('id, name').eq('active', true).eq('is_ceo', false).not('department_id', 'is', null);
-      const { data: written } = await db.from('entries').select('updated_by').eq('week_id', week).neq('content', '');
-      const done = new Set((written ?? []).map((r) => r.updated_by));
+      const { data: members } = await db.from('members').select('id, name').eq('active', true).eq('is_ceo', false).eq('is_executive', false).not('department_id', 'is', null);
+      // 쓴 사람: 부서 업무보고는 본인 칸, 현장 칸은 함께 쓴 사람 모두
+      const { data: written } = await db.from('entries').select('kind, author_id, updated_by, writers').eq('week_id', week).neq('content', '');
+      const done = new Set((written ?? []).flatMap((r) => (r.kind === 'dept' ? [r.author_id] : [r.updated_by, ...(r.writers ?? [])])));
       const targets = (members ?? []).filter((m) => !done.has(m.id)).map((m) => m.id);
       const r = await send(db, targets, { title: '주간보고 작성 알림', body: '이번 주 보고가 아직 없습니다. 마감은 토요일 오전 10시입니다.', tag: `deadline-${week}` }, 'deadline');
       return json({ week, targets: targets.length, ...r });

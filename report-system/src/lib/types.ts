@@ -122,6 +122,8 @@ export interface Entry {
   content: string;
   updatedAt: string;
   updatedBy: string | null;
+  /** 이 칸에 내용을 쓴 적 있는 사람 모두 (함께 쓰는 현장 칸에서 작성 현황을 셀 때 쓴다) */
+  writers?: string[];
 }
 
 export type DirectiveTarget = 'site' | 'member' | 'misc';

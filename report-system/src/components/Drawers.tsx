@@ -6,7 +6,7 @@ import { canEditEntry, canViewDept, isReviewer, isWeekLocked } from '../lib/acce
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
-  activeDirectives, byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork,
+  activeDirectives, byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork, wroteEntry,
 } from '../lib/derive';
 import { DIRECTIVE_STATUS, isBuildStage, type Comment, type Site, type SiteSummary, type Department, type Directive, type DirectiveStatus, type Entry, type Member } from '../lib/types';
 import { currentWeekId, formatDate, relativeTime, shiftWeek, toIsoDate, weekLabel } from '../lib/week';
@@ -226,7 +226,7 @@ function WritersDrawer({ onClose }: { onClose(): void }) {
   if (!snap) return null;
   const depts = byId(snap.departments);
   const people = reporters(snap);
-  const lastWrite = (id: string) => snap.entries.filter((e) => e.updatedBy === id && has(e.content)).map((e) => e.updatedAt).sort().pop();
+  const lastWrite = (id: string) => snap.entries.filter((e) => wroteEntry(e, id)).map((e) => e.updatedAt).sort().pop();
   const done = people.filter((m) => hasWritten(snap, m.id));
   const missing = people.filter((m) => !hasWritten(snap, m.id));
   const row = (m: Member, at?: string) => (

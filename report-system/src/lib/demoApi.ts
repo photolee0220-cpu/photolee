@@ -190,7 +190,7 @@ export const demoApi: Api = {
     const m = me();
     const out: WeekSummary[] = weeksWithData().map((w) => {
       const es = visibleEntries(m, state.entries.filter((e) => e.weekId === w && e.content.trim()));
-      return { weekId: w, entryCount: es.length, writers: new Set(es.map((e) => e.updatedBy)).size };
+      return { weekId: w, entryCount: es.length, writers: new Set(es.flatMap((e) => [e.updatedBy, ...(e.writers ?? [])]).filter(Boolean)).size };
     });
     return delay(out.reverse());
   },
@@ -226,6 +226,7 @@ export const demoApi: Api = {
     e.content = input.content;
     e.updatedAt = new Date().toISOString();
     e.updatedBy = m.id;
+    if (input.content.trim() && !(e.writers ?? []).includes(m.id)) e.writers = [...(e.writers ?? []), m.id];
     persist();
     return structuredClone(e);
   },
