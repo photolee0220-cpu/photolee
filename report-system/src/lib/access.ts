@@ -1,5 +1,5 @@
-import type { Directive, Entry, Grant, Member, WeekId } from './types';
-import { currentWeekId } from './week';
+import type { Affiliation, CalendarEvent, Directive, Entry, Grant, Member, WeekId } from './types';
+import { currentWeekId, dowOf, todayIso } from './week';
 
 /** 서버(Supabase RLS)와 같은 규칙. 데모 모드와 화면 표시에서 사용 */
 
@@ -57,4 +57,34 @@ export function canSetDirectiveStatus(me: Member, d: Directive, writesSites: boo
   if (me.isCeo || me.isAdmin) return true;
   if (d.targetKind === 'member') return d.memberId === me.id;
   return d.targetKind === 'site' && writesSites;
+}
+
+/** 일일보고를 쓰는 사람: 부서가 있고 대표·본부장이 아닌 사람 */
+export function writesDaily(m: Member): boolean {
+  return m.active && !!m.departmentId && !m.isCeo && !m.isExecutive;
+}
+
+export function affiliationOf(m: Pick<Member, 'affiliation'>): Affiliation {
+  return m.affiliation ?? 'hq';
+}
+
+/** 일일보고를 써야 하는 날: 본사 월~금, 현장 월~토 */
+export function isWorkday(date: string, a: Affiliation): boolean {
+  const d = dowOf(date);
+  return d >= 1 && d <= (a === 'site' ? 6 : 5);
+}
+
+/** 일일보고는 본인이 당일에만 고친다 (관리자는 언제나). 서버 규칙과 같다 */
+export function canEditDaily(me: Member, authorId: string, date: string): boolean {
+  if (me.isAdmin) return true;
+  return authorId === me.id && date === todayIso();
+}
+
+export function canSeeEvent(me: Member, e: CalendarEvent, grants: Grant[]): boolean {
+  if (e.scope === 'all' || e.createdBy === me.id) return true;
+  return canViewDept(me, e.departmentId, grants);
+}
+
+export function canEditEvent(me: Member, e: Pick<CalendarEvent, 'createdBy'>): boolean {
+  return me.isAdmin || e.createdBy === me.id;
 }

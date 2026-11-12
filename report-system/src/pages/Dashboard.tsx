@@ -6,7 +6,8 @@ import { Badge, Button, Card, cx, Empty, Progress, Segmented, Select, Spinner } 
 import { canViewFinance, isReviewer } from '../lib/access';
 import { activeDirectives, hasWritten, isCompleted, reporters, visibleSites } from '../lib/derive';
 import { isBuildStage, type Site, type Stage } from '../lib/types';
-import { dday } from '../lib/week';
+import { dday, todayIso } from '../lib/week';
+import { DailyBoard, DateSwitcher, useDaily } from './Daily';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
 import { DiffModeSwitch } from '../components/DiffText';
@@ -14,8 +15,40 @@ import { SummaryPanel } from '../components/SummaryPanel';
 import { PeopleGrid } from './People';
 
 type SortKey = 'order' | 'progress' | 'due';
+type DashTab = 'weekly' | 'daily';
+const DASH_TAB = 'dashboard-tab';
 
+/** 대시보드 맨 위 탭: 주간보고 / 일일보고 */
 export function Dashboard() {
+  const [tab, setTabState] = useState<DashTab>(() => {
+    try { return localStorage.getItem(DASH_TAB) === 'daily' ? 'daily' : 'weekly'; } catch { return 'weekly'; }
+  });
+  const setTab = (t: DashTab) => { setTabState(t); try { localStorage.setItem(DASH_TAB, t); } catch { /* 무시 */ } };
+  const tabs = (
+    <Segmented<DashTab> value={tab} onChange={setTab} className="mb-5" options={[
+      { id: 'weekly', label: <span className="px-2 text-[14px]">주간보고</span> },
+      { id: 'daily', label: <span className="px-2 text-[14px]">일일보고</span> },
+    ]} />
+  );
+  return tab === 'daily' ? <DailyDashboard tabs={tabs} /> : <WeeklyDashboard tabs={tabs} />;
+}
+
+function DailyDashboard({ tabs }: { tabs: React.ReactNode }) {
+  const { me } = useStore();
+  const [date, setDate] = useState(todayIso);
+  const { data, reload } = useDaily(date);
+  return (
+    <div className="mx-auto max-w-[1400px]">
+      {tabs}
+      <PageHeader title={me.isCeo ? '대표님 대시보드' : '전체 현황'} right={<DateSwitcher date={date} onChange={setDate} />}>
+        <span className="text-[13px] text-ink-3">본사·현장 직원의 일일보고 · 이름 아래에서 바로 피드백을 남길 수 있습니다</span>
+      </PageHeader>
+      {data ? <DailyBoard date={date} data={data} reload={reload} /> : <div className="flex justify-center py-16"><Spinner /></div>}
+    </div>
+  );
+}
+
+function WeeklyDashboard({ tabs }: { tabs: React.ReactNode }) {
   const { snap, loading, me, openDrawer, setView } = useStore();
   const [stage, setStage] = useState<Stage | 'all'>('construction');
   const [sort, setSort] = useState<SortKey>('order');
@@ -47,6 +80,7 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-[1400px]">
+      {tabs}
       <PageHeader
         title={me.isCeo ? '대표님 대시보드' : '전체 현황'}
         right={<>

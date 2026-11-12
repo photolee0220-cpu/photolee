@@ -4,7 +4,7 @@ import type { Comment, Directive, DirectiveStatus, Entry, Member, SaveDirectiveI
 import { currentWeekId } from '../lib/week';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
-export type View = 'dashboard' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
+export type View = 'dashboard' | 'daily' | 'calendar' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
 export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | { type: 'directives' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
 
@@ -45,7 +45,7 @@ export function useStore(): Store {
 
 export function defaultView(m: Member): View {
   if (m.isCeo || m.isExecutive) return 'dashboard';
-  if (m.departmentId) return 'mine';
+  if (m.departmentId) return 'daily';
   return 'dashboard';
 }
 

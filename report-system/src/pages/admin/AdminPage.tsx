@@ -11,7 +11,7 @@ import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes, triggerDownload } from '../../lib/fileTypes';
 import { buildMediaZip, downloadMediaZip, estimateBytes, zipFileName } from '../../lib/mediaZip';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage } from '../../lib/types';
+import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage, type Affiliation } from '../../lib/types';
 import { currentWeekId, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
@@ -512,7 +512,8 @@ function MembersAdmin() {
                 <tr key={m.id} className={cx('border-b border-line last:border-0', !m.active && 'opacity-50')}>
                   <td className="px-4 py-2.5"><span className="flex items-center gap-2"><Avatar id={m.id} name={m.name} size={26} /><b>{m.name}</b> <span className="text-ink-3">{m.title}</span></span></td>
                   <td className="px-3 py-2.5 font-mono text-[12.5px] text-ink-2">{m.username}</td>
-                  <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}</td>
+                  <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}
+                    {m.affiliation === 'site' && <span className="mt-0.5 block text-[12px] font-semibold text-brand-ink">현장 · {snap.sites.find((s) => s.id === m.homeSiteId)?.name ?? '현장 미지정'}</span>}</td>
                   <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}</span></td>
                   <td className="px-3 py-2.5"><span className="flex items-center gap-1.5">{m.active ? (m.mustChangePassword ? <Badge tone="note">첫 로그인 전</Badge> : <Badge tone="ok">사용 중</Badge>) : <Badge>중지</Badge>}
                     {pushOn.has(m.id) && <span title="알림 켬" className="text-brand-ink"><Bell size={14} /></span>}</span></td>
@@ -540,6 +541,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
   const [m, set] = useState({
     name: member?.name ?? '', title: member?.title ?? '', username: member?.username ?? '', password: genPassword(),
     departmentId: member?.departmentId ?? '', isAdmin: member?.isAdmin ?? false, isCeo: member?.isCeo ?? false, isExecutive: member?.isExecutive ?? false, active: member?.active ?? true,
+    affiliation: (member?.affiliation ?? 'hq') as Affiliation, homeSiteId: member?.homeSiteId ?? '',
   });
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null);
   const [newDept, setNewDept] = useState<{ name: string; writesSites: boolean } | null>(null);
@@ -563,11 +565,11 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
       const renamed = m.username !== member.username;
       const ok = await run(async () => {
         if (renamed) await api.admin.changeUsername(member.id, m.username);
-        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active });
+        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null });
       }, renamed ? `저장했습니다. 이제 아이디 ${m.username}(으)로 로그인합니다` : '저장했습니다');
       if (ok) onClose();
     } else {
-      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive }), `${m.name}님 계정을 만들었습니다`);
+      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null }), `${m.name}님 계정을 만들었습니다`);
       if (ok) setCreated({ username: m.username, password: m.password });
     }
   };
@@ -620,6 +622,20 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
                   label={<>현장별 보고 부서 <span className="text-ink-3">공무·인테리어처럼 현장마다 칸을 쓰는 부서</span></>} />
               </div>
             )}
+          </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="소속" hint="일일보고에서 본사·현장을 나눠 보여줍니다. 현장 소속(소장 등)은 근무하는 현장을 정해 주세요">
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented<Affiliation> value={m.affiliation} onChange={(v) => up('affiliation', v)} options={[{ id: 'hq', label: '본사' }, { id: 'site', label: '현장' }]} />
+              {m.affiliation === 'site' && (
+                <Select id="member-site" value={m.homeSiteId} onChange={(e) => up('homeSiteId', e.target.value)} className="!w-auto min-w-[200px]">
+                  <option value="">근무 현장 선택</option>
+                  {snap.sites.filter((s) => !s.archived).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              )}
+            </div>
+            {m.affiliation === 'site' && !m.homeSiteId && <p className="mt-1.5 text-[12.5px] text-warn">근무 현장을 정해야 일일보고를 쓸 수 있습니다.</p>}
           </Field>
         </div>
         <div className="space-y-3 sm:col-span-2">

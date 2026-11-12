@@ -9,7 +9,9 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 export default defineConfig(({ mode }) => {
   const artifact = mode === 'artifact';
   const privateSeed = r('./seed/private/seed.json');
-  const seed = (artifact || mode === 'demo') && existsSync(privateSeed) ? privateSeed : r('./seed/sample.json');
+  // SAMPLE_SEED=1이면 실제 데이터 대신 견본으로 (설명서·공유용 캡처)
+  const usePrivate = (artifact || mode === 'demo') && existsSync(privateSeed) && process.env.SAMPLE_SEED !== '1';
+  const seed = usePrivate ? privateSeed : r('./seed/sample.json');
   return {
     base: process.env.VITE_BASE || '/',
     plugins: [react(), ...(artifact ? [viteSingleFile()] : [])],

@@ -1,11 +1,12 @@
 import seed from '@seed';
-import { canEditEntry, canSetDirectiveStatus, canViewDept, canViewDirective, isReviewer, isWeekLocked } from './access';
+import { affiliationOf, canEditDaily, canEditEntry, canEditEvent, canSeeEvent, canSetDirectiveStatus, canViewDept, canViewDirective, isReviewer, isWeekLocked, writesDaily } from './access';
 import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } from './api';
 import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
+import { shiftDay } from './week';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable, triggerDownload } from './fileTypes';
-import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
+import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type CalendarEvent, type DailyComment, type DailyPhoto, type DailyReport, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -21,6 +22,9 @@ const DEFAULT_SITE_FIELDS: SiteField[] = [
 ];
 /** 체험판의 '이번 주' */
 export const demoReportWeek: WeekId = (seed as Seed).reportDate;
+/** 체험판의 '오늘': 보고일 직전 금요일 (견본 일일보고가 이 날짜에 있다) */
+export const demoToday: string = shiftDay(demoReportWeek, -3);
+const DAILY_LOCKED = '일일보고는 당일에만 수정할 수 있습니다.';
 
 interface DemoState extends Seed {
   passwords: Record<string, string>;
@@ -33,6 +37,10 @@ interface DemoState extends Seed {
   siteSummaries: Record<string, SiteSummary>;
   backups: { id: number; createdAt: string; kind: 'auto' | 'manual'; data: string }[];
   settings: AppSettings;
+  daily: DailyReport[];
+  dailyPhotos: DailyPhoto[];
+  dailyComments: DailyComment[];
+  events: CalendarEvent[];
 }
 
 function safeGet(k: string): string | null {
@@ -48,7 +56,14 @@ function normalize(st: DemoState): DemoState {
   st.history ??= [];
   st.siteFields ??= structuredClone(DEFAULT_SITE_FIELDS);
   st.sites.forEach((s) => { s.extra ??= {}; });
-  st.members.forEach((m) => { m.isExecutive ??= false; });
+  st.members.forEach((m) => { m.isExecutive ??= false; m.affiliation ??= 'hq'; m.homeSiteId ??= null; });
+  // 예전 체험판 데이터에는 일일보고·일정이 없으므로 견본을 채운다
+  st.daily ??= structuredClone((seed as Seed).daily ?? []);
+  st.dailyPhotos ??= [];
+  st.dailyComments ??= structuredClone((seed as Seed).dailyComments ?? []);
+  st.events ??= structuredClone((seed as Seed).events ?? []);
+  for (const sm of (seed as Seed).members) if (!st.members.some((x) => x.id === sm.id)) { st.members.push(structuredClone(sm)); st.passwords ??= {}; st.passwords[sm.username] ??= DEMO_PASSWORD; }
+  for (const sd of (seed as Seed).departments) if (!st.departments.some((x) => x.id === sd.id)) st.departments.push(structuredClone(sd));
   st.siteSummaries ??= {};
   st.backups ??= [];
   st.directives.forEach((d) => { d.status ??= 'open'; d.statusBy ??= null; d.statusAt ??= null; });
@@ -77,7 +92,7 @@ function foldMisc(st: DemoState): DemoState {
 
 function fresh(): DemoState {
   const s = structuredClone(seed) as Seed;
-  return normalize({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, history: [], siteSummaries: {}, backups: [], siteFields: structuredClone(DEFAULT_SITE_FIELDS), settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
+  return normalize({ ...s, photos: s.photos ?? [], attachments: s.attachments ?? [], stages: s.stages ?? structuredClone(DEFAULT_STAGES), summaries: {}, history: [], siteSummaries: {}, backups: [], daily: s.daily ?? [], dailyPhotos: [], dailyComments: s.dailyComments ?? [], events: s.events ?? [], siteFields: structuredClone(DEFAULT_SITE_FIELDS), settings: { summaryModel: DEFAULT_SUMMARY_MODEL }, passwords: Object.fromEntries(s.members.map((m) => [m.username, DEMO_PASSWORD])) });
 }
 
 let state: DemoState = (() => {
@@ -425,6 +440,119 @@ export const demoApi: Api = {
     return delay(structuredClone(state.settings));
   },
 
+  daily: {
+    async load(date) {
+      const m = me();
+      const members = new Map(state.members.map((x) => [x.id, x]));
+      const reports = state.daily.filter((r) => r.date === date && canViewDept(m, r.departmentId, state.grants));
+      const photos = state.dailyPhotos.filter((p) => p.date === date && canViewDept(m, p.departmentId, state.grants));
+      const comments = state.dailyComments.filter((c) => c.date === date
+        && (c.memberId === m.id || c.authorId === m.id || canViewDept(m, members.get(c.memberId)?.departmentId ?? null, state.grants)));
+      return delay(structuredClone({ date, reports, photos, comments }));
+    },
+    async save(input) {
+      const m = me();
+      if (!writesDaily(m)) throw new ApiError('일일보고를 쓰는 계정이 아닙니다.');
+      if (!canEditDaily(m, m.id, input.date)) throw new ApiError(DAILY_LOCKED);
+      const kind = affiliationOf(m);
+      if (kind === 'site' && input.siteId !== m.homeSiteId) throw new ApiError('소속 현장 칸에만 쓸 수 있습니다. 관리자에게 소속 현장 지정을 요청하세요.');
+      const i = state.daily.findIndex((r) => r.date === input.date && r.authorId === m.id && r.siteId === input.siteId);
+      if (!input.content.trim()) {
+        if (i >= 0) state.daily.splice(i, 1);
+        persist();
+        return null;
+      }
+      const r: DailyReport = {
+        id: i >= 0 ? state.daily[i].id : newId('dr'), date: input.date, authorId: m.id, departmentId: m.departmentId!, siteId: input.siteId,
+        authorKind: kind, content: input.content, updatedAt: new Date().toISOString(),
+      };
+      if (i >= 0) state.daily[i] = r; else state.daily.push(r);
+      persist();
+      return structuredClone(r);
+    },
+    async uploadPhoto(input) {
+      const m = me();
+      if (!writesDaily(m) || !canEditDaily(m, m.id, input.date)) throw new ApiError(DAILY_LOCKED);
+      const p: DailyPhoto = {
+        id: newId('dp'), date: input.date, authorId: m.id, departmentId: m.departmentId!, siteId: input.siteId,
+        width: input.width, height: input.height, createdAt: new Date().toISOString(), url: await blobToDataUrl(input.blob),
+      };
+      state.dailyPhotos.push(p);
+      if (!persist()) {
+        state.dailyPhotos = state.dailyPhotos.filter((x) => x.id !== p.id);
+        persist();
+        throw new ApiError('체험판은 브라우저 저장 공간이 작아 사진을 더 올릴 수 없습니다. 실제 서버에서는 제한이 없습니다.');
+      }
+      return structuredClone(p);
+    },
+    async deletePhoto(id) {
+      const m = me();
+      const p = state.dailyPhotos.find((x) => x.id === id);
+      if (!p || !canEditDaily(m, p.authorId, p.date)) throw new ApiError('올린 사람이 당일에만 지울 수 있습니다.');
+      state.dailyPhotos = state.dailyPhotos.filter((x) => x.id !== id);
+      persist();
+    },
+    async addComment(date, memberId, content) {
+      const m = me();
+      if (!isReviewer(m) && m.id !== memberId) throw new ApiError('피드백을 남길 권한이 없습니다.');
+      const c: DailyComment = { id: newId('dc'), date, memberId, authorId: m.id, content, createdAt: new Date().toISOString(), acknowledgedAt: null };
+      state.dailyComments.push(c);
+      persist();
+      return structuredClone(c);
+    },
+    async acknowledge(id) {
+      const m = me();
+      const c = state.dailyComments.find((x) => x.id === id);
+      if (!c || c.memberId !== m.id) throw new ApiError('본인 보고에 달린 피드백만 확인할 수 있습니다.');
+      c.acknowledgedAt = new Date().toISOString();
+      persist();
+    },
+    async deleteComment(id) {
+      const m = me();
+      const c = state.dailyComments.find((x) => x.id === id);
+      if (!c || c.authorId !== m.id) throw new ApiError('본인이 쓴 글만 지울 수 있습니다.');
+      state.dailyComments = state.dailyComments.filter((x) => x.id !== id);
+      persist();
+    },
+    async pending() {
+      const m = me();
+      const reviewers = new Set(state.members.filter(isReviewer).map((x) => x.id));
+      return delay(structuredClone(state.dailyComments.filter((c) => c.memberId === m.id && !c.acknowledgedAt && reviewers.has(c.authorId))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))));
+    },
+  },
+
+  calendar: {
+    async list(from, to) {
+      const m = me();
+      return delay(structuredClone(state.events.filter((e) => e.startDate <= to && e.endDate >= from && canSeeEvent(m, e, state.grants))
+        .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.time.localeCompare(b.time))));
+    },
+    async save(e) {
+      const m = me();
+      if (!e.title.trim()) throw new ApiError('일정 제목을 입력해 주세요.');
+      if (e.endDate < e.startDate) throw new ApiError('끝나는 날이 시작일보다 빠릅니다.');
+      const i = state.events.findIndex((x) => x.id === e.id);
+      if (i >= 0 && !canEditEvent(m, state.events[i])) throw new ApiError('만든 사람이나 관리자만 고칠 수 있습니다.');
+      const prev = i >= 0 ? state.events[i] : null;
+      const departmentId = prev ? prev.departmentId : m.departmentId;
+      const next: CalendarEvent = {
+        ...e, title: e.title.trim(), memo: e.memo.trim(), createdBy: prev?.createdBy ?? m.id, departmentId,
+        scope: departmentId ? e.scope : 'all', updatedAt: new Date().toISOString(),
+      };
+      if (i >= 0) state.events[i] = next; else state.events.push(next);
+      persist();
+      return structuredClone(next);
+    },
+    async remove(id) {
+      const m = me();
+      const e = state.events.find((x) => x.id === id);
+      if (!e || !canEditEvent(m, e)) throw new ApiError('만든 사람이나 관리자만 지울 수 있습니다.');
+      state.events = state.events.filter((x) => x.id !== id);
+      persist();
+    },
+  },
+
   subscribe(fn) {
     listeners.add(fn);
     return () => { listeners.delete(fn); };
@@ -447,6 +575,10 @@ export const demoApi: Api = {
       state.photos = state.photos.filter((p) => p.siteId !== id);
       state.attachments = state.attachments.filter((a) => a.siteId !== id);
       state.sites = state.sites.filter((s) => s.id !== id);
+      state.daily = state.daily.filter((r) => r.siteId !== id);
+      state.dailyPhotos = state.dailyPhotos.filter((p) => p.siteId !== id);
+      state.events = state.events.map((e) => (e.siteId === id ? { ...e, siteId: null } : e));
+      state.members.forEach((m) => { if (m.homeSiteId === id) m.homeSiteId = null; });
       persist();
     },
     async saveSiteField(f) {
@@ -522,6 +654,7 @@ export const demoApi: Api = {
       const m: Member = {
         id: newId('m'), username: input.username, name: input.name, title: input.title, departmentId: input.departmentId,
         isCeo: input.isCeo, isAdmin: input.isAdmin, isExecutive: input.isExecutive, active: true, mustChangePassword: true,
+        affiliation: input.affiliation, homeSiteId: input.affiliation === 'site' ? input.homeSiteId : null,
       };
       state.members.push(m);
       state.passwords[m.username] = input.password;

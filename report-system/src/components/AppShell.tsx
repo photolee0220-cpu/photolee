@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarRange, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
+  BookOpen, CalendarDays, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -17,6 +17,7 @@ type NavItem = { id: View; label: string; icon: ReactNode };
 export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean): NavItem[] {
   const items: NavItem[] = [];
   if (me.departmentId && !isReviewer(me)) {
+    items.push({ id: 'daily', label: '일일보고', icon: <ClipboardList size={18} /> });
     items.push({ id: 'mine', label: '이번 주 작성', icon: <PenLine size={18} /> });
     items.push({ id: 'report', label: '내 보고', icon: <FileText size={18} /> });
   }
@@ -26,6 +27,7 @@ export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boole
     items.push({ id: 'people', label: '부서 보고', icon: <Users size={18} /> });
     items.push({ id: 'directives', label: '지시사항', icon: <ListChecks size={18} /> });
   }
+  items.push({ id: 'calendar', label: '캘린더', icon: <CalendarDays size={18} /> });
   if (hasShared && !canSeeAll(me)) items.push({ id: 'shared', label: '함께 보는 부서', icon: <Eye size={18} /> });
   items.push({ id: 'history', label: '지난 보고', icon: <History size={18} /> });
   return items;
@@ -247,19 +249,52 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
+      <BottomNav items={items} view={view} setView={setView} />
+      <SearchPalette />
+      <Toasts />
+    </div>
+  );
+}
+
+/** 휴대폰 아래 메뉴: 5개가 넘으면 4개만 두고 나머지는 '더보기'로 */
+function BottomNav({ items, view, setView }: { items: NavItem[]; view: View; setView(v: View): void }) {
+  const [more, setMore] = useState(false);
+  const overflow = items.length > 5;
+  const shown = overflow ? items.slice(0, 4) : items;
+  const rest = overflow ? items.slice(4) : [];
+  const restActive = rest.some((i) => i.id === view);
+  const btn = 'relative flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] font-semibold';
+  return (
+    <>
+      {more && (
+        <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setMore(false)}>
+          <div className="absolute inset-x-3 rounded-2xl border border-line bg-surface p-1.5 shadow-pop animate-pop-in"
+            style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }} onClick={(e) => e.stopPropagation()}>
+            {rest.map((it) => (
+              <button key={it.id} onClick={() => { setMore(false); setView(it.id); }}
+                className={cx('flex h-11 w-full items-center gap-3 rounded-xl px-3 text-[14px] font-semibold', view === it.id ? 'bg-brand-soft text-brand-ink' : 'text-ink-2 hover:bg-sunken')}>
+                {it.icon}{it.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-surface/95 backdrop-blur lg:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        {items.map((it) => (
-          <button key={it.id} onClick={() => setView(it.id)}
-            className={cx('relative flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] font-semibold', view === it.id ? 'text-brand-ink' : 'text-ink-3')}>
+        {shown.map((it) => (
+          <button key={it.id} onClick={() => { setMore(false); setView(it.id); }} className={cx(btn, view === it.id ? 'text-brand-ink' : 'text-ink-3')}>
             {view === it.id && <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-brand" />}
             {it.icon}{it.label}
           </button>
         ))}
+        {overflow && (
+          <button onClick={() => setMore((v) => !v)} className={cx(btn, restActive || more ? 'text-brand-ink' : 'text-ink-3')} aria-expanded={more}>
+            {restActive && <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-brand" />}
+            <MoreHorizontal size={18} />{restActive ? rest.find((i) => i.id === view)?.label : '더보기'}
+          </button>
+        )}
       </nav>
-      <SearchPalette />
-      <Toasts />
-    </div>
+    </>
   );
 }
 

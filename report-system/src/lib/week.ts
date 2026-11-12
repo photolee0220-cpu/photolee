@@ -12,6 +12,32 @@ export function parseIsoDate(s: string): Date {
 }
 
 let fixedWeek: WeekId | null = null;
+let fixedToday: string | null = null;
+
+/** 체험판은 견본 데이터에 맞춰 '오늘'을 고정한다 */
+export function fixToday(d: string) {
+  fixedToday = d;
+}
+
+/** 오늘 날짜 (YYYY-MM-DD, 이 기기 시간 기준) */
+export function todayIso(): string {
+  return fixedToday ?? toIsoDate(new Date());
+}
+
+export function shiftDay(iso: string, days: number): string {
+  const d = parseIsoDate(iso);
+  d.setDate(d.getDate() + days);
+  return toIsoDate(d);
+}
+
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+export function dayLabel(iso: string): string {
+  const d = parseIsoDate(iso);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`;
+}
+export function dowOf(iso: string): number {
+  return parseIsoDate(iso).getDay();
+}
 
 /** 체험판은 견본 데이터의 주차를 '이번 주'로 고정한다 */
 export function fixCurrentWeek(w: WeekId) {

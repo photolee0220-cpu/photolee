@@ -74,18 +74,30 @@ function Lightbox({ photos, index, onIndex, onClose }: { photos: Photo[]; index:
   const p = photos[index];
   const who = snap?.members.find((m) => m.id === p.uploadedBy);
   const dept = snap?.departments.find((d) => d.id === p.departmentId);
-  const canDelete = p.uploadedBy === me.id || me.isAdmin;
+  return (
+    <ImageViewer urls={photos.map((x) => x.url)} index={index} onIndex={onIndex} onClose={onClose}
+      meta={<><b>{who?.name ?? ''}</b> · {dept?.name ?? ''} · {relativeTime(p.createdAt)}</>}
+      onDelete={p.uploadedBy === me.id || me.isAdmin ? async () => {
+        try { await api.deletePhoto(p.id); await reload(); toast('사진을 지웠습니다'); onClose(); } catch (e) { toast(e instanceof Error ? e.message : '지우지 못했습니다.', 'error'); }
+      } : undefined} />
+  );
+}
+
+/** 사진 크게 보기 (좌우 넘기기, 지우기) */
+export function ImageViewer({ urls, index, onIndex, onClose, meta, onDelete }: {
+  urls: string[]; index: number; onIndex(i: number): void; onClose(): void; meta?: React.ReactNode; onDelete?: () => void | Promise<void>;
+}) {
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft' && index > 0) onIndex(index - 1);
-      if (e.key === 'ArrowRight' && index < photos.length - 1) onIndex(index + 1);
+      if (e.key === 'ArrowRight' && index < urls.length - 1) onIndex(index + 1);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [index, photos.length, onIndex, onClose]);
+  }, [index, urls.length, onIndex, onClose]);
   useEffect(() => setConfirm(false), [index]);
 
   return (
@@ -93,25 +105,22 @@ function Lightbox({ photos, index, onIndex, onClose }: { photos: Photo[]; index:
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center gap-3 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
         <p className="min-w-0 flex-1 truncate text-[13px]">
-          <b>{who?.name ?? ''}</b> · {dept?.name ?? ''} · {relativeTime(p.createdAt)} <span className="opacity-60">({index + 1}/{photos.length})</span>
+          {meta} <span className="opacity-60">({index + 1}/{urls.length})</span>
         </p>
-        {canDelete && (confirm ? (
-          <button className="rounded-md bg-danger px-3 py-1.5 text-[13px] font-semibold text-white"
-            onClick={async () => {
-              try { await api.deletePhoto(p.id); await reload(); toast('사진을 지웠습니다'); onClose(); } catch (e) { toast(e instanceof Error ? e.message : '지우지 못했습니다.', 'error'); }
-            }}>정말 지우기</button>
+        {onDelete && (confirm ? (
+          <button className="rounded-md bg-danger px-3 py-1.5 text-[13px] font-semibold text-white" onClick={() => void onDelete()}>정말 지우기</button>
         ) : (
           <IconButton label="사진 지우기" onClick={() => setConfirm(true)} className="text-white hover:bg-white/10 hover:text-white"><Trash2 size={18} /></IconButton>
         ))}
         <IconButton label="닫기" onClick={onClose} className="text-white hover:bg-white/10 hover:text-white"><X size={20} /></IconButton>
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 pb-4">
-        <img src={p.url} alt="현장 사진" className="max-h-full max-w-full rounded-md object-contain" onClick={(e) => e.stopPropagation()} />
+        <img src={urls[index]} alt="사진" className="max-h-full max-w-full rounded-md object-contain" onClick={(e) => e.stopPropagation()} />
         {index > 0 && (
           <button aria-label="이전 사진" onClick={(e) => { e.stopPropagation(); onIndex(index - 1); }}
             className={cx('absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white hover:bg-black/70')}><ChevronLeft size={24} /></button>
         )}
-        {index < photos.length - 1 && (
+        {index < urls.length - 1 && (
           <button aria-label="다음 사진" onClick={(e) => { e.stopPropagation(); onIndex(index + 1); }}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white hover:bg-black/70"><ChevronRight size={24} /></button>
         )}

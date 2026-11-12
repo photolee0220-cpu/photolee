@@ -76,6 +76,83 @@ export interface Member {
   isExecutive: boolean;
   active: boolean;
   mustChangePassword: boolean;
+  /** 소속: 본사 또는 현장 (일일보고를 나눠 볼 때 쓴다) */
+  affiliation?: Affiliation;
+  /** 현장 소속이면 근무하는 현장 */
+  homeSiteId?: string | null;
+}
+
+export type Affiliation = 'hq' | 'site';
+
+/** 일일 업무보고 한 칸. 본사 직원은 일반 업무(siteId 없음)와 현장별 칸을, 현장 직원은 소속 현장 칸 하나를 쓴다 */
+export interface DailyReport {
+  id: string;
+  /** YYYY-MM-DD */
+  date: string;
+  authorId: string;
+  departmentId: string;
+  siteId: string | null;
+  /** 쓸 때의 소속 (나중에 소속이 바뀌어도 그날 보고는 그대로 분류) */
+  authorKind: Affiliation;
+  content: string;
+  updatedAt: string;
+}
+
+export interface DailyPhoto {
+  id: string;
+  date: string;
+  authorId: string;
+  departmentId: string;
+  siteId: string | null;
+  width: number;
+  height: number;
+  createdAt: string;
+  url: string;
+}
+
+/** 일일보고 피드백: 사람·날짜 단위. 대표·본부장이 남기면 본인이 확인한다 */
+export interface DailyComment {
+  id: string;
+  date: string;
+  /** 누구의 일일보고에 단 글인지 */
+  memberId: string;
+  authorId: string;
+  content: string;
+  createdAt: string;
+  acknowledgedAt: string | null;
+}
+
+export interface DailySnapshot {
+  date: string;
+  reports: DailyReport[];
+  photos: DailyPhoto[];
+  comments: DailyComment[];
+}
+
+export interface SaveDailyInput {
+  date: string;
+  siteId: string | null;
+  content: string;
+}
+
+export type CalendarScope = 'dept' | 'all';
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  /** YYYY-MM-DD */
+  startDate: string;
+  /** 하루 일정이면 startDate와 같다 */
+  endDate: string;
+  /** 'HH:MM' 또는 종일이면 빈 글자 */
+  time: string;
+  siteId: string | null;
+  scope: CalendarScope;
+  /** 만든 사람의 부서. 'dept' 일정은 이 부서를 볼 수 있는 사람에게 보인다 */
+  departmentId: string | null;
+  memo: string;
+  createdBy: string;
+  updatedAt: string;
 }
 
 export interface Site {
@@ -278,6 +355,9 @@ export interface Seed {
   comments: Comment[];
   photos?: Photo[];
   attachments?: Attachment[];
+  daily?: DailyReport[];
+  dailyComments?: DailyComment[];
+  events?: CalendarEvent[];
 }
 
 /** 화면 하나를 그리는 데 필요한 데이터. 권한에 따라 이미 걸러진 상태 */
@@ -328,4 +408,6 @@ export interface NewMemberInput {
   isAdmin: boolean;
   isCeo: boolean;
   isExecutive: boolean;
+  affiliation: Affiliation;
+  homeSiteId: string | null;
 }

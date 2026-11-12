@@ -6,6 +6,8 @@ import { api, missingServerConfig } from './lib/client';
 import type { Member } from './lib/types';
 import { AdminPage } from './pages/admin/AdminPage';
 import { Dashboard } from './pages/Dashboard';
+import { DailyPage } from './pages/Daily';
+import { CalendarPage } from './pages/Calendar';
 import { HistoryPage } from './pages/History';
 import { ChangePassword, Login } from './pages/Login';
 import { DirectivesPage } from './pages/Directives';
@@ -55,6 +57,8 @@ function Routes() {
   return (
     <AppShell>
       {view === 'dashboard' && <Dashboard />}
+      {view === 'daily' && <DailyPage />}
+      {view === 'calendar' && <CalendarPage />}
       {view === 'people' && <People />}
       {view === 'mine' && <MyWeek />}
       {view === 'shared' && <Shared />}

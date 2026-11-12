@@ -1,5 +1,6 @@
 import type {
   AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary, SiteField, PendingFeedback, MediaItem,
+  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput,
 } from './types';
 
 export interface WeekSummary {
@@ -58,6 +59,26 @@ export interface Api {
     save(sub: PushSubscriptionJSON): Promise<void>;
     remove(endpoint: string): Promise<void>;
     test(): Promise<number>;
+  };
+  /** 일일 업무보고 (볼 수 있는 사람의 것만) */
+  daily: {
+    load(date: string): Promise<DailySnapshot>;
+    /** 내 칸 저장. 당일에만 (관리자는 언제나). 내용을 비우고 현장 칸이면 칸이 지워진다 */
+    save(input: SaveDailyInput): Promise<DailyReport | null>;
+    uploadPhoto(input: { date: string; siteId: string | null; blob: Blob; width: number; height: number }): Promise<DailyPhoto>;
+    deletePhoto(id: string): Promise<void>;
+    addComment(date: string, memberId: string, content: string): Promise<DailyComment>;
+    acknowledge(id: string): Promise<void>;
+    deleteComment(id: string): Promise<void>;
+    /** 내 일일보고에 달린 확인 전 피드백 (지난 날짜 포함) */
+    pending(): Promise<DailyComment[]>;
+  };
+  /** 공유 캘린더 */
+  calendar: {
+    /** from~to(포함)에 걸치는 일정 중 볼 수 있는 것 */
+    list(from: string, to: string): Promise<CalendarEvent[]>;
+    save(e: CalendarEvent): Promise<CalendarEvent>;
+    remove(id: string): Promise<void>;
   };
   /** 다른 사람이 바꾼 내용이 생기면 호출된다 */
   subscribe(onChange: () => void): () => void;
