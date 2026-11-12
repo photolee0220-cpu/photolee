@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-12T04:48:31Z",
+  "at": "2026-11-12T04:51:07Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -284,7 +284,7 @@
     {
       "check": "일일보고 사진 저장소",
       "ok": false,
-      "detail": "up={\"Key\":\"daily-photos/3e3f9b2a-ea0d-43c9-993d-60bf85c5c21e/2026-11-12/verify-test.jpg\",\"Id\":\"1c1d2199 del=[]"
+      "detail": "up={\"statusCode\":\"403\",\"error\":\"Unauthorized\",\"message\":\"new row violates row-level security policy\",\"c del=[{\"name\":\"3e3f9b2a-ea0d-43c9-993d-60bf85c5c21e/2026-11-12/verify-test.jpg\",\"bucket_id\":\"daily-photos"
     },
     {
       "check": "일일보고 저장 규칙",
