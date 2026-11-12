@@ -1,1 +1,1 @@
-apply 0010 entry writers 2026-11-08T23:41:21Z
+apply 0011 daily/calendar/team + functions 2026-11-12T04:45:43Z
