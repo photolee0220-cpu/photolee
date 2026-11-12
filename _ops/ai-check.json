@@ -1,10 +1,13 @@
 {
-  "at": "2026-10-29T01:11:22.149Z",
+  "at": "2026-11-12T04:54:40.176Z",
   "ok": true,
-  "week": "11월 2일 보고",
-  "seconds": 12,
-  "highlights": 13,
+  "notifyGate": "shown, skipped",
+  "seconds": 18,
+  "answerLines": 10,
+  "refs": 12,
+  "sources": 11,
   "model": "Claude Haiku 5.5",
-  "message": "AI 요약을 만들었습니다",
+  "used": "보고 157건 중 157건",
+  "matches": 30,
   "pageErrors": []
 }
