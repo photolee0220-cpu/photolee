@@ -164,7 +164,8 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
         placeholder="오늘 진행한 업무, 특이사항, 내일 계획 등을 적어 주세요" />
       <DailyPhotos date={date} siteId={null} authorId={me.id} photos={data.photos} editable={editable} onChanged={reload} />
 
-      {(siteIds.length > 0 || editable) && (
+      {/* 부서원(부서 안 보고)은 부서장에게만 보고하므로 현장별 칸이 없다 */}
+      {!internalTo && (siteIds.length > 0 || editable) && (
         <div className="mt-6 border-t border-line pt-5">
           <p className="mb-1 text-[13px] font-bold text-ink-2">현장 관련 내용 <span className="font-normal text-ink-3">· 대표님 화면의 현장 탭에 그 현장 보고로 함께 나옵니다</span></p>
           <div className="mt-3 space-y-4">
