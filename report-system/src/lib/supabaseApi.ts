@@ -3,18 +3,36 @@ import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf, triggerDownload } from './fileTypes';
-import type { AiSummary, Attachment, Comment, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
+import type { AiSummary, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
 
 const BUCKET = 'site-photos';
 const FILES = 'report-files';
+const DAILY = 'daily-photos';
+const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
 
-const toDept = (r: Row): Department => ({ id: r.id, name: r.name, sort: r.sort, writesSites: r.writes_sites, active: r.active });
+const toDept = (r: Row): Department => ({ id: r.id, name: r.name, sort: r.sort, writesSites: r.writes_sites, active: r.active, internalReport: !!r.internal_report, headId: r.head_id ?? null });
 const toMember = (r: Row): Member => ({
   id: r.id, username: r.username, name: r.name, title: r.title, departmentId: r.department_id,
   isCeo: r.is_ceo, isAdmin: r.is_admin, isExecutive: !!r.is_executive, active: r.active, mustChangePassword: r.must_change_password,
+  affiliation: r.affiliation ?? 'hq', homeSiteId: r.home_site_id ?? null, dailyEnabled: r.daily_enabled !== false,
+});
+const toDaily = (r: Row): DailyReport => ({
+  id: r.id, date: r.date, authorId: r.author_id, departmentId: r.department_id, siteId: r.site_id, authorKind: r.author_kind,
+  internal: !!r.internal, content: r.content, updatedAt: r.updated_at,
+});
+const toDailyComment = (r: Row): DailyComment => ({
+  id: r.id, date: r.date, memberId: r.member_id, authorId: r.author_id, content: r.content, createdAt: r.created_at,
+  editedAt: r.edited_at ?? null, acknowledgedAt: r.acknowledged_at ?? null,
+});
+const toStatus = (r: Row): DayStatus => ({
+  id: r.id, memberId: r.member_id, startDate: r.start_date, endDate: r.end_date, kind: r.kind, memo: r.memo ?? '', createdBy: r.created_by ?? '', createdAt: r.created_at,
+});
+const toEvent = (r: Row): CalendarEvent => ({
+  id: r.id, title: r.title, startDate: r.start_date, endDate: r.end_date, time: r.time ?? '', siteId: r.site_id, scope: r.scope,
+  departmentId: r.department_id, memo: r.memo ?? '', createdBy: r.created_by ?? '', updatedAt: r.updated_at,
 });
 const toSite = (r: Row): Site => ({
   id: r.id, name: r.name, note: r.note, stage: r.stage, dueDate: r.due_date, dueText: r.due_text, process: r.process,
@@ -36,7 +54,7 @@ const toSiteSummary = (r: Row): SiteSummary => ({
 });
 const toComment = (r: Row): Comment => ({
   id: r.id, entryId: r.entry_id, authorId: r.author_id, content: r.content, createdAt: r.created_at,
-  acknowledgedAt: r.acknowledged_at, acknowledgedBy: r.acknowledged_by,
+  editedAt: r.edited_at ?? null, acknowledgedAt: r.acknowledged_at, acknowledgedBy: r.acknowledged_by,
 });
 
 const toAttachment = (r: Row): Attachment => ({
@@ -74,6 +92,16 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     return rows.map((r) => ({
       id: r.id, weekId: r.week_id, siteId: r.site_id, departmentId: r.department_id, uploadedBy: r.uploaded_by,
       caption: r.caption ?? '', createdAt: r.created_at, width: r.width ?? 0, height: r.height ?? 0, url: urls.get(r.storage_path) ?? '',
+    }));
+  }
+
+  async function dailyUrls(rows: Row[]): Promise<DailyPhoto[]> {
+    if (!rows.length) return [];
+    const signed = await sb.storage.from(DAILY).createSignedUrls(rows.map((r) => r.storage_path), 60 * 60 * 6);
+    const urls = new Map((signed.data ?? []).map((x) => [x.path, x.signedUrl]));
+    return rows.map((r) => ({
+      id: r.id, date: r.date, authorId: r.author_id, departmentId: r.department_id, siteId: r.site_id, internal: !!r.internal,
+      width: r.width ?? 0, height: r.height ?? 0, createdAt: r.created_at, url: urls.get(r.storage_path) ?? '',
     }));
   }
 
@@ -343,41 +371,123 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     },
 
     async getSettings() {
-      const r = check(await sb.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle());
-      return { summaryModel: (r?.value as string) || DEFAULT_SUMMARY_MODEL };
+      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url'])) as Row[];
+      const get = (k: string) => rows.find((r) => r.key === k)?.value as string | undefined;
+      return { summaryModel: get('summary_model') || DEFAULT_SUMMARY_MODEL, layersUrl: get('layers_url') ?? '' };
     },
 
     subscribe(fn) {
       let t: ReturnType<typeof setTimeout> | undefined;
       const debounced = () => { clearTimeout(t); t = setTimeout(fn, 400); };
       const ch = sb.channel('report-changes');
-      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos', 'attachments', 'stages']) {
+      for (const table of ['entries', 'directives', 'comments', 'sites', 'photos', 'attachments', 'stages', 'daily_reports', 'daily_photos', 'daily_comments', 'day_status', 'calendar_events', 'departments', 'members']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, debounced);
       }
       ch.subscribe();
       return () => { clearTimeout(t); sb.removeChannel(ch); };
     },
 
-    async editComment() { throw new ApiError('준비 중인 기능입니다.'); },
-    // 일일보고·캘린더 서버 연결은 체험판 확인 후에 붙인다
-    daily: {
-      async load(date) { return { date, reports: [], photos: [], comments: [], statuses: [] }; },
-      async editComment() { throw new ApiError('준비 중인 기능입니다.'); },
-      async statuses() { return []; },
-      async saveStatus() { throw new ApiError('준비 중인 기능입니다.'); },
-      async removeStatus() { throw new ApiError('준비 중인 기능입니다.'); },
-      async save() { throw new ApiError('준비 중인 기능입니다.'); },
-      async uploadPhoto() { throw new ApiError('준비 중인 기능입니다.'); },
-      async deletePhoto() { throw new ApiError('준비 중인 기능입니다.'); },
-      async addComment() { throw new ApiError('준비 중인 기능입니다.'); },
-      async acknowledge() { throw new ApiError('준비 중인 기능입니다.'); },
-      async deleteComment() { throw new ApiError('준비 중인 기능입니다.'); },
-      async pending() { return []; },
+    async editComment(id, content) {
+      return toComment(check(await sb.rpc('edit_comment', { p_id: id, p_content: content })));
     },
+
+    daily: {
+      async load(date) {
+        const [rep, ph, cm, st] = await Promise.all([
+          sb.from('daily_reports').select('*').eq('date', date),
+          sb.from('daily_photos').select('*').eq('date', date).order('created_at'),
+          sb.from('daily_comments').select('*').eq('date', date).order('created_at'),
+          sb.from('day_status').select('*').lte('start_date', date).gte('end_date', date),
+        ]);
+        return {
+          date,
+          reports: (check(rep) as Row[]).map(toDaily),
+          photos: await dailyUrls(check(ph) as Row[]),
+          comments: (check(cm) as Row[]).map(toDailyComment),
+          statuses: (check(st) as Row[]).map(toStatus),
+        };
+      },
+      async save(i) {
+        const r = check(await sb.rpc('save_daily', { p_date: i.date, p_site: i.siteId, p_content: i.content }));
+        return r && r.id ? toDaily(r) : null;
+      },
+      async uploadPhoto(i) {
+        const me = await currentMember();
+        if (!me) throw new ApiError('로그인이 필요합니다.');
+        const path = `${me.id}/${i.date}/${crypto.randomUUID()}.jpg`;
+        const up = await sb.storage.from(DAILY).upload(path, i.blob, { contentType: 'image/jpeg', upsert: false });
+        if (up.error) throw new ApiError('사진을 올리지 못했습니다.');
+        const r = await sb.rpc('add_daily_photo', { p_date: i.date, p_site: i.siteId, p_path: path, p_width: i.width, p_height: i.height, p_size: i.blob.size });
+        if (r.error) {
+          await sb.storage.from(DAILY).remove([path]);
+          throw new ApiError(r.error.message);
+        }
+        return (await dailyUrls([r.data]))[0];
+      },
+      async deletePhoto(id) {
+        const path = check(await sb.rpc('delete_daily_photo', { p_id: id })) as string;
+        if (path) await sb.storage.from(DAILY).remove([path]);
+      },
+      async addComment(date, memberId, content) {
+        return toDailyComment(check(await sb.rpc('add_daily_comment', { p_date: date, p_member: memberId, p_content: content })));
+      },
+      async editComment(id, content) {
+        return toDailyComment(check(await sb.rpc('edit_daily_comment', { p_id: id, p_content: content })));
+      },
+      async acknowledge(id) {
+        check(await sb.rpc('ack_daily_comment', { p_id: id }));
+      },
+      async deleteComment(id) {
+        const r = check(await sb.from('daily_comments').delete().eq('id', id).select());
+        if (!(r as Row[]).length) throw new ApiError('본인이 쓴 글만 지울 수 있습니다.');
+      },
+      async pending() {
+        const me = await currentMember();
+        if (!me) return [];
+        const rows = check(await sb.from('daily_comments').select('*').eq('member_id', me.id).neq('author_id', me.id)
+          .is('acknowledged_at', null).order('created_at', { ascending: false }).limit(200)) as Row[];
+        return rows.map(toDailyComment);
+      },
+      async statuses(from, to) {
+        const rows = check(await sb.from('day_status').select('*').lte('start_date', to).gte('end_date', from).order('start_date')) as Row[];
+        return rows.map(toStatus);
+      },
+      async saveStatus(x) {
+        const row = { member_id: x.memberId, start_date: x.startDate, end_date: x.endDate, kind: x.kind, memo: x.memo.trim() };
+        const r = isUuid(x.id)
+          ? check(await sb.from('day_status').update(row).eq('id', x.id).select().single())
+          : check(await sb.from('day_status').insert({ ...row, created_by: (await currentMember())?.id }).select().single());
+        return toStatus(r);
+      },
+      async removeStatus(id) {
+        const r = check(await sb.from('day_status').delete().eq('id', id).select());
+        if (!(r as Row[]).length) throw new ApiError('지울 권한이 없습니다.');
+      },
+    },
+
     calendar: {
-      async list() { return []; },
-      async save() { throw new ApiError('준비 중인 기능입니다.'); },
-      async remove() { throw new ApiError('준비 중인 기능입니다.'); },
+      async list(from, to) {
+        const rows = check(await sb.from('calendar_events').select('*').lte('start_date', to).gte('end_date', from)
+          .order('start_date').order('time')) as Row[];
+        return rows.map(toEvent);
+      },
+      async save(e) {
+        if (!e.title.trim()) throw new ApiError('일정 제목을 입력해 주세요.');
+        if (e.endDate < e.startDate) throw new ApiError('끝나는 날이 시작일보다 빠릅니다.');
+        const row = { title: e.title.trim(), start_date: e.startDate, end_date: e.endDate, time: e.time, site_id: e.siteId, memo: e.memo.trim(), updated_at: new Date().toISOString() };
+        if (isUuid(e.id)) {
+          return toEvent(check(await sb.from('calendar_events').update({ ...row, scope: e.departmentId ? e.scope : 'all' }).eq('id', e.id).select().single()));
+        }
+        const me = await currentMember();
+        if (!me) throw new ApiError('로그인이 필요합니다.');
+        return toEvent(check(await sb.from('calendar_events').insert({
+          ...row, scope: me.departmentId ? e.scope : 'all', department_id: me.departmentId, created_by: me.id,
+        }).select().single()));
+      },
+      async remove(id) {
+        const r = check(await sb.from('calendar_events').delete().eq('id', id).select());
+        if (!(r as Row[]).length) throw new ApiError('만든 사람이나 관리자만 지울 수 있습니다.');
+      },
     },
 
     admin: {
@@ -447,7 +557,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         if (error) throw new ApiError(error.code === '23503' ? '이 단계에 현장이 있어 지울 수 없습니다. 현장을 다른 단계로 옮기거나 보관함의 현장도 확인해 주세요.' : error.message);
       },
       async saveDepartment(d) {
-        const row = { name: d.name, sort: d.sort, writes_sites: d.writesSites, active: d.active };
+        const row = { name: d.name, sort: d.sort, writes_sites: d.writesSites, active: d.active, internal_report: !!d.internalReport, head_id: d.headId ?? null };
         const r = d.id.startsWith('new_')
           ? check(await sb.from('departments').insert(row).select().single())
           : check(await sb.from('departments').update(row).eq('id', d.id).select().single());
@@ -472,12 +582,17 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         if (before.active !== m.active) await adminCall({ action: 'set_active', memberId: m.id, active: m.active });
         const r = check(await sb.from('members').update({
           name: m.name, title: m.title, department_id: m.departmentId, is_admin: m.isAdmin, is_ceo: m.isCeo, is_executive: m.isExecutive,
+          affiliation: m.affiliation ?? 'hq', home_site_id: m.affiliation === 'site' ? m.homeSiteId ?? null : null, daily_enabled: m.dailyEnabled !== false,
         }).eq('id', m.id).select().single());
         return toMember(r);
       },
       async saveSettings(next) {
-        check(await sb.from('app_settings').upsert({ key: 'summary_model', value: next.summaryModel, updated_at: new Date().toISOString() }));
-        return next;
+        const at = new Date().toISOString();
+        check(await sb.from('app_settings').upsert([
+          { key: 'summary_model', value: next.summaryModel, updated_at: at },
+          { key: 'layers_url', value: (next.layersUrl ?? '').trim(), updated_at: at },
+        ]));
+        return { ...next, layersUrl: (next.layersUrl ?? '').trim() };
       },
       async storageUsage() {
         const rows = check(await sb.rpc('storage_usage')) as Row[];

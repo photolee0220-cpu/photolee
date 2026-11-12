@@ -1,4 +1,4 @@
-// 푸시 알림: 마감 전 미작성자 알림, 대표 피드백 알림, 시험 알림
+// 푸시 알림: 마감 전 미작성자 알림(주간·일일), 피드백 알림(주간·일일), 시험 알림
 // 호출: 화면(로그인한 직원) → public-key, test / 서버 예약 작업(pg_cron·트리거) → deadline, feedback (cron_secret 확인)
 // 알림 서명 키(VAPID)는 처음 필요할 때 만들어 app_secrets에 보관한다
 import webpush from 'npm:web-push@3.6.7';
@@ -42,6 +42,23 @@ function currentWeek(now = new Date()): string {
   return kst.toISOString().slice(0, 10);
 }
 
+/** 오늘 날짜 (한국 시간) */
+function todayKst(now = new Date()): string {
+  return new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** 알림 본문용: 강조 표시를 빼고 한 줄로 */
+const plain = (t: string) => String(t).replace(/\[\/?(b|red|blue|hl)\]/g, '').replace(/\s+/g, ' ').slice(0, 90);
+
+/** 부서 안 보고 부서원(부서장 제외): 주간보고 대상이 아니다 */
+async function internalMemberIds(db: SupabaseClient): Promise<Set<string>> {
+  const { data: depts } = await db.from('departments').select('id, head_id').eq('internal_report', true);
+  if (!depts?.length) return new Set();
+  const { data: ms } = await db.from('members').select('id, department_id').in('department_id', depts.map((d) => d.id));
+  const heads = new Set(depts.map((d) => d.head_id));
+  return new Set((ms ?? []).filter((m) => !heads.has(m.id)).map((m) => m.id));
+}
+
 async function send(db: SupabaseClient, memberIds: string[], payload: Payload, kind: string) {
   if (!memberIds.length) return { sent: 0, failed: 0 };
   const keys = await vapid(db);
@@ -79,19 +96,49 @@ Deno.serve(async (req) => {
   const action = String(input.action ?? '');
 
   // 서버 예약 작업에서 오는 요청
-  if (action === 'deadline' || action === 'feedback') {
+  if (action === 'deadline' || action === 'feedback' || action === 'daily-deadline' || action === 'daily-feedback') {
     const expected = await secret(db, 'cron_secret');
     if (!expected || input.secret !== expected) return json({ error: 'forbidden' }, 403);
 
     if (action === 'deadline') {
       const week = currentWeek();
-      const { data: members } = await db.from('members').select('id, name').eq('active', true).eq('is_ceo', false).eq('is_executive', false).not('department_id', 'is', null);
+      const internal = await internalMemberIds(db);
+      const { data: all } = await db.from('members').select('id, name').eq('active', true).eq('is_ceo', false).eq('is_executive', false).not('department_id', 'is', null);
+      const members = (all ?? []).filter((m) => !internal.has(m.id));
       // 쓴 사람: 부서 업무보고는 본인 칸, 현장 칸은 함께 쓴 사람 모두
       const { data: written } = await db.from('entries').select('kind, author_id, updated_by, writers').eq('week_id', week).neq('content', '');
       const done = new Set((written ?? []).flatMap((r) => (r.kind === 'dept' ? [r.author_id] : [r.updated_by, ...(r.writers ?? [])])));
-      const targets = (members ?? []).filter((m) => !done.has(m.id)).map((m) => m.id);
-      const r = await send(db, targets, { title: '주간보고 작성 알림', body: '이번 주 보고가 아직 없습니다. 마감은 토요일 오전 10시입니다.', tag: `deadline-${week}` }, 'deadline');
+      const targets = members.filter((m) => !done.has(m.id)).map((m) => m.id);
+      const r = await send(db, targets, { title: '[주간보고] 작성 알림', body: '이번 주 보고가 아직 없습니다. 마감은 토요일 오전 10시입니다.', tag: `deadline-${week}` }, 'deadline');
       return json({ week, targets: targets.length, ...r });
+    }
+
+    // 평일 오후 6시: 그날 일일보고를 안 쓴 사람 (근무 상태 등록자는 반차 빼고 제외)
+    if (action === 'daily-deadline') {
+      const date = todayKst();
+      const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+      if (dow === 0 || dow === 6) return json({ date, skipped: 'weekend' });
+      const [{ data: people }, { data: rep }, { data: ph }, { data: st }] = await Promise.all([
+        db.from('members').select('id').eq('active', true).eq('is_ceo', false).eq('is_executive', false).eq('daily_enabled', true).not('department_id', 'is', null),
+        db.from('daily_reports').select('author_id').eq('date', date).neq('content', ''),
+        db.from('daily_photos').select('author_id').eq('date', date),
+        db.from('day_status').select('member_id, kind').lte('start_date', date).gte('end_date', date),
+      ]);
+      const done = new Set([...(rep ?? []).map((r) => r.author_id), ...(ph ?? []).map((r) => r.author_id)]);
+      const away = new Set((st ?? []).filter((x) => x.kind !== 'half').map((x) => x.member_id));
+      const targets = (people ?? []).map((m) => m.id).filter((id) => !done.has(id) && !away.has(id));
+      const r = await send(db, targets, { title: '[일일보고] 작성 알림', body: '오늘 일일보고를 아직 쓰지 않으셨습니다. 오늘 안에 써 주세요.', tag: `daily-${date}` }, 'daily-deadline');
+      return json({ date, targets: targets.length, ...r });
+    }
+
+    if (action === 'daily-feedback') {
+      const { data: c } = await db.from('daily_comments').select('id, date, member_id, author_id, content').eq('id', input.commentId).maybeSingle();
+      if (!c) return json({ error: 'not found' }, 404);
+      const { data: author } = await db.from('members').select('name, title, is_ceo').eq('id', c.author_id).maybeSingle();
+      const who = author?.is_ceo ? '대표님' : `${author?.name ?? ''} ${author?.title ?? ''}`.trim();
+      const [, m, d] = String(c.date).split('-');
+      const r = await send(db, [c.member_id], { title: `[일일보고] ${who} 피드백 · ${Number(m)}/${Number(d)}`, body: plain(c.content), tag: `daily-feedback-${c.id}` }, 'daily-feedback');
+      return json(r);
     }
 
     const { data: c } = await db.from('comments').select('id, entry_id, content, author_id').eq('id', input.commentId).maybeSingle();
@@ -110,10 +157,10 @@ Deno.serve(async (req) => {
     } else if (e.author_id) {
       targets = [e.author_id];
     }
-    const text = String(c.content).replace(/\s+/g, ' ').slice(0, 90);
+    const text = plain(c.content);
     const { data: author } = await db.from('members').select('name, title, is_ceo').eq('id', c.author_id).maybeSingle();
     const who = author?.is_ceo ? '대표님 피드백' : `${author?.name ?? ''} ${author?.title ?? ''} 코멘트`.trim();
-    const r = await send(db, targets, { title: `${who} · ${where}`, body: text, tag: `feedback-${c.id}` }, 'feedback');
+    const r = await send(db, targets, { title: `[주간보고] ${who} · ${where}`, body: text, tag: `feedback-${c.id}` }, 'feedback');
     return json(r);
   }
 
@@ -127,6 +174,6 @@ Deno.serve(async (req) => {
   if (!me?.active) return json({ error: '사용할 수 없는 계정입니다.' }, 403);
 
   if (action === 'public-key') return json({ publicKey: (await vapid(db)).publicKey });
-  if (action === 'test') return json(await send(db, [me.id], { title: '주간보고 알림 시험', body: '이 기기에서 알림을 받을 수 있습니다 ✓', tag: 'test' }, 'test'));
+  if (action === 'test') return json(await send(db, [me.id], { title: '업무보고 알림 시험', body: '이 기기에서 알림을 받을 수 있습니다 ✓', tag: 'test' }, 'test'));
   return json({ error: '알 수 없는 요청입니다.' }, 400);
 });
