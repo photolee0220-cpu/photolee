@@ -1,6 +1,6 @@
 import type {
   AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary, SiteField, PendingFeedback, MediaItem,
-  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput,
+  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus,
 } from './types';
 
 export interface WeekSummary {
@@ -29,6 +29,8 @@ export interface Api {
   saveEntry(input: SaveEntryInput): Promise<Entry>;
   saveDirective(input: SaveDirectiveInput): Promise<Directive>;
   addComment(entryId: string, content: string): Promise<Comment>;
+  /** 내가 쓴 피드백 고치기 (상대가 확인하기 전까지만) */
+  editComment(id: string, content: string): Promise<Comment>;
   acknowledgeComment(id: string): Promise<void>;
   deleteComment(id: string): Promise<void>;
   uploadPhoto(input: NewPhotoInput): Promise<Photo>;
@@ -68,10 +70,16 @@ export interface Api {
     uploadPhoto(input: { date: string; siteId: string | null; blob: Blob; width: number; height: number }): Promise<DailyPhoto>;
     deletePhoto(id: string): Promise<void>;
     addComment(date: string, memberId: string, content: string): Promise<DailyComment>;
+    editComment(id: string, content: string): Promise<DailyComment>;
     acknowledge(id: string): Promise<void>;
     deleteComment(id: string): Promise<void>;
     /** 내 일일보고에 달린 확인 전 피드백 (지난 날짜 포함) */
     pending(): Promise<DailyComment[]>;
+    /** from~to에 걸친 근무 상태 중 볼 수 있는 것 */
+    statuses(from: string, to: string): Promise<DayStatus[]>;
+    /** 본인·부서장·관리자 */
+    saveStatus(s: DayStatus): Promise<DayStatus>;
+    removeStatus(id: string): Promise<void>;
   };
   /** 공유 캘린더 */
   calendar: {

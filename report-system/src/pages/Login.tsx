@@ -34,7 +34,7 @@ export function Login({ onSignedIn }: { onSignedIn(m: Member): void }) {
         <div className="mb-9 flex flex-col items-center text-center">
           <Logo size={112} />
           <p className="mt-5 text-[13px] font-semibold tracking-[0.12em] text-ink-3">사닥다리종합건설</p>
-          <h1 className="mt-1 text-[24px] font-bold tracking-[-0.025em]">주간보고</h1>
+          <h1 className="mt-1 text-[24px] font-bold tracking-[-0.025em]">업무보고 시스템</h1>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-7 shadow-card">
           <p className="text-[13.5px] text-ink-2">관리자에게 받은 아이디로 로그인하세요</p>

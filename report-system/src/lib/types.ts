@@ -62,6 +62,10 @@ export interface Department {
   /** 현장별 표에 칸을 가지는 부서 (공무, 인테리어/디자인, CM, 견적) */
   writesSites: boolean;
   active: boolean;
+  /** 부서 안 보고: 부서원은 대표님이 아니라 부서장에게 일일보고를 쓴다 */
+  internalReport?: boolean;
+  /** 부서장 (부서 안 보고일 때 부서원 보고를 받는 사람) */
+  headId?: string | null;
 }
 
 export interface Member {
@@ -80,6 +84,8 @@ export interface Member {
   affiliation?: Affiliation;
   /** 현장 소속이면 근무하는 현장 */
   homeSiteId?: string | null;
+  /** 일일보고 작성 대상 (관리자가 끌 수 있다) */
+  dailyEnabled?: boolean;
 }
 
 export type Affiliation = 'hq' | 'site';
@@ -94,6 +100,8 @@ export interface DailyReport {
   siteId: string | null;
   /** 쓸 때의 소속 (나중에 소속이 바뀌어도 그날 보고는 그대로 분류) */
   authorKind: Affiliation;
+  /** 부서 안 보고 부서원의 보고: 그 부서 안에서만 보인다 */
+  internal?: boolean;
   content: string;
   updatedAt: string;
 }
@@ -104,6 +112,7 @@ export interface DailyPhoto {
   authorId: string;
   departmentId: string;
   siteId: string | null;
+  internal?: boolean;
   width: number;
   height: number;
   createdAt: string;
@@ -119,7 +128,31 @@ export interface DailyComment {
   authorId: string;
   content: string;
   createdAt: string;
+  /** 확인 전에 고친 시각 */
+  editedAt?: string | null;
   acknowledgedAt: string | null;
+}
+
+/** 근무 상태 (연차·출장 등). 이 기간에는 일일보고 미작성으로 세지 않는다 (반차는 표시만) */
+export type DayStatusKind = 'annual' | 'half' | 'vacation' | 'trip' | 'training' | 'off';
+export const DAY_STATUS: { id: DayStatusKind; label: string }[] = [
+  { id: 'annual', label: '연차' },
+  { id: 'half', label: '반차' },
+  { id: 'vacation', label: '휴가' },
+  { id: 'trip', label: '출장' },
+  { id: 'training', label: '교육' },
+  { id: 'off', label: '휴무' },
+];
+
+export interface DayStatus {
+  id: string;
+  memberId: string;
+  startDate: string;
+  endDate: string;
+  kind: DayStatusKind;
+  memo: string;
+  createdBy: string;
+  createdAt: string;
 }
 
 export interface DailySnapshot {
@@ -127,6 +160,8 @@ export interface DailySnapshot {
   reports: DailyReport[];
   photos: DailyPhoto[];
   comments: DailyComment[];
+  /** 이 날짜에 걸친 근무 상태 */
+  statuses: DayStatus[];
 }
 
 export interface SaveDailyInput {
@@ -265,6 +300,8 @@ export interface Comment {
   authorId: string;
   content: string;
   createdAt: string;
+  /** 확인 전에 고친 시각 */
+  editedAt?: string | null;
   acknowledgedAt: string | null;
   acknowledgedBy: string | null;
 }
@@ -341,6 +378,8 @@ export interface AiSummary {
 
 export interface AppSettings {
   summaryModel: string;
+  /** 레이어스 시스템 주소 (대표님 화면의 레이어스 버튼) */
+  layersUrl?: string;
 }
 
 export interface Seed {
@@ -358,6 +397,7 @@ export interface Seed {
   daily?: DailyReport[];
   dailyComments?: DailyComment[];
   events?: CalendarEvent[];
+  dayStatus?: DayStatus[];
 }
 
 /** 화면 하나를 그리는 데 필요한 데이터. 권한에 따라 이미 걸러진 상태 */
@@ -410,4 +450,5 @@ export interface NewMemberInput {
   isExecutive: boolean;
   affiliation: Affiliation;
   homeSiteId: string | null;
+  dailyEnabled: boolean;
 }

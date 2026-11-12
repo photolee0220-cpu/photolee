@@ -36,7 +36,7 @@ export function AdminPage() {
           <Logo size={34} />
           <div className="flex-1 leading-tight">
             <p className="text-[15px] font-bold">관리자 페이지</p>
-            <p className="text-[12px] text-ink-3">사닥다리종합건설 주간보고</p>
+            <p className="text-[12px] text-ink-3">사닥다리 업무보고 시스템</p>
           </div>
           <Button size="sm" tone="ghost" onClick={() => setView(defaultView(me))}><ArrowLeft size={15} />보고 화면으로</Button>
         </div>
@@ -514,7 +514,7 @@ function MembersAdmin() {
                   <td className="px-3 py-2.5 font-mono text-[12.5px] text-ink-2">{m.username}</td>
                   <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}
                     {m.affiliation === 'site' && <span className="mt-0.5 block text-[12px] font-semibold text-brand-ink">현장 · {snap.sites.find((s) => s.id === m.homeSiteId)?.name ?? '현장 미지정'}</span>}</td>
-                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}</span></td>
+                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}{m.dailyEnabled === false && <Badge>일일보고 안 씀</Badge>}{snap.departments.some((d) => d.internalReport && d.headId === m.id) && <Badge tone="note">부서장</Badge>}</span></td>
                   <td className="px-3 py-2.5"><span className="flex items-center gap-1.5">{m.active ? (m.mustChangePassword ? <Badge tone="note">첫 로그인 전</Badge> : <Badge tone="ok">사용 중</Badge>) : <Badge>중지</Badge>}
                     {pushOn.has(m.id) && <span title="알림 켬" className="text-brand-ink"><Bell size={14} /></span>}</span></td>
                   <td className="px-3 py-2.5">
@@ -541,7 +541,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
   const [m, set] = useState({
     name: member?.name ?? '', title: member?.title ?? '', username: member?.username ?? '', password: genPassword(),
     departmentId: member?.departmentId ?? '', isAdmin: member?.isAdmin ?? false, isCeo: member?.isCeo ?? false, isExecutive: member?.isExecutive ?? false, active: member?.active ?? true,
-    affiliation: (member?.affiliation ?? 'hq') as Affiliation, homeSiteId: member?.homeSiteId ?? '',
+    affiliation: (member?.affiliation ?? 'hq') as Affiliation, homeSiteId: member?.homeSiteId ?? '', dailyEnabled: member?.dailyEnabled ?? true,
   });
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null);
   const [newDept, setNewDept] = useState<{ name: string; writesSites: boolean } | null>(null);
@@ -565,17 +565,17 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
       const renamed = m.username !== member.username;
       const ok = await run(async () => {
         if (renamed) await api.admin.changeUsername(member.id, m.username);
-        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null });
+        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null, dailyEnabled: m.dailyEnabled });
       }, renamed ? `저장했습니다. 이제 아이디 ${m.username}(으)로 로그인합니다` : '저장했습니다');
       if (ok) onClose();
     } else {
-      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null }), `${m.name}님 계정을 만들었습니다`);
+      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null, dailyEnabled: m.dailyEnabled }), `${m.name}님 계정을 만들었습니다`);
       if (ok) setCreated({ username: m.username, password: m.password });
     }
   };
 
   if (created) {
-    const text = `[사닥다리 주간보고]\n접속 주소: ${location.origin}${location.pathname}\n아이디: ${created.username}\n임시 비밀번호: ${created.password}\n처음 로그인하면 비밀번호를 바꿔주세요.`;
+    const text = `[사닥다리 업무보고 시스템]\n접속 주소: ${location.origin}${location.pathname}\n아이디: ${created.username}\n임시 비밀번호: ${created.password}\n처음 로그인하면 비밀번호를 바꿔주세요.`;
     return (
       <Modal open onClose={onClose} title="계정을 만들었습니다" footer={<>
         <Button onClick={() => navigator.clipboard?.writeText(text).catch(() => undefined)}>안내문 복사</Button>
@@ -639,6 +639,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
           </Field>
         </div>
         <div className="space-y-3 sm:col-span-2">
+          <Toggle checked={m.dailyEnabled} onChange={(v) => up('dailyEnabled', v)} label={<>일일보고 작성 대상 <span className="text-ink-3">끄면 일일보고 칸·미작성 집계·마감 알림에서 빠집니다</span></>} />
           <Toggle checked={m.isAdmin} onChange={(v) => up('isAdmin', v)} disabled={isSelf} label={<>관리자 <span className="text-ink-3">현장·인원·부서 관리, 전체 엑셀</span></>} />
           <Toggle checked={m.isCeo} onChange={(v) => up('isCeo', v)} label={<>대표 <span className="text-ink-3">전체 열람, 지시사항·피드백 입력, 회계 현황</span></>} />
           <Toggle checked={m.isExecutive} onChange={(v) => up('isExecutive', v)} label={<>전체 열람·코멘트 <span className="text-ink-3">본부장 등 · 모든 보고를 보고 코멘트만 남김 (보고 작성·마감 알림 대상 아님)</span></>} />
@@ -689,7 +690,7 @@ function DeptsAdmin() {
     <div className="space-y-10">
       <section>
         <h1 className="text-[20px] font-extrabold">부서</h1>
-        <p className="mb-3 text-[13px] text-ink-3">'현장 칸'을 켠 부서는 현장마다 보고 칸이 생깁니다 (지금은 공무, 인테리어/디자인, CM, 견적).</p>
+        <p className="mb-3 text-[13px] text-ink-3">'현장 칸'을 켠 부서는 현장마다 보고 칸이 생깁니다. '부서 안 보고'를 켜면 부서원은 부서장에게 일일보고만 쓰고(대표님 화면에는 나오지 않음), 부서장이 대표님께 보고합니다.</p>
         <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           {depts.map((d, i) => (
             <div key={d.id} className={cx('flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0', !d.active && 'opacity-50')}>
@@ -709,6 +710,13 @@ function DeptsAdmin() {
                 )}
               </div>
               <Toggle checked={d.writesSites} onChange={(v) => run(() => api.admin.saveDepartment({ ...d, writesSites: v }))} label="현장 칸" />
+              <Toggle checked={!!d.internalReport} onChange={(v) => run(() => api.admin.saveDepartment({ ...d, internalReport: v }), v ? '부서 안 보고를 켰습니다. 부서장을 지정해 주세요' : '부서 안 보고를 껐습니다')} label="부서 안 보고" />
+              {d.internalReport && (
+                <Select aria-label={`${d.name} 부서장`} value={d.headId ?? ''} onChange={(e) => run(() => api.admin.saveDepartment({ ...d, headId: e.target.value || null }), '부서장을 지정했습니다')} className="!h-9 !w-auto min-w-[150px] text-[13px]">
+                  <option value="">부서장 선택</option>
+                  {snap.members.filter((m) => m.active && m.departmentId === d.id).map((m) => <option key={m.id} value={m.id}>{m.name} {m.title}</option>)}
+                </Select>
+              )}
               <Toggle checked={d.active} onChange={(v) => run(() => api.admin.saveDepartment({ ...d, active: v }))} label="사용" />
               <div className="flex">
                 <Button size="sm" tone="ghost" onClick={() => setRenaming({ id: d.id, name: d.name })}><Pencil size={14} />이름 변경</Button>
@@ -1077,22 +1085,26 @@ function BackupsCard() {
 function AiSettings() {
   const { toast } = useStore();
   const [model, setModel] = useState<string | null>(null);
+  const [layers, setLayers] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => { api.getSettings().then((s) => setModel(s.summaryModel)).catch(() => setModel(SUMMARY_MODELS[0].id)); }, []);
+  useEffect(() => {
+    api.getSettings().then((s) => { setModel(s.summaryModel); setLayers(s.layersUrl ?? ''); }).catch(() => setModel(SUMMARY_MODELS[0].id));
+  }, []);
 
-  const choose = async (id: string) => {
-    if (id === model) return;
+  const save = async (next: { summaryModel?: string; layersUrl?: string }, msg: string) => {
     setSaving(true);
     try {
-      const s = await api.admin.saveSettings({ summaryModel: id });
+      const s = await api.admin.saveSettings({ summaryModel: next.summaryModel ?? model ?? SUMMARY_MODELS[0].id, layersUrl: next.layersUrl ?? layers });
       setModel(s.summaryModel);
-      toast('AI 요약 모델을 바꿨습니다. 다음 요약부터 적용됩니다');
+      setLayers(s.layersUrl ?? '');
+      toast(msg);
     } catch (e) {
       toast(e instanceof Error ? e.message : '저장하지 못했습니다.', 'error');
     } finally {
       setSaving(false);
     }
   };
+  const choose = (id: string) => { if (id !== model) void save({ summaryModel: id }, 'AI 모델을 바꿨습니다. 다음 질문부터 적용됩니다'); };
 
   return (
     <div className="max-w-[720px]">
@@ -1118,6 +1130,13 @@ function AiSettings() {
           })}
         </div>
       )}
+
+      <h2 className="mt-10 text-[18px] font-extrabold">레이어스 연결</h2>
+      <p className="mb-3 text-[13px] text-ink-3">대표님 화면의 '레이어스' 버튼을 누르면 이 주소가 새 창으로 열립니다. 레이어스 시스템이 생기면 주소를 넣어 주세요.</p>
+      <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void save({ layersUrl: layers }, layers.trim() ? '레이어스 주소를 저장했습니다' : '레이어스 주소를 비웠습니다'); }}>
+        <Input id="layers-url" value={layers} onChange={(e) => setLayers(e.target.value)} placeholder="https://..." className="!w-80 max-w-full" />
+        <Button type="submit" disabled={saving || (!!layers.trim() && !/^https:\/\//.test(layers.trim()))}>저장</Button>
+      </form>
     </div>
   );
 }

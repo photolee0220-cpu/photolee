@@ -1,12 +1,12 @@
-import { ChevronLeft, ChevronRight, Clock, Globe2, MapPin, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { CalendarOff, ChevronLeft, ChevronRight, Clock, Globe2, MapPin, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../components/AppShell';
-import { Badge, Button, Card, cx, Field, IconButton, Input, Modal, Segmented, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal, Segmented, Select, Spinner } from '../components/ui';
 import { newId } from '../lib/api';
-import { canEditEvent } from '../lib/access';
+import { canEditEvent, canSeeAll } from '../lib/access';
 import { api } from '../lib/client';
 import { byId, visibleSites } from '../lib/derive';
-import type { CalendarEvent, CalendarScope } from '../lib/types';
+import { DAY_STATUS, type CalendarEvent, type CalendarScope, type DayStatus } from '../lib/types';
 import { dayLabel, parseIsoDate, shiftDay, todayIso, toIsoDate } from '../lib/week';
 import { useStore } from '../state/store';
 
@@ -35,18 +35,32 @@ export function CalendarPage() {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [selected, setSelected] = useState(today);
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
+  const [statuses, setStatuses] = useState<DayStatus[]>([]);
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [mode, setMode] = useState<'month' | 'sites'>('month');
   const days = useMemo(() => monthGrid(month), [month]);
 
   const load = useCallback(async () => {
-    try { setEvents(await api.calendar.list(days[0], days[days.length - 1])); } catch (e) { toast(e instanceof Error ? e.message : '불러오지 못했습니다.', 'error'); setEvents([]); }
+    try {
+      const [ev, st] = await Promise.all([api.calendar.list(days[0], days[days.length - 1]), api.daily.statuses(days[0], days[days.length - 1]).catch(() => [])]);
+      setEvents(ev);
+      setStatuses(st);
+    } catch (e) { toast(e instanceof Error ? e.message : '불러오지 못했습니다.', 'error'); setEvents([]); }
   }, [days, toast]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => api.subscribe(() => void load()), [load]);
 
   if (!snap || !events) return <div className="flex justify-center py-20"><Spinner /></div>;
   const sites = byId(snap.sites);
-  const on = (d: string) => events.filter((e) => e.startDate <= d && e.endDate >= d);
+  const members = byId(snap.members);
+  const shown = siteFilter === 'all' ? events : events.filter((e) => e.siteId === siteFilter);
+  const on = (d: string) => shown.filter((e) => e.startDate <= d && e.endDate >= d);
+  // 근무 상태(연차·출장 등)는 현장 필터가 '전체'일 때만 함께 보인다
+  const away = (d: string) => (siteFilter === 'all' ? statuses.filter((x) => x.startDate <= d && x.endDate >= d) : []);
+  const awayLabel = (x: DayStatus) => `${members.get(x.memberId)?.name ?? ''} ${DAY_STATUS.find((k) => k.id === x.kind)?.label ?? ''}`;
+  const usedSites = [...new Set(events.map((e) => e.siteId).filter(Boolean) as string[])].map((id) => sites.get(id)).filter(Boolean);
+  const all = canSeeAll(me);
   const label = (e: CalendarEvent) => (e.siteId ? `${sites.get(e.siteId)?.name ?? ''} · ${e.title}` : e.title);
   const blank = (date: string): CalendarEvent => ({
     id: newId('ev'), title: '', startDate: date, endDate: date, time: '', siteId: null, scope: me.departmentId ? 'dept' : 'all',
@@ -55,6 +69,7 @@ export function CalendarPage() {
   const go = (m: string) => { setMonth(m); setSelected(m === today.slice(0, 7) ? today : `${m}-01`); };
   const [y, mo] = month.split('-').map(Number);
   const dayList = on(selected);
+  const dayAway = away(selected);
 
   return (
     <div className="mx-auto max-w-[1100px]">
@@ -73,6 +88,22 @@ export function CalendarPage() {
         </span>
       </div>
 
+      {(all || usedSites.length > 0) && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {all && <Segmented<'month' | 'sites'> value={mode} onChange={setMode} className="mr-2" options={[{ id: 'month', label: '달력' }, { id: 'sites', label: '현장별 목록' }]} />}
+          {mode === 'month' && <>
+            <button onClick={() => setSiteFilter('all')} className={cx('rounded-full border px-2.5 py-1 text-[12px] font-semibold', siteFilter === 'all' ? 'border-brand bg-brand text-on-brand' : 'border-line-strong bg-surface text-ink-2 hover:border-brand')}>전체</button>
+            {usedSites.map((x) => (
+              <button key={x!.id} onClick={() => setSiteFilter(siteFilter === x!.id ? 'all' : x!.id)}
+                className={cx('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold', siteFilter === x!.id ? 'border-brand bg-brand text-on-brand' : 'border-line-strong bg-surface text-ink-2 hover:border-brand')}>
+                <MapPin size={11} />{x!.name}
+              </button>
+            ))}
+          </>}
+        </div>
+      )}
+
+      {mode === 'sites' ? <SiteList month={month} events={events.filter((e) => e.endDate >= `${month}-01` && e.startDate <= `${month}-31`)} onEdit={setEditing} onChanged={load} /> : <>
       <Card className="overflow-hidden">
         <div className="grid grid-cols-7 border-b border-line bg-sunken text-center text-[12px] font-bold">
           {DOW.map((d, i) => <div key={d} className={cx('py-2', i === 0 ? 'text-danger' : i === 6 ? 'text-brand-ink' : 'text-ink-2')}>{d}</div>)}
@@ -99,9 +130,12 @@ export function CalendarPage() {
                     </span>
                   ))}
                   {list.length > 3 && <span className="block px-1 text-[11px] font-semibold text-ink-3">+{list.length - 3}건</span>}
+                  {away(d).slice(0, 2).map((x) => <span key={x.id} className="block truncate px-1 text-[11px] font-semibold text-ink-3">· {awayLabel(x)}</span>)}
+                  {away(d).length > 2 && <span className="block px-1 text-[11px] text-ink-3">· 외 {away(d).length - 2}명</span>}
                 </span>
                 <span className="flex flex-wrap gap-0.5 sm:hidden">
                   {list.slice(0, 4).map((e) => <span key={e.id} className={cx('h-1.5 w-1.5 rounded-full', e.scope === 'all' ? 'bg-brand' : 'bg-amber-500')} />)}
+                  {away(d).length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />}
                 </span>
               </button>
             );
@@ -114,17 +148,24 @@ export function CalendarPage() {
           <h2 className="text-[16px] font-bold">{dayLabel(selected)} <span className="text-ink-3">{dayList.length}건</span></h2>
           <Button size="sm" onClick={() => setEditing(blank(selected))}><Plus size={14} />이 날 일정 추가</Button>
         </div>
-        {dayList.length === 0 ? <p className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-[13.5px] text-ink-3">일정이 없습니다</p> : (
+        {dayList.length === 0 && !dayAway.length ? <p className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-[13.5px] text-ink-3">일정이 없습니다</p> : (
           <div className="space-y-2.5">{dayList.map((e) => <EventCard key={e.id} e={e} onEdit={() => setEditing(e)} onChanged={load} />)}</div>
         )}
+        {dayAway.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-ink-3"><CalendarOff size={13} />근무 상태</span>
+            {dayAway.map((x) => <span key={x.id} className="rounded-full border border-note-line bg-note px-2.5 py-0.5 text-[12.5px] font-semibold text-note-ink">{awayLabel(x)}{x.memo && ` (${x.memo})`}</span>)}
+          </div>
+        )}
       </section>
+      </>}
 
       {editing && <EventForm event={editing} isNew={!events.some((x) => x.id === editing.id)} onClose={() => setEditing(null)} onSaved={(e) => { setEditing(null); setSelected(e.startDate); void load(); }} />}
     </div>
   );
 }
 
-function EventCard({ e, onEdit, onChanged }: { e: CalendarEvent; onEdit(): void; onChanged(): void }) {
+function EventCard({ e, onEdit, onChanged, showDate }: { e: CalendarEvent; onEdit(): void; onChanged(): void; showDate?: boolean }) {
   const { snap, me, toast } = useStore();
   if (!snap) return null;
   const site = e.siteId ? snap.sites.find((s) => s.id === e.siteId) : undefined;
@@ -140,7 +181,7 @@ function EventCard({ e, onEdit, onChanged }: { e: CalendarEvent; onEdit(): void;
         <div className="min-w-0 flex-1">
           <p className="text-[15px] font-bold">{e.title}</p>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-2">
-            <span className="inline-flex items-center gap-1"><Clock size={13} />{e.startDate === e.endDate ? '' : `${dayLabel(e.startDate)} ~ ${dayLabel(e.endDate)} · `}{e.time || '종일'}</span>
+            <span className="inline-flex items-center gap-1"><Clock size={13} />{e.startDate === e.endDate ? (showDate ? `${dayLabel(e.startDate)} · ` : '') : `${dayLabel(e.startDate)} ~ ${dayLabel(e.endDate)} · `}{e.time || '종일'}</span>
             {site && <span className="inline-flex items-center gap-1 font-semibold text-brand-ink"><MapPin size={13} />{site.name}</span>}
             {e.scope === 'all' ? <Badge tone="brand"><Globe2 size={11} />전체</Badge> : <Badge tone="note"><Users size={11} />{dept?.name ?? '부서'}</Badge>}
           </p>
@@ -206,5 +247,25 @@ function EventForm({ event, isNew, onClose, onSaved }: { event: CalendarEvent; i
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** 대표님: 이번 달 일정을 현장별로 묶어 보기 */
+function SiteList({ month, events, onEdit, onChanged }: { month: string; events: CalendarEvent[]; onEdit(e: CalendarEvent): void; onChanged(): void }) {
+  const { snap } = useStore();
+  if (!snap) return null;
+  const groups = [...visibleSites(snap).map((s) => ({ key: s.id, name: s.name, list: events.filter((e) => e.siteId === s.id) })),
+    { key: 'none', name: '현장 없음 (회사 일정)', list: events.filter((e) => !e.siteId) }].filter((g) => g.list.length);
+  const [y, m] = month.split('-').map(Number);
+  if (!groups.length) return <Empty title={`${y}년 ${m}월 일정이 없습니다`} />;
+  return (
+    <div className="space-y-6">
+      {groups.map((g) => (
+        <section key={g.key}>
+          <h3 className="mb-2 flex items-center gap-1.5 text-[15px] font-bold">{g.key !== 'none' && <MapPin size={15} className="text-brand" />}{g.name} <span className="text-ink-3">{g.list.length}건</span></h3>
+          <div className="space-y-2">{g.list.map((e) => <EventCard key={e.id} e={e} onEdit={() => onEdit(e)} onChanged={onChanged} showDate />)}</div>
+        </section>
+      ))}
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { stripMarks } from '../lib/marks';
 import { RichLines } from '../components/RichText';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { Avatar, Badge, Card, cx, Empty, Spinner } from '../components/ui';
-import { canViewDept } from '../lib/access';
+import { canViewDept, isInternalMember } from '../lib/access';
 import { activeDepartments, commentsFor, firstLines, has, hasWritten, memberDirective, personEntry, siteWork } from '../lib/derive';
 import { headingText, isHeading } from '../lib/sections';
 import type { Entry, Member } from '../lib/types';
@@ -16,7 +16,7 @@ export function PeopleGrid({ compact, onlyDepartments }: { compact?: boolean; on
   const { snap, me, openDrawer } = useStore();
   if (!snap) return null;
   const depts = activeDepartments(snap).filter((d) => canViewDept(me, d.id, snap.grants) && (!onlyDepartments || onlyDepartments.includes(d.id)));
-  const people = depts.flatMap((d) => snap.members.filter((m) => m.active && m.departmentId === d.id).map((m) => ({ m, dept: d })));
+  const people = depts.flatMap((d) => snap.members.filter((m) => m.active && m.departmentId === d.id && !isInternalMember(m, snap.departments)).map((m) => ({ m, dept: d })));
   if (!people.length) return <Empty title="볼 수 있는 부서 보고가 없습니다" />;
 
   return (

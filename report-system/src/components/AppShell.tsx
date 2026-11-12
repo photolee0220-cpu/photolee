@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarDays, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
+  BookOpen, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -8,16 +8,24 @@ import { api } from '../lib/client';
 import { byId, has, personEntry } from '../lib/derive';
 import { currentWeekId, deadlineText, shiftWeek, weekLabel } from '../lib/week';
 import { useStore, type View } from '../state/store';
-import { canSeeAll, isReviewer } from '../lib/access';
-import { NotificationButton } from './Notifications';
+import { canSeeAll, headedDepartments, isInternalMember, isReviewer, writesDaily } from '../lib/access';
+import type { Department } from '../lib/types';
+import { NotificationButton, NotificationGate } from './Notifications';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
 type NavItem = { id: View; label: string; icon: ReactNode };
 
-export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean): NavItem[] {
+export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean, departments: Department[] = []): NavItem[] {
   const items: NavItem[] = [];
+  // 부서 안 보고 부서원: 부서장에게 일일보고만 쓴다
+  if (isInternalMember(me, departments)) {
+    if (writesDaily(me)) items.push({ id: 'daily', label: '일일보고', icon: <ClipboardList size={18} /> });
+    items.push({ id: 'calendar', label: '캘린더', icon: <CalendarDays size={18} /> });
+    return items;
+  }
   if (me.departmentId && !isReviewer(me)) {
-    items.push({ id: 'daily', label: '일일보고', icon: <ClipboardList size={18} /> });
+    if (writesDaily(me)) items.push({ id: 'daily', label: '일일보고', icon: <ClipboardList size={18} /> });
+    if (headedDepartments(me, departments).length) items.push({ id: 'team', label: '부서원 보고', icon: <UsersRound size={18} /> });
     items.push({ id: 'mine', label: '이번 주 작성', icon: <PenLine size={18} /> });
     items.push({ id: 'report', label: '내 보고', icon: <FileText size={18} /> });
   }
@@ -181,7 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { me, snap, view, setView, setSearchOpen, signOut } = useStore();
   const { isDark, toggle } = useTheme();
   const hasShared = !!snap?.grants.some((g) => g.viewerDepartmentId === me.departmentId);
-  const items = navItems(me, hasShared);
+  const items = navItems(me, hasShared, snap?.departments ?? []);
   const dept = snap?.departments.find((d) => d.id === me.departmentId);
 
   return (
@@ -193,7 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Logo size={44} />
             <div className="min-w-0 leading-tight">
               <p className="truncate text-[15px] font-bold tracking-[-0.02em]">사닥다리종합건설</p>
-              <p className="mt-0.5 text-[12.5px] font-medium text-ink-3">주간보고</p>
+              <p className="mt-0.5 text-[12.5px] font-medium text-ink-3">업무보고 시스템</p>
             </div>
           </div>
           <div className="px-3">
@@ -216,6 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Settings size={18} />관리자 페이지
               </button>
             )}
+            {me.isCeo && <LayersLink className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink" />}
             <a href={`${import.meta.env.BASE_URL}guide/`} target="_blank" rel="noopener"
               className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
               <BookOpen size={18} />사용 설명서
@@ -240,6 +249,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Logo size={32} />
             <p className="flex-1 truncate text-[15.5px] font-bold">{items.find((i) => i.id === view)?.label ?? '관리자 페이지'}</p>
             <IconButton label="검색" onClick={() => setSearchOpen(true)}><Search size={18} /></IconButton>
+            {me.isCeo && <LayersLink iconOnly />}
             <NotificationButton />
             <IconButton label={isDark ? '밝은 화면' : '어두운 화면'} onClick={toggle}>{isDark ? <Sun size={17} /> : <Moon size={17} />}</IconButton>
             {me.isAdmin && <IconButton label="관리자 페이지" onClick={() => setView('admin')}><Settings size={18} /></IconButton>}
@@ -251,9 +261,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <BottomNav items={items} view={view} setView={setView} />
       <SearchPalette />
+      <NotificationGate />
       <Toasts />
     </div>
   );
+}
+
+/** 대표님: 레이어스(별도 법인) 시스템을 새 창으로 연다. 주소는 관리자 페이지에서 넣는다 */
+function LayersLink({ className, iconOnly }: { className?: string; iconOnly?: boolean }) {
+  const { toast } = useStore();
+  const open = async () => {
+    // 팝업 차단을 피하려고 창을 먼저 연 뒤 주소를 넣는다
+    const w = window.open('', '_blank');
+    try {
+      const url = (await api.getSettings()).layersUrl?.trim();
+      if (!url) { w?.close(); toast('레이어스 시스템은 준비 중입니다. 주소가 생기면 이 버튼으로 바로 열립니다.'); return; }
+      if (w) w.location.href = url; else window.location.href = url;
+    } catch { w?.close(); toast('열지 못했습니다.', 'error'); }
+  };
+  if (iconOnly) return <IconButton label="레이어스" onClick={() => void open()}><ExternalLink size={17} /></IconButton>;
+  return <button onClick={() => void open()} className={className}><ExternalLink size={18} />레이어스</button>;
 }
 
 /** 휴대폰 아래 메뉴: 5개가 넘으면 4개만 두고 나머지는 '더보기'로 */

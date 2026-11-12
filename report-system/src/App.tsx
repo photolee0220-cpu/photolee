@@ -6,7 +6,7 @@ import { api, missingServerConfig } from './lib/client';
 import type { Member } from './lib/types';
 import { AdminPage } from './pages/admin/AdminPage';
 import { Dashboard } from './pages/Dashboard';
-import { DailyPage } from './pages/Daily';
+import { DailyPage, TeamDailyPage } from './pages/Daily';
 import { CalendarPage } from './pages/Calendar';
 import { HistoryPage } from './pages/History';
 import { ChangePassword, Login } from './pages/Login';
@@ -58,6 +58,7 @@ function Routes() {
     <AppShell>
       {view === 'dashboard' && <Dashboard />}
       {view === 'daily' && <DailyPage />}
+      {view === 'team' && <TeamDailyPage />}
       {view === 'calendar' && <CalendarPage />}
       {view === 'people' && <People />}
       {view === 'mine' && <MyWeek />}
@@ -85,7 +86,7 @@ function ServerNotConnected() {
       <div className="max-w-[420px] rounded-2xl border border-line bg-surface p-6 text-center shadow-card">
         <h1 className="text-[19px] font-extrabold">서버 연결 전입니다</h1>
         <p className="mt-2 text-[14px] leading-relaxed text-ink-2">
-          사닥다리 주간보고 서버 연결 정보가 아직 입력되지 않았습니다. 관리자가 연결을 마치면 이 주소에서 바로 로그인할 수 있습니다.
+          사닥다리 업무보고 시스템 서버 연결 정보가 아직 입력되지 않았습니다. 관리자가 연결을 마치면 이 주소에서 바로 로그인할 수 있습니다.
         </p>
       </div>
     </div>

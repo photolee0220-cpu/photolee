@@ -1,4 +1,4 @@
-import type { Affiliation, CalendarEvent, Directive, Entry, Grant, Member, WeekId } from './types';
+import type { Affiliation, CalendarEvent, Department, Directive, Entry, Grant, Member, WeekId } from './types';
 import { currentWeekId, dowOf, todayIso } from './week';
 
 /** 서버(Supabase RLS)와 같은 규칙. 데모 모드와 화면 표시에서 사용 */
@@ -59,19 +59,43 @@ export function canSetDirectiveStatus(me: Member, d: Directive, writesSites: boo
   return d.targetKind === 'site' && writesSites;
 }
 
-/** 일일보고를 쓰는 사람: 부서가 있고 대표·본부장이 아닌 사람 */
+/** 일일보고를 쓰는 사람: 부서가 있고 대표·본부장이 아니며 관리자가 끄지 않은 사람 */
 export function writesDaily(m: Member): boolean {
-  return m.active && !!m.departmentId && !m.isCeo && !m.isExecutive;
+  return m.active && !!m.departmentId && !m.isCeo && !m.isExecutive && m.dailyEnabled !== false;
 }
 
 export function affiliationOf(m: Pick<Member, 'affiliation'>): Affiliation {
   return m.affiliation ?? 'hq';
 }
 
-/** 일일보고를 써야 하는 날: 본사 월~금, 현장 월~토 */
-export function isWorkday(date: string, a: Affiliation): boolean {
+/** 일일보고를 꼭 써야 하는 날: 월~금 (토요일은 쓴 사람만 표시) */
+export function isWorkday(date: string): boolean {
   const d = dowOf(date);
-  return d >= 1 && d <= (a === 'site' ? 6 : 5);
+  return d >= 1 && d <= 5;
+}
+
+/** 부서 안 보고 부서의 부서원 (부서장 제외): 대표님이 아니라 부서장에게 일일보고만 쓴다 */
+export function isInternalMember(m: Pick<Member, 'id' | 'departmentId'>, departments: Department[]): boolean {
+  const d = departments.find((x) => x.id === m.departmentId);
+  return !!d?.internalReport && d.headId !== m.id;
+}
+
+/** 내가 부서장인 '부서 안 보고' 부서 */
+export function headedDepartments(me: Member, departments: Department[]): Department[] {
+  return departments.filter((d) => d.active && d.internalReport && d.headId === me.id);
+}
+
+/** 이 사람의 일일보고에 피드백(확인 요청)을 남길 수 있는 사람: 부서원은 부서장, 그 밖에는 대표·본부장 */
+export function canReviewDaily(me: Member, target: Member, departments: Department[]): boolean {
+  if (me.id === target.id) return false;
+  if (isInternalMember(target, departments)) return departments.some((d) => d.id === target.departmentId && d.headId === me.id);
+  return isReviewer(me);
+}
+
+/** 근무 상태 등록: 본인, 관리자, 그 사람 부서의 부서장 */
+export function canSetDayStatus(me: Member, target: Member, departments: Department[]): boolean {
+  if (me.isAdmin || me.id === target.id) return true;
+  return departments.some((d) => d.id === target.departmentId && d.headId === me.id);
 }
 
 /** 일일보고는 본인이 당일에만 고친다 (관리자는 언제나). 서버 규칙과 같다 */

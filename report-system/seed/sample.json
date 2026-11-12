@@ -13,7 +13,9 @@
       "name": "인테리어/디자인",
       "sort": 2,
       "writesSites": true,
-      "active": true
+      "active": true,
+      "internalReport": true,
+      "headId": "m_b"
     },
     {
       "id": "d_3",
@@ -194,6 +196,32 @@
       "mustChangePassword": false,
       "affiliation": "site",
       "homeSiteId": "s_2"
+    },
+    {
+      "id": "m_t1",
+      "username": "sample.t1",
+      "name": "정디자",
+      "title": "대리",
+      "departmentId": "d_2",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false,
+      "affiliation": "hq",
+      "homeSiteId": null
+    },
+    {
+      "id": "m_t2",
+      "username": "sample.t2",
+      "name": "오디자",
+      "title": "사원",
+      "departmentId": "d_2",
+      "isCeo": false,
+      "isAdmin": false,
+      "active": true,
+      "mustChangePassword": false,
+      "affiliation": "hq",
+      "homeSiteId": null
     }
   ],
   "sites": [
@@ -436,6 +464,17 @@
       "authorKind": "hq",
       "content": "- CM 월간 보고서 초안 작성",
       "updatedAt": "2026-10-22T07:00:00.000Z"
+    },
+    {
+      "id": "dr20",
+      "date": "2026-10-23",
+      "authorId": "m_t1",
+      "departmentId": "d_2",
+      "siteId": null,
+      "authorKind": "hq",
+      "internal": true,
+      "content": "- 사아자교회 예배당 색상 B안 3D 이미지 작업\n- 조명 배치도 1차 수정",
+      "updatedAt": "2026-10-23T08:30:00.000Z"
     }
   ],
   "dailyComments": [
@@ -549,6 +588,38 @@
       "memo": "",
       "createdBy": "m_a",
       "updatedAt": "2026-10-20T00:00:00.000Z"
+    }
+  ],
+  "dayStatus": [
+    {
+      "id": "ds1",
+      "memberId": "m_f",
+      "startDate": "2026-10-23",
+      "endDate": "2026-10-23",
+      "kind": "annual",
+      "memo": "",
+      "createdBy": "m_f",
+      "createdAt": "2026-10-20T00:00:00.000Z"
+    },
+    {
+      "id": "ds2",
+      "memberId": "m_e",
+      "startDate": "2026-10-23",
+      "endDate": "2026-10-23",
+      "kind": "half",
+      "memo": "오후 반차",
+      "createdBy": "m_e",
+      "createdAt": "2026-10-20T00:00:00.000Z"
+    },
+    {
+      "id": "ds3",
+      "memberId": "m_d",
+      "startDate": "2026-10-28",
+      "endDate": "2026-10-29",
+      "kind": "trip",
+      "memo": "부산 현장 실사",
+      "createdBy": "m_d",
+      "createdAt": "2026-10-20T00:00:00.000Z"
     }
   ]
 }

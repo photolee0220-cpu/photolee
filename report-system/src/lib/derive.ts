@@ -1,3 +1,4 @@
+import { isInternalMember } from './access';
 import type { Comment, Department, Directive, Entry, Member, MiscSlot, Site, Snapshot } from './types';
 
 export function byId<T extends { id: string }>(list: T[]): Map<string, T> {
@@ -38,7 +39,7 @@ export function activeDepartments(snap: Snapshot): Department[] {
 export function reporters(snap: Snapshot): Member[] {
   const order = new Map(snap.departments.map((d) => [d.id, d.sort]));
   return snap.members
-    .filter((m) => m.active && m.departmentId && !m.isCeo && !m.isExecutive)
+    .filter((m) => m.active && m.departmentId && !m.isCeo && !m.isExecutive && !isInternalMember(m, snap.departments))
     .sort((a, b) => (order.get(a.departmentId!) ?? 0) - (order.get(b.departmentId!) ?? 0));
 }
 

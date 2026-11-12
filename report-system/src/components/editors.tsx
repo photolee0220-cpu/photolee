@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Plus, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CornerDownRight, History, MessageSquareText, Pencil, Plus, Send, Trash2 } from 'lucide-react';
 import { RichEditor, type RichEditorHandle } from './RichEditor';
 import { MarkToolbar, renderInline, RichLines } from './RichText';
 import { useEffect, useRef, useState } from 'react';
@@ -405,9 +405,10 @@ function EntryHistoryModal({ entry, onClose }: { entry: Entry; onClose(): void }
 
 /** 칸별 피드백 대화 */
 export function Feedback({ entry }: { entry: Entry | undefined }) {
-  const { me, snap, addComment, acknowledge, deleteComment, toast } = useStore();
+  const { me, snap, addComment, editComment, acknowledge, deleteComment, toast } = useStore();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const box = useRef<RichEditorHandle>(null);
   if (!snap || !entry) return null;
   const members = byId(snap.members);
@@ -445,12 +446,24 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 text-[12px]">
                 <span className="font-bold text-ink">{author?.name ?? '알 수 없음'}{fromCeo && (author?.isCeo ? ' · 피드백' : ` ${author?.title ?? ''} · 코멘트`)}</span>
-                <span className="text-ink-3">{relativeTime(c.createdAt)}</span>
+                <span className="text-ink-3">{relativeTime(c.createdAt)}{c.editedAt && ' · 수정됨'}</span>
                 {c.authorId === me.id && (
-                  <button onClick={() => deleteComment(c.id).catch(() => toast('지우지 못했습니다.', 'error'))} className="ml-auto text-ink-3 hover:text-danger" aria-label="삭제"><Trash2 size={13} /></button>
+                  <span className="ml-auto flex items-center gap-1.5 text-ink-3">
+                    {fromCeo && !c.acknowledgedAt && editing?.id !== c.id && <button onClick={() => setEditing({ id: c.id, text: c.content })} className="hover:text-ink" aria-label="수정"><Pencil size={13} /></button>}
+                    <button onClick={() => deleteComment(c.id).catch(() => toast('지우지 못했습니다.', 'error'))} className="hover:text-danger" aria-label="삭제"><Trash2 size={13} /></button>
+                  </span>
                 )}
               </div>
-              <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.6]"><RichLines text={c.content} /></p>
+              {editing?.id === c.id ? (
+                <div className="mt-1.5 space-y-1.5">
+                  <RichEditor value={editing.text} onChange={(text) => setEditing({ id: c.id, text })}
+                    className="min-h-[40px] rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] leading-[1.5] focus:border-brand focus:ring-2 focus:ring-brand/20" />
+                  <div className="flex gap-1.5">
+                    <Button size="sm" tone="primary" disabled={!editing.text.trim()} onClick={() => editComment(c.id, editing.text.trim()).then(() => setEditing(null)).catch((e) => toast(e instanceof Error ? e.message : '고치지 못했습니다.', 'error'))}>저장</Button>
+                    <Button size="sm" tone="ghost" onClick={() => setEditing(null)}>취소</Button>
+                  </div>
+                </div>
+              ) : <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.6]"><RichLines text={c.content} /></p>}
               {fromCeo && (
                 c.acknowledgedAt ? (
                   <p className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-ok"><Check size={13} />{members.get(c.acknowledgedBy ?? '')?.name ?? ''} 확인 · {relativeTime(c.acknowledgedAt)}</p>
@@ -459,7 +472,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
                     <Check size={14} />확인했습니다
                   </Button>
                 ) : (
-                  <p className="mt-1 text-[12px] font-semibold text-warn">담당자 확인 전</p>
+                  <p className="mt-1 text-[12px] font-semibold text-warn">담당자 확인 전{c.authorId === me.id && ' · 확인 전까지 고칠 수 있습니다'}</p>
                 )
               )}
             </div>

@@ -32,7 +32,7 @@ const fileNote = (n: number) => (n ? `(첨부파일 ${n}개 · 시스템에서 �
 export async function buildWeeklyWorkbook(snap: Snapshot, me: Member): Promise<{ blob: Blob; filename: string }> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
-  wb.creator = '사닥다리 주간보고';
+  wb.creator = '사닥다리 업무보고 시스템';
   const d = parseIsoDate(snap.weekId);
   const yymmdd = `${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   const ws = wb.addWorksheet(String(d.getFullYear()), { views: [{ state: 'frozen', ySplit: 0 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });

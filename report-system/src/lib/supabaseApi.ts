@@ -358,9 +358,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       return () => { clearTimeout(t); sb.removeChannel(ch); };
     },
 
+    async editComment() { throw new ApiError('준비 중인 기능입니다.'); },
     // 일일보고·캘린더 서버 연결은 체험판 확인 후에 붙인다
     daily: {
-      async load(date) { return { date, reports: [], photos: [], comments: [] }; },
+      async load(date) { return { date, reports: [], photos: [], comments: [], statuses: [] }; },
+      async editComment() { throw new ApiError('준비 중인 기능입니다.'); },
+      async statuses() { return []; },
+      async saveStatus() { throw new ApiError('준비 중인 기능입니다.'); },
+      async removeStatus() { throw new ApiError('준비 중인 기능입니다.'); },
       async save() { throw new ApiError('준비 중인 기능입니다.'); },
       async uploadPhoto() { throw new ApiError('준비 중인 기능입니다.'); },
       async deletePhoto() { throw new ApiError('준비 중인 기능입니다.'); },

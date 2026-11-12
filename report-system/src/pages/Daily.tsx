@@ -1,16 +1,17 @@
-import { Building2, Check, ChevronLeft, ChevronRight, CornerDownRight, HardHat, ImagePlus, Lock, MapPin, MessageSquareText, Send, Trash2, X } from 'lucide-react';
+import { Building2, CalendarOff, Check, ChevronLeft, ChevronRight, CornerDownRight, HardHat, ImagePlus, Lock, MapPin, MessageSquareText, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/AppShell';
 import { EntryEditor, TextBlock } from '../components/editors';
 import { ImageViewer } from '../components/Photos';
 import { RichEditor, type RichEditorHandle } from '../components/RichEditor';
 import { MarkToolbar, RichLines } from '../components/RichText';
-import { Avatar, Badge, Button, Card, cx, Empty, IconButton, Segmented, Select, Spinner, StageChip } from '../components/ui';
-import { affiliationOf, canEditDaily, canViewDept, isReviewer, isWorkday, writesDaily } from '../lib/access';
+import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal, Segmented, Select, Spinner, StageChip } from '../components/ui';
+import { affiliationOf, canEditDaily, canReviewDaily, canSetDayStatus, canViewDept, headedDepartments, isInternalMember, isWorkday, writesDaily } from '../lib/access';
+import { newId } from '../lib/api';
 import { api } from '../lib/client';
 import { activeDepartments, byId, has, visibleSites } from '../lib/derive';
 import { shrinkImage } from '../lib/image';
-import type { Affiliation, DailyComment, DailyPhoto, DailySnapshot, Member, Site, Snapshot } from '../lib/types';
+import { DAY_STATUS, type Affiliation, type DailyComment, type DailyPhoto, type DailySnapshot, type DayStatus, type DayStatusKind, type Department, type Member, type Site, type Snapshot } from '../lib/types';
 import { dayLabel, dowOf, relativeTime, shiftDay, todayIso } from '../lib/week';
 import { useStore } from '../state/store';
 
@@ -30,12 +31,29 @@ export function useDaily(date: string) {
 const wrote = (d: DailySnapshot, memberId: string) =>
   d.reports.some((r) => r.authorId === memberId && has(r.content)) || d.photos.some((p) => p.authorId === memberId);
 
+/** 일일보고 범위: 회사 전체(대표님 쪽, 부서원 제외) 또는 '부서 안 보고' 부서 하나 */
+export type BoardScope = { kind: 'company' } | { kind: 'team'; deptId: string };
+
 /** 볼 수 있는 일일보고 작성 대상자 */
-function dailyPeople(snap: Snapshot, me: Member): Member[] {
+function dailyPeople(snap: Snapshot, me: Member, scope: BoardScope): Member[] {
   const order = new Map(snap.departments.map((d) => [d.id, d.sort]));
   return snap.members
-    .filter((m) => writesDaily(m) && canViewDept(me, m.departmentId, snap.grants))
+    .filter((m) => writesDaily(m) && (scope.kind === 'team'
+      ? m.departmentId === scope.deptId && isInternalMember(m, snap.departments)
+      : !isInternalMember(m, snap.departments) && canViewDept(me, m.departmentId, snap.grants)))
     .sort((a, b) => (order.get(a.departmentId!) ?? 0) - (order.get(b.departmentId!) ?? 0) || a.name.localeCompare(b.name));
+}
+
+const statusLabel = (k: DayStatusKind) => DAY_STATUS.find((x) => x.id === k)?.label ?? '';
+/** 이 날짜의 근무 상태 (반차가 아닌 것을 먼저) */
+function statusOf(d: DailySnapshot, memberId: string): DayStatus | undefined {
+  const list = d.statuses.filter((x) => x.memberId === memberId);
+  return list.find((x) => x.kind !== 'half') ?? list[0];
+}
+/** 이 날 꼭 써야 하는지: 월~금이고 연차·출장 등이 아님 (반차는 씀) */
+function expected(d: DailySnapshot, date: string, memberId: string): boolean {
+  const st = statusOf(d, memberId);
+  return isWorkday(date) && (!st || st.kind === 'half');
 }
 
 /* ───────────── 날짜 이동 ───────────── */
@@ -64,15 +82,17 @@ export function DailyPage() {
   return (
     <div className="mx-auto max-w-[1100px]">
       <PageHeader title="일일보고" right={<DateSwitcher date={date} onChange={setDate} />}>
-        <span className="text-[13px] text-ink-3">당일에만 쓰고 고칠 수 있습니다 · 본사 월~금, 현장 월~토</span>
+        <span className="text-[13px] text-ink-3">당일에만 쓰고 고칠 수 있습니다 · 월~금 작성 (토요일은 쓴 날만 표시)</span>
       </PageHeader>
       {mine && <PendingDailyFeedback onGo={setDate} refreshKey={data} />}
+      {mine && <MyStatusBar onChanged={reload} />}
       {!data ? <div className="flex justify-center py-16"><Spinner /></div> : (
         <>
           {mine && <MyDaily date={date} data={data} setData={setData} reload={reload} />}
           <section className="mt-10">
             <h2 className="mb-3 text-[17px] font-bold">{mine ? '함께 보는 일일보고' : '일일보고'}</h2>
-            <DailyBoard date={date} data={data} reload={reload} />
+            <DailyBoard date={date} data={data} reload={reload}
+              scope={isInternalMember(me, snap.departments) ? { kind: 'team', deptId: me.departmentId! } : { kind: 'company' }} />
           </section>
         </>
       )}
@@ -97,13 +117,15 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
   };
   const content = (siteId: string | null) => myRows.find((r) => r.siteId === siteId)?.content ?? '';
   const comments = data.comments.filter((c) => c.memberId === me.id);
-  const dayOff = !isWorkday(date, kind);
+  const written = wrote(data, me.id);
+  const internalTo = isInternalMember(me, snap.departments) ? snap.members.find((m) => m.id === snap.departments.find((d) => d.id === me.departmentId)?.headId) : undefined;
 
   const header = (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <h2 className="text-[17px] font-bold">내 일일보고</h2>
       <Badge tone="neutral">{kind === 'site' ? '현장' : '본사'}</Badge>
-      {wrote(data, me.id) ? <Badge tone="brand">작성</Badge> : dayOff ? <Badge>휴무일</Badge> : <Badge tone="warn">미작성</Badge>}
+      <StatusBadge date={date} member={me} data={data} />
+      {internalTo && <span className="text-[12.5px] text-ink-3">{internalTo.name} {internalTo.title}님께 보고됩니다</span>}
       {!editable && <span className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-semibold text-ink-3"><Lock size={13} />지난 날짜는 볼 수만 있습니다</span>}
     </div>
   );
@@ -122,7 +144,7 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
             <DailyPhotos date={date} siteId={site.id} authorId={me.id} photos={data.photos} editable={editable} onChanged={reload} />
           </SiteBlockTitle>
         )}
-        <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} />
+        <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} written={written} />
       </Card>
     );
   }
@@ -137,9 +159,9 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
   return (
     <Card className="p-5">
       {header}
-      <p className="mb-1.5 text-[13px] font-bold text-ink-2">오늘 한 일</p>
+      <p className="mb-1.5 text-[13px] font-bold text-ink-2">일일보고</p>
       <EntryEditor key={`${date}-general`} value={content(null)} editable={editable} onSave={save(null)}
-        placeholder="오늘 한 일, 특이사항, 내일 할 일 등을 적어 주세요" />
+        placeholder="오늘 진행한 업무, 특이사항, 내일 계획 등을 적어 주세요" />
       <DailyPhotos date={date} siteId={null} authorId={me.id} photos={data.photos} editable={editable} onChanged={reload} />
 
       {(siteIds.length > 0 || editable) && (
@@ -167,7 +189,7 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
           )}
         </div>
       )}
-      <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} />
+      <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} written={written} />
     </Card>
   );
 }
@@ -270,19 +292,23 @@ function DailyPhotos({ date, siteId, authorId, photos, editable, onChanged }: {
 
 /* ───────────── 피드백 ───────────── */
 
-function DailyFeedback({ date, member, comments, onChanged, compact }: {
+function DailyFeedback({ date, member, comments, onChanged, compact, written }: {
   date: string; member: Member; comments: DailyComment[]; onChanged(): Promise<void> | void; compact?: boolean;
+  /** 보고를 쓴 날에만 새 피드백을 남길 수 있다 */
+  written: boolean;
 }) {
   const { me, snap, toast } = useStore();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const box = useRef<RichEditorHandle>(null);
   if (!snap) return null;
   const members = byId(snap.members);
   const list = [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const owner = member.id === me.id;
-  const canWrite = isReviewer(me) || (owner && list.length > 0);
+  const reviewer = written && canReviewDaily(me, member, snap.departments);
+  const canWrite = reviewer || (owner && list.length > 0);
   if (!list.length && !canWrite) return null;
   if (compact && !list.length && !open) {
     return <button type="button" onClick={() => setOpen(true)} className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-ink hover:underline"><MessageSquareText size={13} />피드백</button>;
@@ -291,29 +317,44 @@ function DailyFeedback({ date, member, comments, onChanged, compact }: {
     setBusy(true);
     try { await fn(); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : '처리하지 못했습니다.', 'error'); } finally { setBusy(false); }
   };
+  const send = () => act(async () => { if (draft.trim()) { await api.daily.addComment(date, member.id, draft.trim()); setDraft(''); } });
 
   return (
     <div className="mt-3 space-y-2">
       {list.map((c) => {
         const a = members.get(c.authorId);
-        const fromReviewer = isReviewer(a);
+        // 확인을 받아야 하는 글: 이 사람 보고를 검토하는 사람(대표·본부장, 부서원이면 부서장)이 쓴 것
+        const fromReviewer = !!a && canReviewDaily(a, member, snap.departments);
+        const mineUnacked = c.authorId === me.id && !c.acknowledgedAt;
         return (
           <div key={c.id} className={cx('flex gap-2.5 rounded-lg px-3 py-2.5', fromReviewer ? 'bg-brand-soft' : 'bg-sunken')}>
             {fromReviewer ? <MessageSquareText size={16} className="mt-0.5 shrink-0 text-brand-ink" /> : <CornerDownRight size={16} className="mt-0.5 shrink-0 text-ink-3" />}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 text-[12px]">
-                <span className="font-bold text-ink">{a?.isCeo ? '대표님 · 피드백' : `${a?.name ?? ''}${fromReviewer ? ` ${a?.title ?? ''} · 코멘트` : ''}`}</span>
-                <span className="text-ink-3">{relativeTime(c.createdAt)}</span>
+                <span className="font-bold text-ink">{a?.isCeo ? '대표님 · 피드백' : `${a?.name ?? ''}${fromReviewer ? ` ${a?.title ?? ''} · 피드백` : ''}`}</span>
+                <span className="text-ink-3">{relativeTime(c.createdAt)}{c.editedAt && ' · 수정됨'}</span>
                 {c.authorId === me.id && (
-                  <button onClick={() => void act(() => api.daily.deleteComment(c.id))} className="ml-auto text-ink-3 hover:text-danger" aria-label="삭제"><Trash2 size={13} /></button>
+                  <span className="ml-auto flex items-center gap-1.5 text-ink-3">
+                    {mineUnacked && fromReviewer && editing?.id !== c.id && <button onClick={() => setEditing({ id: c.id, text: c.content })} className="hover:text-ink" aria-label="수정"><Pencil size={13} /></button>}
+                    <button onClick={() => void act(() => api.daily.deleteComment(c.id))} className="hover:text-danger" aria-label="삭제"><Trash2 size={13} /></button>
+                  </span>
                 )}
               </div>
-              <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.6]"><RichLines text={c.content} /></p>
+              {editing?.id === c.id ? (
+                <div className="mt-1.5 space-y-1.5">
+                  <RichEditor value={editing.text} onChange={(text) => setEditing({ id: c.id, text })}
+                    className="min-h-[40px] rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] leading-[1.5] focus:border-brand focus:ring-2 focus:ring-brand/20" />
+                  <div className="flex gap-1.5">
+                    <Button size="sm" tone="primary" disabled={busy || !editing.text.trim()} onClick={() => void act(async () => { await api.daily.editComment(c.id, editing.text.trim()); setEditing(null); })}>저장</Button>
+                    <Button size="sm" tone="ghost" onClick={() => setEditing(null)}>취소</Button>
+                  </div>
+                </div>
+              ) : <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.6]"><RichLines text={c.content} /></p>}
               {fromReviewer && (c.acknowledgedAt ? (
                 <p className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-ok"><Check size={13} />{member.name} 확인 · {relativeTime(c.acknowledgedAt)}</p>
               ) : owner ? (
                 <Button size="sm" className="mt-1.5" disabled={busy} onClick={() => void act(() => api.daily.acknowledge(c.id))}><Check size={14} />확인했습니다</Button>
-              ) : <p className="mt-1 text-[12px] font-semibold text-warn">확인 전</p>)}
+              ) : <p className="mt-1 text-[12px] font-semibold text-warn">확인 전{c.authorId === me.id && ' · 확인 전까지 고칠 수 있습니다'}</p>)}
             </div>
           </div>
         );
@@ -322,13 +363,11 @@ function DailyFeedback({ date, member, comments, onChanged, compact }: {
         <>
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1">
-              <RichEditor ref={box} value={draft} onChange={setDraft}
-                onSubmit={() => void act(async () => { if (draft.trim()) { await api.daily.addComment(date, member.id, draft.trim()); setDraft(''); } })}
-                placeholder={me.isCeo ? `${member.name}님 일일보고에 피드백 남기기` : isReviewer(me) ? '코멘트 남기기' : '답글 남기기'}
+              <RichEditor ref={box} value={draft} onChange={setDraft} onSubmit={() => void send()}
+                placeholder={reviewer ? `${member.name}님 일일보고에 피드백 남기기` : '답글 남기기'}
                 className="min-h-[40px] rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] leading-[1.5] focus:border-brand focus:ring-2 focus:ring-brand/20" />
             </div>
-            <Button tone="primary" aria-label="보내기" disabled={busy || !draft.trim()}
-              onClick={() => void act(async () => { await api.daily.addComment(date, member.id, draft.trim()); setDraft(''); })}><Send size={15} /></Button>
+            <Button tone="primary" aria-label="보내기" disabled={busy || !draft.trim()} onClick={() => void send()}><Send size={15} /></Button>
           </div>
           {draft.trim() && <MarkToolbar onApply={(m) => box.current?.applyMark(m)} />}
         </>
@@ -337,12 +376,95 @@ function DailyFeedback({ date, member, comments, onChanged, compact }: {
   );
 }
 
+/* ───────────── 근무 상태 (연차·출장 등) ───────────── */
+
+/** 내 근무 상태: 등록 버튼과 오늘 이후 등록된 것 */
+function MyStatusBar({ onChanged }: { onChanged(): void }) {
+  const { me } = useStore();
+  const [list, setList] = useState<DayStatus[]>([]);
+  const [open, setOpen] = useState(false);
+  const today = todayIso();
+  const load = useCallback(() => { api.daily.statuses(today, shiftDay(today, 180)).then(setList).catch(() => undefined); }, [today]);
+  useEffect(() => { load(); }, [load]);
+  const mine = list.filter((x) => x.memberId === me.id);
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-2">
+      <Button size="sm" onClick={() => setOpen(true)}><CalendarOff size={14} />근무 상태 등록 <span className="font-normal text-ink-3">(연차·출장 등)</span></Button>
+      {mine.map((x) => <StatusChip key={x.id} status={x} onRemoved={() => { load(); onChanged(); }} />)}
+      {open && <StatusForm onClose={() => setOpen(false)} onSaved={() => { setOpen(false); load(); onChanged(); }} />}
+    </div>
+  );
+}
+
+function StatusChip({ status, onRemoved, showName }: { status: DayStatus; onRemoved(): void; showName?: boolean }) {
+  const { snap, me, toast } = useStore();
+  const target = snap?.members.find((m) => m.id === status.memberId);
+  const can = !!snap && !!target && canSetDayStatus(me, target, snap.departments);
+  const range = status.startDate === status.endDate ? dayLabel(status.startDate) : `${dayLabel(status.startDate)} ~ ${dayLabel(status.endDate)}`;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-note-line bg-note py-1 pl-2.5 pr-1.5 text-[12.5px] font-semibold text-note-ink">
+      {showName && target && <span className="text-ink">{target.name}</span>}
+      {statusLabel(status.kind)} · {range}{status.memo && <span className="font-normal opacity-80">({status.memo})</span>}
+      {can && (
+        <button aria-label="근무 상태 지우기" className="rounded-full p-0.5 hover:bg-black/5"
+          onClick={async () => {
+            if (!window.confirm('이 근무 상태를 지울까요?')) return;
+            try { await api.daily.removeStatus(status.id); onRemoved(); } catch (e) { toast(e instanceof Error ? e.message : '지우지 못했습니다.', 'error'); }
+          }}><X size={13} /></button>
+      )}
+    </span>
+  );
+}
+
+/** 근무 상태 등록. 부서장은 부서원, 관리자는 누구나 대신 등록할 수 있다 */
+export function StatusForm({ onClose, onSaved, memberId }: { onClose(): void; onSaved(): void; memberId?: string }) {
+  const { snap, me, toast } = useStore();
+  const today = todayIso();
+  const [st, set] = useState<DayStatus>({ id: newId('ds'), memberId: memberId ?? me.id, startDate: today, endDate: today, kind: 'annual', memo: '', createdBy: me.id, createdAt: '' });
+  const [busy, setBusy] = useState(false);
+  if (!snap) return null;
+  const targets = snap.members.filter((m) => writesDaily(m) && canSetDayStatus(me, m, snap.departments));
+  const save = async () => {
+    setBusy(true);
+    try { await api.daily.saveStatus(st); toast('근무 상태를 등록했습니다'); onSaved(); } catch (e) { toast(e instanceof Error ? e.message : '등록하지 못했습니다.', 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} title="근무 상태 등록" footer={<><Button onClick={onClose}>취소</Button><Button tone="primary" onClick={save} disabled={busy}>등록</Button></>}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {targets.length > 1 && (
+          <div className="sm:col-span-2">
+            <Field label="대상">
+              <Select id="st-member" value={st.memberId} onChange={(e) => set({ ...st, memberId: e.target.value })}>
+                {targets.map((m) => <option key={m.id} value={m.id}>{m.name} {m.title}</option>)}
+              </Select>
+            </Field>
+          </div>
+        )}
+        <div className="sm:col-span-2">
+          <Field label="종류" hint="반차는 표시만 하고 일일보고는 씁니다">
+            <div className="flex flex-wrap gap-1.5">
+              {DAY_STATUS.map((k) => (
+                <button key={k.id} type="button" onClick={() => set({ ...st, kind: k.id })}
+                  className={cx('rounded-full border px-3 py-1 text-[13px] font-semibold', st.kind === k.id ? 'border-brand bg-brand text-on-brand' : 'border-line-strong text-ink-2 hover:border-brand')}>{k.label}</button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <Field label="시작일"><Input id="st-start" type="date" value={st.startDate} onChange={(e) => set({ ...st, startDate: e.target.value, endDate: st.endDate < e.target.value ? e.target.value : st.endDate })} /></Field>
+        <Field label="종료일"><Input id="st-end" type="date" value={st.endDate} min={st.startDate} onChange={(e) => set({ ...st, endDate: e.target.value })} /></Field>
+        <div className="sm:col-span-2"><Field label="메모 (선택)"><Input id="st-memo" value={st.memo} onChange={(e) => set({ ...st, memo: e.target.value })} placeholder="예: 오후 반차, 부산 출장" /></Field></div>
+        <p className="text-[12.5px] text-ink-3 sm:col-span-2">이 기간에는 미작성으로 세지 않고 마감 알림도 가지 않습니다. 캘린더에도 표시됩니다.</p>
+      </div>
+    </Modal>
+  );
+}
+
 /* ───────────── 모아보기: 본사 / 현장 ───────────── */
 
 type BoardTab = 'hq' | 'site';
 const TAB_KEY = 'daily-board-tab';
 
-export function DailyBoard({ date, data, reload }: { date: string; data: DailySnapshot; reload(): Promise<void> }) {
+export function DailyBoard({ date, data, reload, scope = { kind: 'company' } }: { date: string; data: DailySnapshot; reload(): Promise<void>; scope?: BoardScope }) {
   const { snap, me, openDrawer } = useStore();
   const [saved, setTabState] = useState<BoardTab | null>(() => {
     try { const v = localStorage.getItem(TAB_KEY); return v === 'site' || v === 'hq' ? v : null; } catch { return null; }
@@ -350,54 +472,72 @@ export function DailyBoard({ date, data, reload }: { date: string; data: DailySn
   const setTab = (t: BoardTab) => { setTabState(t); try { localStorage.setItem(TAB_KEY, t); } catch { /* 무시 */ } };
   if (!snap) return null;
 
-  const people = dailyPeople(snap, me);
+  const people = dailyPeople(snap, me, scope);
   const of = (a: Affiliation) => people.filter((m) => affiliationOf(m) === a);
   const count = (list: Member[]) => {
-    const expected = list.filter((m) => isWorkday(date, affiliationOf(m)));
-    return { done: list.filter((m) => wrote(data, m.id)).length, expected: expected.length, missing: expected.filter((m) => !wrote(data, m.id)) };
+    const exp = list.filter((m) => expected(data, date, m.id));
+    return { done: list.filter((m) => wrote(data, m.id)).length, expected: exp.length, missing: exp.filter((m) => !wrote(data, m.id)) };
   };
   const hq = count(of('hq'));
   const site = count(of('site'));
   const all = count(people);
+  const away = people.filter((m) => { const st = statusOf(data, m.id); return st && st.kind !== 'half'; });
   const dow = dowOf(date);
   // 고른 탭이 없거나 볼 사람이 없는 탭이면, 내 소속 탭(또는 사람이 있는 탭)으로
   let tab: BoardTab = saved ?? (affiliationOf(me) === 'site' && writesDaily(me) ? 'site' : 'hq');
   if (!of(tab).length && of(tab === 'hq' ? 'site' : 'hq').length) tab = tab === 'hq' ? 'site' : 'hq';
+  const team = scope.kind === 'team';
 
   return (
     <div>
       <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
         <div>
           <p className="text-[12.5px] font-bold text-ink-3">{dayLabel(date)} 작성</p>
-          <p className="mt-1 text-[24px] font-extrabold tabular leading-none">{all.done}<span className="text-[14px] font-bold text-ink-3"> / {all.expected}명</span></p>
+          <p className="mt-1 text-[24px] font-extrabold tabular leading-none">{all.done}<span className="text-[14px] font-bold text-ink-3"> / {isWorkday(date) ? `${all.expected}명` : '선택'}</span></p>
         </div>
-        <div className="min-w-0 flex-1">
-          {all.expected === 0 ? (
-            <p className="text-[13px] text-ink-3">{dow === 0 ? '일요일' : '토요일'}은 {dow === 6 ? '현장만 작성하는 날입니다' : '작성하지 않는 날입니다'}</p>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {!isWorkday(date) ? (
+            <p className="text-[13px] text-ink-3">{dow === 6 ? '토요일은 쓴 사람만 표시합니다 (미작성으로 세지 않음)' : '일요일은 작성하지 않는 날입니다'}</p>
           ) : all.missing.length ? (
             <div className="flex flex-wrap items-center gap-1">
               <span className="mr-0.5 text-[12px] font-semibold text-ink-3">미작성</span>
               {all.missing.map((m) => (
-                <button key={m.id} onClick={() => openDrawer({ type: 'person', id: m.id })} className="rounded-md bg-sunken px-1.5 py-0.5 text-[12px] font-semibold text-ink-2 hover:bg-line">{m.name}</button>
+                <button key={m.id} onClick={() => !team && openDrawer({ type: 'person', id: m.id })} className="rounded-md bg-sunken px-1.5 py-0.5 text-[12px] font-semibold text-ink-2 hover:bg-line">{m.name}</button>
               ))}
             </div>
-          ) : <p className="text-[13px] font-semibold text-ok">모두 작성했습니다</p>}
+          ) : <p className="text-[13px] font-semibold text-ok">{all.expected ? '모두 작성했습니다' : '작성 대상이 없습니다'}</p>}
+          {away.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-0.5 text-[12px] font-semibold text-ink-3">근무 상태</span>
+              {away.map((m) => <span key={m.id} className="rounded-md bg-note px-1.5 py-0.5 text-[12px] font-semibold text-note-ink">{m.name} · {statusLabel(statusOf(data, m.id)!.kind)}</span>)}
+            </div>
+          )}
         </div>
       </Card>
 
-      <Segmented<BoardTab> value={tab} onChange={setTab} className="mb-4" options={[
-        { id: 'hq', label: <span className="inline-flex items-center gap-1.5"><Building2 size={14} />본사 {hq.done}/{hq.expected}</span> },
-        { id: 'site', label: <span className="inline-flex items-center gap-1.5"><HardHat size={14} />현장 {site.done}/{site.expected}</span> },
-      ]} />
-
-      {tab === 'hq' ? <HqBoard date={date} data={data} people={of('hq')} reload={reload} /> : <SiteBoard date={date} data={data} people={of('site')} reload={reload} />}
+      {team ? <HqBoard date={date} data={data} people={people} reload={reload} /> : (
+        <>
+          <Segmented<BoardTab> value={tab} onChange={setTab} className="mb-4" options={[
+            { id: 'hq', label: <span className="inline-flex items-center gap-1.5"><Building2 size={14} />본사 {hq.done}/{hq.expected}</span> },
+            { id: 'site', label: <span className="inline-flex items-center gap-1.5"><HardHat size={14} />현장 {site.done}/{site.expected}</span> },
+          ]} />
+          {tab === 'hq' ? <HqBoard date={date} data={data} people={of('hq')} reload={reload} /> : <SiteBoard date={date} data={data} people={of('site')} reload={reload} />}
+        </>
+      )}
     </div>
   );
 }
 
 function StatusBadge({ date, member, data }: { date: string; member: Member; data: DailySnapshot }) {
-  if (wrote(data, member.id)) return <Badge tone="brand">작성</Badge>;
-  return isWorkday(date, affiliationOf(member)) ? <Badge tone="warn">미작성</Badge> : <Badge>휴무</Badge>;
+  const st = statusOf(data, member.id);
+  const away = st && st.kind !== 'half' ? <Badge tone="note">{statusLabel(st.kind)}</Badge> : null;
+  const half = st?.kind === 'half' ? <Badge tone="note">반차</Badge> : null;
+  if (wrote(data, member.id)) return <span className="flex gap-1">{half ?? away}<Badge tone="brand">작성</Badge></span>;
+  if (away) return away;
+  const dow = dowOf(date);
+  if (dow === 6) return <span className="flex gap-1">{half}<Badge>토요일</Badge></span>;
+  if (dow === 0) return <Badge>휴일</Badge>;
+  return <span className="flex gap-1">{half}<Badge tone="warn">미작성</Badge></span>;
 }
 
 function HqBoard({ date, data, people, reload }: { date: string; data: DailySnapshot; people: Member[]; reload(): Promise<void> }) {
@@ -441,7 +581,7 @@ function HqBoard({ date, data, people, reload }: { date: string; data: DailySnap
                 {latest && <p className="text-[11.5px] text-ink-3">{relativeTime(latest)} 저장</p>}
               </div>
             ) : <p className="mt-3 text-[13px] text-ink-3">아직 작성하지 않았습니다</p>}
-            <DailyFeedback date={date} member={m} comments={data.comments.filter((c) => c.memberId === m.id)} onChanged={reload} compact />
+            <DailyFeedback date={date} member={m} comments={data.comments.filter((c) => c.memberId === m.id)} onChanged={reload} compact written={written} />
           </Card>
         );
       })}
@@ -461,7 +601,7 @@ function SiteBoard({ date, data, people, reload }: { date: string; data: DailySn
       staff: people.filter((m) => m.homeSiteId === site.id),
       // 이 현장에 대한 보고: 현장 직원 칸(소속이 바뀌었어도 그날 쓴 그대로)과 본사 직원의 현장 칸
       staffRows: data.reports.filter((r) => r.siteId === site.id && r.authorKind === 'site'),
-      hqRows: data.reports.filter((r) => r.siteId === site.id && r.authorKind === 'hq' && canViewDept(me, r.departmentId, snap.grants)),
+      hqRows: data.reports.filter((r) => r.siteId === site.id && r.authorKind === 'hq' && !r.internal && canViewDept(me, r.departmentId, snap.grants)),
     }))
     .filter((b) => b.staff.length || b.staffRows.length || b.hqRows.length)
     .sort((a, b) => (order.get(a.site.stage) ?? 0) - (order.get(b.site.stage) ?? 0) || a.site.sort - b.site.sort);
@@ -500,7 +640,7 @@ function SiteBoard({ date, data, people, reload }: { date: string; data: DailySn
                           </div>
                           {row ? <TextBlock text={row.content} className="mt-2 !text-[13.5px]" /> : null}
                           <PhotoRow data={data} authorId={id} siteId={site.id} />
-                          <DailyFeedback date={date} member={m} comments={data.comments.filter((c) => c.memberId === id)} onChanged={reload} compact />
+                          <DailyFeedback date={date} member={m} comments={data.comments.filter((c) => c.memberId === id)} onChanged={reload} compact written={wrote(data, id)} />
                         </div>
                       );
                     })}
@@ -547,6 +687,36 @@ function PhotoRow({ data, authorId, siteId }: { data: DailySnapshot; authorId: s
         </button>
       ))}
       {open != null && <ImageViewer urls={list.map((p) => p.url)} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+/* ───────────── 부서장: 부서원 일일보고 ───────────── */
+
+export function TeamDailyPage() {
+  const { snap, me } = useStore();
+  const [date, setDate] = useState(todayIso);
+  const { data, reload } = useDaily(date);
+  const depts: Department[] = snap ? headedDepartments(me, snap.departments) : [];
+  const [deptId, setDeptId] = useState<string | null>(null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  if (!snap) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (!depts.length) return <Empty title="부서장으로 지정된 부서가 없습니다" />;
+  const dept = depts.find((d) => d.id === deptId) ?? depts[0];
+  return (
+    <div className="mx-auto max-w-[1100px]">
+      <PageHeader title="부서원 보고" right={<DateSwitcher date={date} onChange={setDate} />}>
+        <Badge tone="neutral" className="!py-1">{dept.name}</Badge>
+        <span className="text-[13px] text-ink-3">부서원 일일보고는 부서장에게만 보입니다 (대표님 화면에는 나오지 않음)</span>
+      </PageHeader>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {depts.length > 1 && (
+          <Segmented<string> value={dept.id} onChange={setDeptId} options={depts.map((d) => ({ id: d.id, label: d.name }))} />
+        )}
+        <Button size="sm" onClick={() => setStatusOpen(true)}><Plus size={14} />부서원 근무 상태 등록</Button>
+      </div>
+      {data ? <DailyBoard date={date} data={data} reload={reload} scope={{ kind: 'team', deptId: dept.id }} /> : <div className="flex justify-center py-16"><Spinner /></div>}
+      {statusOpen && <StatusForm onClose={() => setStatusOpen(false)} onSaved={() => { setStatusOpen(false); void reload(); }} />}
     </div>
   );
 }

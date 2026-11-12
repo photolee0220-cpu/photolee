@@ -4,7 +4,7 @@ import type { Comment, Directive, DirectiveStatus, Entry, Member, SaveDirectiveI
 import { currentWeekId } from '../lib/week';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
-export type View = 'dashboard' | 'daily' | 'calendar' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
+export type View = 'dashboard' | 'daily' | 'team' | 'calendar' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
 export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | { type: 'directives' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
 
@@ -29,6 +29,7 @@ interface Store {
   saveDirective(i: SaveDirectiveInput): Promise<Directive>;
   setDirectiveStatus(id: string, status: DirectiveStatus): Promise<Directive>;
   addComment(entryId: string, content: string): Promise<Comment>;
+  editComment(id: string, content: string): Promise<Comment>;
   acknowledge(id: string): Promise<void>;
   deleteComment(id: string): Promise<void>;
   signOut(): Promise<void>;
@@ -45,7 +46,7 @@ export function useStore(): Store {
 
 export function defaultView(m: Member): View {
   if (m.isCeo || m.isExecutive) return 'dashboard';
-  if (m.departmentId) return 'daily';
+  if (m.departmentId) return m.dailyEnabled === false ? 'mine' : 'daily';
   return 'dashboard';
 }
 
@@ -130,6 +131,7 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
       return d;
     },
     async addComment(entryId, content) { const c = await api.addComment(entryId, content); merge('comments', c); return c; },
+    async editComment(id, content) { const c = await api.editComment(id, content); merge('comments', c); return c; },
     async acknowledge(id) {
       await api.acknowledgeComment(id);
       setSnap((s) => s && { ...s, comments: s.comments.map((c) => (c.id === id ? { ...c, acknowledgedAt: new Date().toISOString(), acknowledgedBy: me.id } : c)) });
