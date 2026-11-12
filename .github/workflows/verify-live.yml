@@ -155,7 +155,7 @@ jobs:
           left=$(curl -sS "$URL/rest/v1/calendar_events?select=id&title=eq.%EC%A0%90%EA%B2%80%EC%9A%A9%20%EC%9D%BC%EC%A0%95" "${H[@]}" | jq 'length')
           [ -n "$EID" ] && [ "$left" = 0 ] && rec "캘린더: 일정 만들고 지우기" 1 "ok" || rec "캘린더: 일정 만들고 지우기" 0 "$(echo "$ev" | head -c 150) left=$left"
           ME=$(curl -sS "$URL/auth/v1/user" "${H[@]}" | jq -r '.id')
-          up=$(curl -sS -X POST "$URL/storage/v1/object/daily-photos/$ME/2026-11-12/verify-test.jpg" "${H[@]}" -H "x-upsert: true" -H "Content-Type: image/jpeg" --data-binary @"$RUNNER_TEMP/t.jpg")
+          up=$(curl -sS -X POST "$URL/storage/v1/object/daily-photos/$ME/2026-11-12/verify-test.jpg" "${H[@]}" -H "Content-Type: image/jpeg" --data-binary @"$RUNNER_TEMP/t.jpg")
           del=$(curl -sS -X DELETE "$URL/storage/v1/object/daily-photos" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg p "$ME/2026-11-12/verify-test.jpg" '{prefixes:[$p]}')")
           echo "$up" | jq -e '.Key // .key // .Id // .id' >/dev/null && echo "$del" | jq -e 'length == 1' >/dev/null && rec "일일보고 사진 저장소" 1 "올리기·지우기 ok" || rec "일일보고 사진 저장소" 0 "up=$(echo "$up" | head -c 100) del=$(echo "$del" | head -c 100)"
           sd=$(curl -sS -X POST "$URL/rest/v1/rpc/save_daily" "${H[@]}" -H "Content-Type: application/json" -d '{"p_date":"2026-11-12","p_site":null,"p_content":""}')
