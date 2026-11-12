@@ -1,6 +1,6 @@
 {
-  "name": "사닥다리종합건설 주간보고",
-  "short_name": "주간보고",
+  "name": "사닥다리 업무보고 시스템",
+  "short_name": "업무보고",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#F5F6F8",
