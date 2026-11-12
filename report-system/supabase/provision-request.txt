@@ -1,1 +1,1 @@
-apply 0011 daily/calendar/team + functions 2026-11-12T04:45:43Z
+apply 0012 daily photo delete 2026-11-12T04:49:03Z
