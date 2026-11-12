@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-08T23:43:39Z",
+  "at": "2026-11-12T04:48:31Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -24,7 +24,7 @@
     {
       "check": "보고 칸",
       "ok": true,
-      "detail": "128칸"
+      "detail": "131칸"
     },
     {
       "check": "현장",
@@ -39,7 +39,7 @@
     {
       "check": "주차 목록",
       "ok": true,
-      "detail": "[\"2026-11-09\",\"2026-11-02\",\"2026-10-26\",\"2026-10-19\"]"
+      "detail": "[\"2026-11-16\",\"2026-11-09\",\"2026-11-02\",\"2026-10-26\",\"2026-10-19\"]"
     },
     {
       "check": "서버 기능: 계정 관리",
@@ -89,7 +89,7 @@
     {
       "check": "저장 공간 사용량",
       "ok": true,
-      "detail": "{\"report-files\":100891,\"site-photos\":6281981}"
+      "detail": "{\"report-files\":314999,\"site-photos\":6281981}"
     },
     {
       "check": "첨부파일 지우기(점검 흔적 정리)",
@@ -134,7 +134,7 @@
     {
       "check": "이번 보고일(잠금 기준)",
       "ok": true,
-      "detail": "2026-11-09"
+      "detail": "2026-11-16"
     },
     {
       "check": "새 표: entry_history",
@@ -179,7 +179,7 @@
     {
       "check": "백업 만들기",
       "ok": true,
-      "detail": "최신 백업 160442바이트"
+      "detail": "최신 백업 165996바이트"
     },
     {
       "check": "알림 서버: 서명 키",
@@ -210,6 +210,101 @@
       "check": "확인 전 피드백 조회(주차 무관)",
       "ok": true,
       "detail": "5건(최대 5)"
+    },
+    {
+      "check": "보고 칸 작성자 목록",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "새 표: daily_reports",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "daily_reports: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "새 표: daily_photos",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "daily_photos: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "새 표: daily_comments",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "daily_comments: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "새 표: day_status",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "day_status: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "새 표: calendar_events",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "calendar_events: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "인원 소속·일일보고 대상 칸",
+      "ok": true,
+      "detail": "{\"affiliation\":\"hq\",\"daily_enabled\":true}"
+    },
+    {
+      "check": "부서 안 보고·부서장 칸",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "캘린더: 일정 만들고 지우기",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "일일보고 사진 저장소",
+      "ok": false,
+      "detail": "up={\"Key\":\"daily-photos/3e3f9b2a-ea0d-43c9-993d-60bf85c5c21e/2026-11-12/verify-test.jpg\",\"Id\":\"1c1d2199 del=[]"
+    },
+    {
+      "check": "일일보고 저장 규칙",
+      "ok": true,
+      "detail": "응답 정상"
+    },
+    {
+      "check": "서버 기능: 대표 질문(AI)",
+      "ok": true,
+      "detail": "응답 정상(관리자는 대표 전용이라 거절)"
+    },
+    {
+      "check": "알림 서버: 일일보고 마감 비밀값 확인",
+      "ok": true,
+      "detail": "틀린 값 거절(403)"
+    },
+    {
+      "check": "레이어스 주소 설정 칸",
+      "ok": true,
+      "detail": "ok"
     }
   ]
 }
