@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-12T04:51:07Z",
+  "at": "2026-11-12T04:52:50Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -89,7 +89,7 @@
     {
       "check": "저장 공간 사용량",
       "ok": true,
-      "detail": "{\"report-files\":314999,\"site-photos\":6281981}"
+      "detail": "{\"site-photos\":6281981,\"report-files\":314999}"
     },
     {
       "check": "첨부파일 지우기(점검 흔적 정리)",
@@ -283,8 +283,8 @@
     },
     {
       "check": "일일보고 사진 저장소",
-      "ok": false,
-      "detail": "up={\"statusCode\":\"403\",\"error\":\"Unauthorized\",\"message\":\"new row violates row-level security policy\",\"c del=[{\"name\":\"3e3f9b2a-ea0d-43c9-993d-60bf85c5c21e/2026-11-12/verify-test.jpg\",\"bucket_id\":\"daily-photos"
+      "ok": true,
+      "detail": "올리기·지우기 ok"
     },
     {
       "check": "일일보고 저장 규칙",
