@@ -11,7 +11,7 @@ import { DailyBoard, DateSwitcher, useDaily } from './Daily';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
 import { DiffModeSwitch } from '../components/DiffText';
-import { SummaryPanel } from '../components/SummaryPanel';
+import { AskPanel } from '../components/AskPanel';
 import { PeopleGrid } from './People';
 
 type SortKey = 'order' | 'progress' | 'due';
@@ -20,6 +20,7 @@ const DASH_TAB = 'dashboard-tab';
 
 /** 대시보드 맨 위 탭: 주간보고 / 일일보고 */
 export function Dashboard() {
+  const { me } = useStore();
   const [tab, setTabState] = useState<DashTab>(() => {
     try { return localStorage.getItem(DASH_TAB) === 'daily' ? 'daily' : 'weekly'; } catch { return 'weekly'; }
   });
@@ -30,7 +31,9 @@ export function Dashboard() {
       { id: 'daily', label: <span className="px-2 text-[14px]">일일보고</span> },
     ]} />
   );
-  return tab === 'daily' ? <DailyDashboard tabs={tabs} /> : <WeeklyDashboard tabs={tabs} />;
+  // 대표님: 맨 위 검색창 (주간·일일 탭 어디서나)
+  const top = <>{me.isCeo && <div className="mx-auto max-w-[1400px]"><AskPanel /></div>}{tabs}</>;
+  return tab === 'daily' ? <DailyDashboard tabs={top} /> : <WeeklyDashboard tabs={top} />;
 }
 
 function DailyDashboard({ tabs }: { tabs: React.ReactNode }) {
@@ -93,7 +96,6 @@ function WeeklyDashboard({ tabs }: { tabs: React.ReactNode }) {
         {loading && <Spinner className="h-3.5 w-3.5" />}
       </PageHeader>
 
-      {me.isCeo && <SummaryPanel />}
 
       {/* 요약 */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">

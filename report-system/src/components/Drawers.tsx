@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Download, History, Lock, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, History, Lock } from 'lucide-react';
 import { stripMarks } from '../lib/marks';
 import { RichLines } from './RichText';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -8,11 +8,9 @@ import { api } from '../lib/client';
 import {
   activeDirectives, byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork, wroteEntry,
 } from '../lib/derive';
-import { DIRECTIVE_STATUS, isBuildStage, type Comment, type Site, type SiteSummary, type Department, type Directive, type DirectiveStatus, type Entry, type Member } from '../lib/types';
+import { DIRECTIVE_STATUS, isBuildStage, type Comment, type Site, type Department, type Directive, type DirectiveStatus, type Entry, type Member } from '../lib/types';
 import { currentWeekId, formatDate, relativeTime, shiftWeek, toIsoDate, weekLabel } from '../lib/week';
 import { downloadMediaZip } from '../lib/mediaZip';
-import { summaryModel } from '../lib/models';
-import { buildSiteSummaryPrompt } from '../lib/summary';
 import { useStore } from '../state/store';
 import { AttachmentList } from './Attachments';
 import { DiffText } from './DiffText';
@@ -385,20 +383,16 @@ function DirectivesDrawer({ onClose }: { onClose(): void }) {
 
 type Range = '3' | '6' | '0';
 
-/** 현장 기록 모아보기: 기간을 골라 주차별 기록을 시간 순서로 보고, 대표·관리자는 AI로 기간 요약 */
+/** 현장 기록 모아보기: 기간을 골라 주차별 기록을 시간 순서로 본다 (AI 정리는 대표님 대시보드의 검색창에서) */
 function SiteTimeline({ site }: { site: Site }) {
-  const { snap, me, weekId, toast } = useStore();
+  const { snap, weekId } = useStore();
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<Range>('3');
   const [history, setHistory] = useState<SiteHistoryItem[] | null>(null);
-  const [summary, setSummary] = useState<SiteSummary | null>(null);
-  const [busy, setBusy] = useState(false);
-  const canAi = me.isCeo || me.isAdmin;
   useEffect(() => {
     if (!open || history) return;
     api.siteHistory(site.id).then(setHistory).catch(() => setHistory([]));
-    if (canAi) api.getSiteSummary(site.id).then(setSummary).catch(() => undefined);
-  }, [open, history, site.id, canAi]);
+  }, [open, history, site.id]);
   if (!snap) return null;
 
   const months = Number(range);
@@ -406,18 +400,6 @@ function SiteTimeline({ site }: { site: Site }) {
   const inRange = (history ?? []).filter((h) => !cutoff || h.weekId >= cutoff);
   const past = inRange.filter((h) => h.weekId !== weekId);
   const deptName = (id: string) => snap.departments.find((d) => d.id === id)?.name ?? '';
-
-  const makeSummary = async () => {
-    if (!inRange.length) return;
-    setBusy(true);
-    try {
-      setSummary(await api.generateSiteSummary(site.id, months || 12, buildSiteSummaryPrompt(site, inRange, deptName, months || 12)));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : '요약을 만들지 못했습니다.', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <>
@@ -432,34 +414,6 @@ function SiteTimeline({ site }: { site: Site }) {
             { id: '6', label: '6개월' },
             { id: '0', label: '전체' },
           ]} />
-
-          {canAi && (
-            <section className="rounded-2xl border border-brand/25 bg-brand-soft/50 p-4">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="flex items-center gap-1.5 text-[14px] font-bold"><Sparkles size={15} className="text-brand" />AI 기간 요약</h4>
-                <Button size="sm" tone={summary ? 'secondary' : 'primary'} onClick={makeSummary} disabled={busy || !inRange.length}>
-                  {busy ? <><Spinner />정리하는 중</> : summary ? '다시 만들기' : `${months ? `${months}개월` : '전체'} 요약 만들기`}
-                </Button>
-              </div>
-              {summary ? (
-                <div className="space-y-3 text-[13.5px] leading-[1.7]">
-                  <p>{summary.overview}</p>
-                  {summary.milestones.length > 0 && (
-                    <ol className="space-y-1 border-l-2 border-brand/30 pl-3">
-                      {summary.milestones.map((m, i) => <li key={i}><b className="mr-1.5 tabular text-brand-ink">{m.weekId.slice(5).replace('-', '/')}</b>{m.text}</li>)}
-                    </ol>
-                  )}
-                  {summary.issues.length > 0 && (
-                    <div>
-                      <p className="mb-1 text-[12.5px] font-bold text-warn">챙겨야 할 것</p>
-                      <ul className="space-y-0.5">{summary.issues.map((x, i) => <li key={i}>• {x}</li>)}</ul>
-                    </div>
-                  )}
-                  <p className="text-[12px] text-ink-3">{summaryModel(summary.model).name} · {relativeTime(summary.generatedAt)} · 최근 {summary.months}개월 기준 · AI 요약은 틀릴 수 있으니 원문을 확인하세요</p>
-                </div>
-              ) : <p className="text-[13px] text-ink-3">고른 기간의 주간보고를 읽고 흐름·주요 사건·챙길 점을 정리합니다. (Haiku 기준 1회 몇 원)</p>}
-            </section>
-          )}
 
           {history == null ? <div className="flex justify-center py-4"><Spinner /></div>
             : past.length === 0 ? <p className="px-1 text-[13px] text-ink-3">이 기간에 지난 주차 기록이 없습니다.</p>

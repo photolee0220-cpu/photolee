@@ -1,5 +1,6 @@
 // 대표 전용: 이번 주 보고를 Claude로 요약해 저장한다 (모델은 app_settings.summary_model)
 // mode: 'site' 이면 현장 하나의 여러 달 기록을 요약한다 (대표·관리자)
+// mode: 'ask' 이면 대표님 질문에 보고 원문(화면에서 골라 보낸 것)만 근거로 답한다 (저장하지 않음)
 // 배포: supabase functions deploy weekly-summary
 // 비밀값: supabase secrets set ANTHROPIC_API_KEY=...
 import Anthropic from 'npm:@anthropic-ai/sdk@0.133.0';
@@ -51,6 +52,16 @@ const SITE_SCHEMA = {
   },
 };
 
+const ASK_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['answer', 'sourceIds'],
+  properties: {
+    answer: { type: 'string' },
+    sourceIds: { type: 'array', items: { type: 'string' } },
+  },
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
@@ -65,11 +76,13 @@ Deno.serve(async (req) => {
   const body = await req.json();
   // 현장 기간 요약은 대표·관리자, 주간 요약은 대표만
   const siteMode = body.mode === 'site';
+  const askMode = body.mode === 'ask';
   if (!actor?.active || !(actor.is_ceo || (siteMode && actor.is_admin))) {
-    return json({ error: siteMode ? '현장 기간 요약은 대표님과 관리자만 만들 수 있습니다.' : 'AI 요약은 대표님만 만들 수 있습니다.' }, 403);
+    return json({ error: siteMode ? '현장 기간 요약은 대표님과 관리자만 만들 수 있습니다.' : askMode ? 'AI 질문은 대표님만 쓸 수 있습니다.' : 'AI 요약은 대표님만 만들 수 있습니다.' }, 403);
   }
   const { weekId, prompt, sourceUpdatedAt, siteId, months } = body;
-  if (typeof prompt !== 'string' || !prompt.trim() || (siteMode ? typeof siteId !== 'string' : typeof weekId !== 'string')) return json({ error: '요청 형식이 맞지 않습니다.' }, 400);
+  if (typeof prompt !== 'string' || !prompt.trim() || (!askMode && (siteMode ? typeof siteId !== 'string' : typeof weekId !== 'string'))) return json({ error: '요청 형식이 맞지 않습니다.' }, 400);
+  if (prompt.length > 400_000) return json({ error: '보낼 보고가 너무 많습니다. 기간을 줄여 주세요.' }, 413);
 
   // 관리자 페이지 > 설정에서 고른 모델 (기본 Haiku 5.5)
   const { data: setting } = await service.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle();
@@ -81,7 +94,7 @@ Deno.serve(async (req) => {
   const request = {
     model,
     max_tokens: 16000,
-    output_config: { effort: 'medium' as const, format: { type: 'json_schema' as const, schema: siteMode ? SITE_SCHEMA : SCHEMA } },
+    output_config: { effort: 'medium' as const, format: { type: 'json_schema' as const, schema: askMode ? ASK_SCHEMA : siteMode ? SITE_SCHEMA : SCHEMA } },
     messages: [{ role: 'user' as const, content: prompt }],
   };
   let response;
@@ -96,9 +109,18 @@ Deno.serve(async (req) => {
     throw e;
   }
 
-  if (response.stop_reason === 'refusal') return json({ error: 'AI가 이 보고의 요약을 거절했습니다. 원문을 확인해 주세요.' }, 422);
-  if (response.stop_reason === 'max_tokens') return json({ error: '보고가 너무 길어 요약이 끊겼습니다.' }, 422);
+  if (response.stop_reason === 'refusal') return json({ error: askMode ? 'AI가 이 질문에 답하지 않았습니다. 질문을 바꿔 보세요.' : 'AI가 이 보고의 요약을 거절했습니다. 원문을 확인해 주세요.' }, 422);
+  if (response.stop_reason === 'max_tokens') return json({ error: askMode ? '답이 너무 길어 끊겼습니다. 질문을 좁혀 주세요.' : '보고가 너무 길어 요약이 끊겼습니다.' }, 422);
   const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+
+  if (askMode) {
+    try {
+      const a = JSON.parse(text) as { answer: string; sourceIds: string[] };
+      return json({ answer: a.answer, sourceIds: a.sourceIds, model: response.model });
+    } catch {
+      return json({ error: '답을 읽지 못했습니다. 다시 물어봐 주세요.' }, 502);
+    }
+  }
 
   if (siteMode) {
     let site: { overview: string; milestones: { weekId: string; text: string }[]; issues: string[] };

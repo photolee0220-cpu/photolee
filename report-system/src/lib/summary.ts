@@ -116,7 +116,7 @@ export async function askClaudeForSummary(prompt: string, model: { id: string; t
 export async function askClaudeJson(prompt: string, model: { id: string; tier: string }): Promise<unknown> {
   const host = (window as unknown as { claude?: { use?(n: string): Promise<unknown> } }).claude;
   const sample = host?.use ? ((await host.use('sample').catch(() => null)) as SampleFn | null) : null;
-  if (!sample) throw new ApiError('체험판에서는 Claude 안에서 열었을 때만 AI 요약을 만들 수 있습니다. 실제 서버에서는 대표님 화면에서 바로 됩니다.');
+  if (!sample) throw new ApiError('체험판에서는 AI 답변을 받을 수 없습니다. 실제 사이트에서는 대표님 화면에서 바로 답이 나옵니다. (아래 원문 검색은 체험판에서도 됩니다)');
   try {
     return await sample.json(prompt, { model: model.id, modelTier: model.tier, cache: false });
   } catch (e) {

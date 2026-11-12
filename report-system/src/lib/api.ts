@@ -1,6 +1,6 @@
 import type {
   AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary, SiteField, PendingFeedback, MediaItem,
-  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus,
+  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus, SearchDoc, AskAnswer,
 } from './types';
 
 export interface WeekSummary {
@@ -80,6 +80,12 @@ export interface Api {
     /** 본인·부서장·관리자 */
     saveStatus(s: DayStatus): Promise<DayStatus>;
     removeStatus(id: string): Promise<void>;
+  };
+  /** 대표 전용: 보고 검색과 AI 답변 */
+  ask: {
+    /** from(포함) 이후의 주간·일일보고와 지시 (부서원 보고는 제외) */
+    corpus(from: string): Promise<SearchDoc[]>;
+    answer(prompt: string): Promise<AskAnswer>;
   };
   /** 공유 캘린더 */
   calendar: {

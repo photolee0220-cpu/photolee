@@ -452,3 +452,24 @@ export interface NewMemberInput {
   homeSiteId: string | null;
   dailyEnabled: boolean;
 }
+
+/** 대표님 검색·AI 질문에 쓰는 보고 한 칸 */
+export interface SearchDoc {
+  id: string;
+  kind: 'weekly' | 'daily' | 'directive';
+  /** 주간·지시는 보고일(월요일), 일일은 그날 */
+  date: string;
+  siteId: string | null;
+  departmentId: string | null;
+  /** 개인 보고(부서 업무보고·일일보고·개인 지시)의 사람 */
+  memberId: string | null;
+  content: string;
+  /** 지시사항 처리 상태 */
+  status?: DirectiveStatus;
+}
+
+export interface AskAnswer {
+  answer: string;
+  sourceIds: string[];
+  model: string;
+}

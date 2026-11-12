@@ -465,6 +465,39 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       },
     },
 
+    ask: {
+      async corpus(from) {
+        const page = async (q: () => any) => {
+          const out: Row[] = [];
+          for (let i = 0; i < 20; i++) {
+            const rows = check(await q().range(i * 1000, i * 1000 + 999)) as Row[];
+            out.push(...rows);
+            if (rows.length < 1000) break;
+          }
+          return out;
+        };
+        const [en, dv, dl] = await Promise.all([
+          page(() => sb.from('entries').select('id, week_id, kind, site_id, department_id, author_id, content').gte('week_id', from).neq('content', '').order('week_id', { ascending: false })),
+          page(() => sb.from('directives').select('id, week_id, target_kind, site_id, member_id, content, status').gte('week_id', from).in('target_kind', ['site', 'member']).neq('content', '').order('week_id', { ascending: false })),
+          page(() => sb.from('daily_reports').select('id, date, site_id, department_id, author_id, content').gte('date', from).eq('internal', false).neq('content', '').order('date', { ascending: false })),
+        ]);
+        return [
+          ...en.map((e) => ({ id: e.id, kind: 'weekly' as const, date: e.week_id, siteId: e.site_id, departmentId: e.department_id, memberId: e.kind === 'dept' ? e.author_id : null, content: e.content })),
+          ...dv.map((d) => ({ id: d.id, kind: 'directive' as const, date: d.week_id, siteId: d.site_id, departmentId: null, memberId: d.member_id, content: d.content, status: d.status ?? 'open' })),
+          ...dl.map((r) => ({ id: r.id, kind: 'daily' as const, date: r.date, siteId: r.site_id, departmentId: r.department_id, memberId: r.author_id, content: r.content })),
+        ];
+      },
+      async answer(prompt) {
+        const { data, error } = await sb.functions.invoke('weekly-summary', { body: { mode: 'ask', prompt } });
+        if (error) {
+          let msg = 'AI 답변을 받지 못했습니다.';
+          try { const b = await (error as { context?: Response }).context?.json(); if (b?.error) msg = b.error; } catch { /* 기본 문구 */ }
+          throw new ApiError(msg);
+        }
+        return { answer: String(data.answer ?? ''), sourceIds: Array.isArray(data.sourceIds) ? data.sourceIds.map(String) : [], model: String(data.model ?? '') };
+      },
+    },
+
     calendar: {
       async list(from, to) {
         const rows = check(await sb.from('calendar_events').select('*').lte('start_date', to).gte('end_date', from)

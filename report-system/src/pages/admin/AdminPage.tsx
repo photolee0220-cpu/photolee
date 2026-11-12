@@ -1109,9 +1109,9 @@ function AiSettings() {
   return (
     <div className="max-w-[720px]">
       <h1 className="text-[20px] font-extrabold">AI 설정</h1>
-      <p className="mb-4 text-[13px] text-ink-3">대표님 대시보드의 AI 주간 요약에 쓰는 모델입니다. 비용은 보고 한 주(약 1만 6천 자)를 요약할 때의 어림값이며, 요약은 대표님이 버튼을 누를 때만 만들어집니다.</p>
+      <p className="mb-4 text-[13px] text-ink-3">대표님 대시보드 검색창의 AI 답변에 쓰는 모델입니다. 비용은 보고 약 1만 6천 자를 읽을 때의 어림값이며, 대표님이 질문할 때만 쓰입니다. 기간을 넓히면 읽는 보고가 늘어 비용도 늘어납니다.</p>
       {model == null ? <Spinner /> : (
-        <div className="space-y-2" role="radiogroup" aria-label="AI 요약 모델">
+        <div className="space-y-2" role="radiogroup" aria-label="AI 모델">
           {SUMMARY_MODELS.map((m) => {
             const on = m.id === model;
             return (

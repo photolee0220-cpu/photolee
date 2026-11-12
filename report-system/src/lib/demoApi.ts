@@ -585,6 +585,32 @@ export const demoApi: Api = {
     },
   },
 
+  ask: {
+    async corpus(from) {
+      const m = me();
+      if (!m.isCeo) throw new ApiError('대표님만 쓸 수 있습니다.');
+      return delay([
+        ...state.entries.filter((e) => e.weekId >= from && e.content.trim()).map((e) => ({
+          id: e.id, kind: 'weekly' as const, date: e.weekId, siteId: e.siteId, departmentId: e.departmentId, memberId: e.kind === 'dept' ? e.authorId : null, content: e.content,
+        })),
+        ...state.directives.filter((d) => d.weekId >= from && d.content.trim() && (d.targetKind === 'site' || d.targetKind === 'member')).map((d) => ({
+          id: d.id, kind: 'directive' as const, date: d.weekId, siteId: d.siteId, departmentId: null, memberId: d.memberId, content: d.content, status: d.status,
+        })),
+        ...state.daily.filter((r) => r.date >= from && r.content.trim() && !r.internal).map((r) => ({
+          id: r.id, kind: 'daily' as const, date: r.date, siteId: r.siteId, departmentId: r.departmentId, memberId: r.authorId, content: r.content,
+        })),
+      ]);
+    },
+    async answer(prompt) {
+      const m = me();
+      if (!m.isCeo) throw new ApiError('대표님만 쓸 수 있습니다.');
+      const model = summaryModel(state.settings.summaryModel);
+      const v = (await askClaudeJson(prompt, model)) as { answer?: unknown; sourceIds?: unknown } | null;
+      if (typeof v?.answer !== 'string') throw new ApiError('답을 읽지 못했습니다. 다시 물어봐 주세요.');
+      return { answer: v.answer, sourceIds: Array.isArray(v.sourceIds) ? v.sourceIds.map(String) : [], model: model.id };
+    },
+  },
+
   calendar: {
     async list(from, to) {
       const m = me();
