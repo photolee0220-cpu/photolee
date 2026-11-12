@@ -1,5 +1,5 @@
-# 실제 사이트에서 대표 계정으로 AI 주간 요약을 한 번 만들어 본다 (비밀번호 없이 일회용 로그인)
-# 결과는 gh-pages 브랜치의 _ops/ai-check.json (성공 여부·줄 수·모델만, 요약 내용은 남기지 않음)
+# 실제 사이트에서 대표 계정으로 검색창에 일반 질문을 한 번 해 본다 (비밀번호 없이 일회용 로그인)
+# 결과는 gh-pages 브랜치의 _ops/ai-check.json (성공 여부·줄 수·출처 수·모델만, 답 내용은 남기지 않음)
 name: ai-summary-check
 on:
   push:
@@ -47,7 +47,7 @@ jobs:
           echo "::add-mask::$(jq -r .refresh_token "$RUNNER_TEMP/session.json")"
           echo "REF=$REF" >> "$GITHUB_ENV"
           if jq -e '.access_token' "$RUNNER_TEMP/session.json" >/dev/null; then echo "session ok"; else echo "session failed: $(jq -c '{code,error_code,msg}' "$RUNNER_TEMP/session.json")"; fi
-      - name: Make summary in the site
+      - name: Ask a question in the site
         working-directory: ${{ runner.temp }}
         run: |
           cat > check.cjs <<'EOF'
@@ -71,24 +71,33 @@ jobs:
             await p.goto(process.env.SITE + '/', { waitUntil: 'networkidle' });
             await p.waitForTimeout(2000);
             if (await p.getByText(/새 비밀번호/).count()) { out.error = '대표 계정이 아직 첫 비밀번호 변경 전이라 화면에 들어갈 수 없음'; await b.close(); return; }
-            const btn = p.getByRole('button', { name: /요약 만들기|다시 만들기/ }).first();
-            await btn.waitFor({ timeout: 30000 });
-            out.week = (await p.getByText(/월 \d+일 보고/).first().textContent())?.trim();
-            await btn.click();
+            // 알림 필수 안내: 헤드리스 브라우저는 알림을 켤 수 없으므로 거절 후 넘어간다 (구독은 만들지 않음)
+            if (await p.getByText('알림을 켜 주세요').count()) {
+              await p.getByRole('button', { name: '알림 켜기' }).click().catch(() => {});
+              await p.waitForTimeout(1500);
+              await p.getByRole('button', { name: /지금은 넘어가기/ }).click().catch(() => {});
+              out.notifyGate = 'shown, skipped';
+            }
+            await p.locator('#ask-input').waitFor({ timeout: 30000 });
+            await p.fill('#ask-input', '이번 주 이슈 있는 현장 알려줘');
+            await p.getByRole('button', { name: '묻기' }).click();
             const t0 = Date.now();
             for (;;) {
               await p.waitForTimeout(2000);
-              const busy = await p.getByText('정리하는 중').count();
-              if (!busy || Date.now() - t0 > 180000) break;
+              const busy = await p.getByText(/답을 정리하는 중/).count();
+              if ((!busy && Date.now() - t0 > 3000) || Date.now() - t0 > 180000) break;
             }
             out.seconds = Math.round((Date.now() - t0) / 1000);
-            const panel = p.locator('section, div').filter({ has: p.getByText('AI 주간 요약') }).first();
-            out.highlights = await panel.locator('ol li, ul li').count();
-            const meta = await p.getByText(/Claude (Haiku|Sonnet|Opus)[^·]*·/).first().textContent().catch(() => null);
+            const ai = p.locator('section', { has: p.getByRole('heading', { name: 'AI 답변' }) }).first();
+            out.answerLines = await ai.locator('div.space-y-1 > p').count();
+            out.refs = await ai.locator('button', { hasText: /^S\d+$/ }).count();
+            out.sources = await ai.locator('ul li').count();
+            const meta = await ai.getByText(/Claude (Haiku|Sonnet|Opus)[^·]*·/).first().textContent().catch(() => null);
             out.model = meta ? meta.split('·')[0].trim() : null;
-            const toast = await p.locator('[role=status], [role=alert]').allInnerTexts().catch(() => []);
-            if (toast.length) out.message = toast.join(' / ').slice(0, 200);
-            out.ok = out.highlights > 0 && !!out.model;
+            out.used = meta ? (meta.match(/보고 \d+건 중 \d+건/) ?? [null])[0] : null;
+            if (!out.answerLines) out.message = ((await ai.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').slice(0, 160);
+            out.matches = Number(((await p.getByText(/관련 보고 원문/).first().innerText().catch(() => '')).match(/(\d+)건/) ?? [0, 0])[1]);
+            out.ok = out.answerLines > 0 && out.refs > 0 && !!out.model;
             out.pageErrors = errors.slice(0, 3);
             await b.close();
           })().catch((e) => { out.error = String(e).slice(0, 300); }).finally(() => {
@@ -106,4 +115,4 @@ jobs:
           cd "$RUNNER_TEMP/site"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A && git commit -m "ai summary check" && git push origin HEAD:gh-pages || true
+          git add -A && git commit -m "ai question check" && git push origin HEAD:gh-pages || true
