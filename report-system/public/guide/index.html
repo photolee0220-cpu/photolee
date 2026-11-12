@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>주간보고 사용 설명서 · 사닥다리종합건설</title>
+<title>업무보고 시스템 사용 설명서 · 사닥다리종합건설</title>
 <link rel="icon" href="../icon-64.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
 <style>
@@ -112,10 +112,10 @@
     <img class="hero-logo" src="../icon-192.png" alt="사닥다리종합건설 로고" />
     <div>
       <span class="chip">시범 운영</span>
-      <h1>주간보고 사용 설명서</h1>
-      <p>사닥다리종합건설 · 엑셀 대신 휴대폰·컴퓨터로 쓰는 주간보고</p>
+      <h1>업무보고 시스템 사용 설명서</h1>
+      <p>사닥다리종합건설 · 일일보고·주간보고·캘린더를 휴대폰과 컴퓨터로 한곳에서</p>
       <p style="margin-top:8px"><a href="https://photolee0220-cpu.github.io/photolee/" style="color:#fff;font-weight:700">photolee0220-cpu.github.io/photolee</a>
-        <span class="noprint"> · <a href="sadakdari-weekly-report-guide.pdf" download="주간보고_사용설명서.pdf" style="color:#fff">PDF로 받기</a></span></p>
+        <span class="noprint"> · <a href="sadakdari-weekly-report-guide.pdf" download="업무보고시스템_사용설명서.pdf" style="color:#fff">PDF로 받기</a></span></p>
     </div>
     <div class="qr"><img src="img/qr.svg" alt="접속 주소 QR 코드" />휴대폰으로 찍어서 접속</div>
   </div>
@@ -126,11 +126,14 @@
     <ol>
       <li><a href="#login">접속과 로그인</a></li>
       <li><a href="#home">휴대폰 홈 화면에 추가</a></li>
-      <li><a href="#write">보고 쓰기</a></li>
+      <li><a href="#daily">일일보고 쓰기</a></li>
+      <li><a href="#write">주간보고 쓰기</a></li>
       <li><a href="#deadline">마감과 수정</a></li>
       <li><a href="#feedback">피드백 확인·지시 처리</a></li>
       <li><a href="#meeting">월요일 회의: 내 보고</a></li>
-      <li><a href="#notify">알림 받기</a></li>
+      <li><a href="#calendar">캘린더</a></li>
+      <li><a href="#notify">알림 켜기 (필수)</a></li>
+      <li><a href="#team">부서장·부서원</a></li>
       <li><a href="#faq">자주 묻는 질문</a></li>
     </ol>
   </nav>
@@ -158,27 +161,62 @@
       <div class="phone-card">
         <h3>아이폰 (사파리)</h3>
         <ol>
-          <li>사파리로 주간보고 주소에 접속</li>
+          <li>사파리로 업무보고 주소에 접속</li>
           <li>아래쪽 <span class="ico">⬆︎</span> <b>공유</b> 버튼</li>
           <li><b>홈 화면에 추가</b> → <b>추가</b></li>
-          <li>홈 화면의 <b>주간보고</b> 아이콘으로 열기</li>
+          <li>홈 화면의 <b>업무보고</b> 아이콘으로 열기</li>
         </ol>
       </div>
       <div class="phone-card">
         <h3>안드로이드 (크롬·삼성 인터넷)</h3>
         <ol>
-          <li>크롬으로 주간보고 주소에 접속</li>
+          <li>크롬으로 업무보고 주소에 접속</li>
           <li>오른쪽 위 <span class="ico">⋮</span> 메뉴</li>
           <li><b>홈 화면에 추가</b> (또는 <b>앱 설치</b>)</li>
-          <li>홈 화면의 <b>주간보고</b> 아이콘으로 열기</li>
+          <li>홈 화면의 <b>업무보고</b> 아이콘으로 열기</li>
         </ol>
       </div>
     </div>
   </section>
 
+  <section class="step big" id="daily">
+    <h2><span class="num">3</span>일일보고 쓰기</h2>
+    <p class="lead">메뉴 <span class="ui">일일보고</span>에서 그날 한 일을 씁니다. 로그인하면 처음 열리는 화면입니다. 입력하면 <b>자동 저장</b>됩니다.</p>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li><b>월~금은 매일</b> 씁니다. 토요일은 근무한 날만 쓰면 되고, 안 써도 미작성으로 세지 않습니다.</li>
+          <li><b>그날 안에만</b> 쓰고 고칠 수 있습니다. 지난 날짜는 보기만 됩니다.</li>
+          <li><b>본사 직원</b>: <span class="ui">일일보고</span> 칸에 그날 업무를 쓰고, 현장 일을 했다면 <span class="ui">+ 현장 추가</span>로 현장을 골라 따로 씁니다. 현장 칸에 쓴 내용은 대표님 화면의 그 현장에 함께 나옵니다.</li>
+          <li><b>현장 직원</b>(소장·대리 등): 소속 현장 칸 하나에 작업 내용, 투입 인원·장비, 특이사항, 내일 계획을 씁니다.</li>
+          <li>칸마다 <b>사진</b>을 붙일 수 있고, 굵게·빨강·파랑·형광펜으로 <b>강조</b>할 수 있습니다.</li>
+          <li>아래 <b>함께 보는 일일보고</b>에서 우리 부서(열람권한이 있는 부서 포함) 사람들의 보고를 볼 수 있습니다.</li>
+        </ul>
+      </div>
+      <div class="shots">
+        <figure><a href="img/15-daily-hq.jpg"><img src="img/15-daily-hq.jpg" alt="본사 직원 일일보고" /></a><figcaption>본사 직원 일일보고</figcaption></figure>
+        <figure><a href="img/17-daily-site.jpg"><img src="img/17-daily-site.jpg" alt="현장 직원 일일보고" /></a><figcaption>현장 직원 일일보고</figcaption></figure>
+      </div>
+    </div>
+
+    <h3 style="margin:22px 0 6px">연차·출장 등 근무 상태 등록</h3>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li>쉬거나 외근하는 날은 <span class="ui">근무 상태 등록</span>을 눌러 <b>연차·반차·휴가·출장·교육·휴무</b>와 날짜(기간)를 등록합니다. <b>미리 등록</b>해 두면 됩니다.</li>
+          <li>등록한 날은 대표님 화면에 미작성 대신 <b>"연차"</b>처럼 표시되고, 마감 알림도 가지 않습니다. 캘린더에도 표시됩니다.</li>
+          <li><b>반차</b>는 표시만 되고 일일보고는 씁니다.</li>
+          <li>부서장과 관리자는 부서원 대신 등록할 수 있습니다.</li>
+        </ul>
+        <div class="tip">휴가 신청·승인은 지금처럼 다우오피스에서 합니다. 여기서는 보고 미작성으로 잡히지 않도록 <b>표시만</b> 합니다.</div>
+      </div>
+      <figure class="solo"><a href="img/18-status.jpg"><img src="img/18-status.jpg" alt="근무 상태 등록" /></a><figcaption>근무 상태 등록</figcaption></figure>
+    </div>
+  </section>
+
   <section class="step big" id="write">
-    <h2><span class="num">3</span>보고 쓰기</h2>
-    <p class="lead">메뉴 <span class="ui">이번 주 작성</span>에서 씁니다. 입력하면 <b>자동으로 저장</b>됩니다. 저장 버튼이 따로 없고, 칸 아래 <b>✓ 저장됨</b>이 보이면 저장된 것입니다.</p>
+    <h2><span class="num">4</span>주간보고 쓰기</h2>
+    <p class="lead">메뉴 <span class="ui">이번 주 작성</span>에서 일주일에 한 번 씁니다. 입력하면 <b>자동으로 저장</b>됩니다. 저장 버튼이 따로 없고, 칸 아래 <b>✓ 저장됨</b>이 보이면 저장된 것입니다.</p>
 
     <h3 style="margin:18px 0 6px">현장 보고 부서 (공무·인테리어·CM·견적)</h3>
     <div class="row">
@@ -215,7 +253,7 @@
   </section>
 
   <section class="step" id="deadline">
-    <h2><span class="num">4</span>마감과 수정</h2>
+    <h2><span class="num">5</span>마감과 수정</h2>
     <div class="timeline">
       <div><b>월~금</b>이번 주 작성</div>
       <div><b>토 오전 10시</b>작성 마감</div>
@@ -228,6 +266,7 @@
           <li>마감 후에도 <b>월요일까지</b>는 고칠 수 있습니다.</li>
           <li><b>화요일 0시</b>부터 지난주 보고는 <b>보기만</b> 가능합니다. 고칠 내용이 있으면 관리자에게 요청해 주세요.</li>
           <li>칸 아래 <span class="ui">수정 기록</span>을 누르면 이전 내용과 고친 사람을 볼 수 있습니다.</li>
+          <li><b>일일보고</b>는 마감이 따로 없고 <b>그날 안에</b> 쓰고 고칩니다. 평일 <b>오후 6시</b>까지 안 쓰면 알림이 갑니다.</li>
         </ul>
       </div>
       <figure class="wide flat" style="max-width:420px"><a href="img/11-locked-banner.jpg"><img src="img/11-locked-banner.jpg" alt="지난 주차 잠금 안내" /></a><figcaption>지난 주차를 열면 보이는 안내</figcaption></figure>
@@ -235,7 +274,7 @@
   </section>
 
   <section class="step big" id="feedback">
-    <h2><span class="num">5</span>피드백 확인 · 지시 처리</h2>
+    <h2><span class="num">6</span>피드백 확인 · 지시 처리</h2>
     <p class="lead">대표님·본부장님이 남긴 피드백과 대표님 지시사항을 꼭 확인해 주세요.</p>
     <div class="row">
       <div class="text">
@@ -243,6 +282,8 @@
           <li>새 피드백이 있으면 화면 위에 <b>"피드백 n건이 확인을 기다립니다"</b>가 뜨고, 해당 현장 옆에 <b>피드백</b> 표시가 붙습니다.</li>
           <li>내용을 읽고 <span class="ui">✓ 확인했습니다</span>를 눌러 주세요. 대표님 화면에 확인 여부가 바로 표시됩니다.</li>
           <li>필요하면 <b>답글</b>을 달 수 있습니다.</li>
+          <li><b>일일보고 피드백</b>은 주간보고와 따로, 일일보고 화면 위쪽에 <b>"확인하지 않은 일일보고 피드백"</b>으로 모여 나옵니다.</li>
+          <li>피드백은 <b>확인하기 전까지</b> 남긴 사람이 고칠 수 있습니다(<b>수정됨</b> 표시). 확인한 뒤에는 바뀌지 않습니다.</li>
           <li>대표님 지시사항 아래 <span class="ui">대기</span> <span class="ui">진행 중</span> <span class="ui">완료</span>를 눌러 <b>처리 상태</b>를 표시해 주세요.</li>
         </ul>
       </div>
@@ -254,7 +295,7 @@
   </section>
 
   <section class="step big" id="meeting">
-    <h2><span class="num">6</span>월요일 회의: 내 보고</h2>
+    <h2><span class="num">7</span>월요일 회의: 내 보고</h2>
     <p class="lead">메뉴 <span class="ui">내 보고</span>를 엽니다. 회의 때는 휴대폰이나 태블릿으로 이 화면을 보면서 보고하세요.</p>
     <div class="row">
       <div class="text">
@@ -272,8 +313,26 @@
     </div>
   </section>
 
+  <section class="step" id="calendar">
+    <h2><span class="num">8</span>캘린더</h2>
+    <p class="lead">메뉴 <span class="ui">캘린더</span>에서 일정을 함께 봅니다. (휴대폰은 아래 <span class="ui">더보기</span> 안에 있습니다)</p>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li><span class="ui">+ 일정 추가</span>로 제목, 날짜(여러 날이면 끝나는 날), 시간, 현장, 메모를 넣습니다.</li>
+          <li><b>공유 범위</b>: <b>우리 부서</b>는 부서원과 열람권한이 있는 부서에, <b>전체</b>는 모든 직원에게 보입니다.</li>
+          <li>날짜를 누르면 아래에 그날 일정과 연차·출장 같은 <b>근무 상태</b>가 나옵니다.</li>
+          <li>위쪽 현장 이름을 누르면 그 현장 일정만 봅니다.</li>
+          <li>일정은 만든 사람과 관리자가 고치거나 지울 수 있습니다.</li>
+        </ul>
+      </div>
+      <figure class="solo"><a href="img/19-calendar.jpg"><img src="img/19-calendar.jpg" alt="캘린더" /></a><figcaption>캘린더</figcaption></figure>
+    </div>
+  </section>
+
   <section class="step" id="notify">
-    <h2><span class="num">7</span>알림 받기 <span style="font-size:14px;color:var(--ink-3);font-weight:600">(선택)</span></h2>
+    <h2><span class="num">9</span>알림 켜기 <span style="font-size:14px;color:var(--ink-3);font-weight:600">(필수)</span></h2>
+    <p class="lead">마감과 피드백을 휴대폰으로 알려 드립니다. <b>모든 직원이 켜야 하는 설정</b>이라, 알림이 꺼져 있으면 로그인할 때 <b>"알림을 켜 주세요"</b> 안내가 뜹니다.</p>
     <div class="row">
       <div class="text">
         <ol class="steps">
@@ -282,12 +341,28 @@
           <li><span class="ui">시험 알림 보내기</span>로 잘 오는지 확인합니다.</li>
         </ol>
         <ul class="points">
-          <li><b>금요일 오후 3시, 토요일 오전 8시 30분</b>: 이번 주 보고를 아직 안 쓴 경우에만 알림</li>
-          <li>대표님·본부장님이 내 보고에 <b>피드백을 남겼을 때</b> 알림</li>
+          <li><b>평일 오후 6시</b>: 그날 일일보고를 아직 안 쓴 경우에만 (근무 상태를 등록한 날은 제외)</li>
+          <li><b>금요일 오후 3시, 토요일 오전 8시 30분</b>: 이번 주 주간보고를 아직 안 쓴 경우에만</li>
+          <li>내 일일보고·주간보고에 <b>피드백이 달렸을 때</b> (제목에 [일일보고]·[주간보고] 표시)</li>
         </ul>
-        <div class="tip">아이폰은 먼저 <b>2번 '홈 화면에 추가'</b>를 하고, 그 아이콘으로 연 다음 알림을 켜야 합니다. (iOS 16.4 이상)</div>
+        <div class="tip">아이폰은 먼저 <b>2번 '홈 화면에 추가'</b>를 하고, 그 아이콘으로 연 다음 알림을 켜야 합니다. (iOS 16.4 이상) 휴대폰이 무음·방해금지 상태면 소리는 나지 않습니다. 컴퓨터와 휴대폰을 함께 쓰면 <b>기기마다 한 번씩</b> 켜 주세요.</div>
       </div>
       <figure class="solo"><a href="img/12-notify.jpg"><img src="img/12-notify.jpg" alt="알림 설정 창" /></a><figcaption>🔔 알림 설정</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="step" id="team">
+    <h2><span class="num">10</span>부서장 · 부서원 <span style="font-size:14px;color:var(--ink-3);font-weight:600">(해당 부서만)</span></h2>
+    <p class="lead">관리자가 '부서 안 보고'를 켠 부서는 <b>부서원이 부서장에게</b> 일일보고를 하고, 부서장이 대표님께 보고합니다.</p>
+    <div class="row">
+      <div class="text">
+        <ul class="points">
+          <li><b>부서원</b>: 메뉴에 <span class="ui">일일보고</span>와 <span class="ui">캘린더</span>만 있습니다. 쓴 보고는 <b>부서장에게만</b> 보이고 대표님 화면에는 나오지 않습니다.</li>
+          <li><b>부서장</b>: 메뉴 <span class="ui">부서원 보고</span>에서 부서원의 작성 현황·미작성자를 보고 피드백을 남깁니다. 부서원 근무 상태도 대신 등록할 수 있습니다.</li>
+          <li>부서장 본인의 일일·주간보고는 지금처럼 대표님께 올라갑니다.</li>
+        </ul>
+      </div>
+      <figure class="solo"><a href="img/20-team.jpg"><img src="img/20-team.jpg" alt="부서원 보고" /></a><figcaption>부서장: 부서원 보고</figcaption></figure>
     </div>
   </section>
 
@@ -304,6 +379,12 @@
       <dd>칸 아래 <b>수정 기록</b>에서 이전 내용을 보고 다시 붙여 넣을 수 있습니다.</dd>
       <dt>지난주 보고를 고쳐야 해요.</dt>
       <dd>화요일부터는 잠겨 있으니 관리자에게 요청해 주세요.</dd>
+      <dt>연차인데 일일보고 미작성으로 나와요.</dt>
+      <dd>일일보고 화면의 <b>근무 상태 등록</b>에서 그날을 연차로 등록하면 미작성에서 빠집니다. 미리 등록해 두면 좋습니다.</dd>
+      <dt>일일보고를 쓰지 않는 직무인데요.</dt>
+      <dd>관리자가 <b>일일보고 작성 대상</b>을 끄면 일일보고 칸과 알림이 없어집니다. 관리자에게 요청해 주세요.</dd>
+      <dt>알림 안내 창이 계속 떠요.</dt>
+      <dd>알림을 켜야 사라집니다. 브라우저에서 알림을 '차단'해 둔 경우 설정에서 '허용'으로 바꾼 뒤 새로고침해 주세요.</dd>
       <dt>비밀번호를 잊었어요.</dt>
       <dd>관리자에게 초기화를 요청하면 임시 비밀번호를 다시 받습니다.</dd>
     </dl>
@@ -317,7 +398,7 @@
 
   <footer>
     화면 예시의 이름·현장은 설명을 위한 가상의 내용입니다.<br />
-    문의: 관리자(취합 담당) · 사닥다리종합건설 주간보고
+    문의: 관리자(취합 담당) · 사닥다리 업무보고 시스템
   </footer>
 </div>
 </body>
