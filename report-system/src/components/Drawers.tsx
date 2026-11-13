@@ -63,6 +63,8 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const prevDirective = siteDirective(snap.prevDirectives, site.id);
   const due = dueInfo(site);
 
+  // 이번 주에 이 현장 칸을 쓴 부서 (내용 열람 권한과 관계없이 작성 여부는 안다)
+  const wroteSite = (deptId: string) => !!siteStatusOf(snap, site.id, deptId) || has(siteEntry(snap.entries, site.id, deptId)?.content);
   return (
     <Sheet
       open
@@ -104,7 +106,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
           directive={directive}
         />
 
-        {depts.map((d) => {
+        {depts.filter((d) => wroteSite(d.id) || d.id === me.departmentId).map((d) => {
           const status = siteStatusOf(snap, site.id, d.id);
           if (!canViewDept(me, d.id, snap.grants)) {
             return (
@@ -136,6 +138,14 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
             </Block>
           );
         })}
+
+        {/* 안 쓴 부서는 칸 대신 한 줄로 (내 부서 칸은 위에서 바로 쓸 수 있게 남겨 둔다) */}
+        {depts.some((d) => !wroteSite(d.id) && d.id !== me.departmentId) && (
+          <p className="rounded-xl border border-dashed border-line-strong px-4 py-2.5 text-[13px] text-ink-3">
+            <b className="mr-1.5 font-semibold text-ink-2">미작성</b>
+            {depts.filter((d) => !wroteSite(d.id) && d.id !== me.departmentId).map((d) => d.name).join(' · ')}
+          </p>
+        )}
 
         <SiteTimeline site={site} />
       </div>
