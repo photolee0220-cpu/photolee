@@ -761,7 +761,7 @@ export const demoApi: Api = {
     },
     async saveSettings(next) {
       requireAdmin();
-      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim() };
+      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice };
       persist();
       return structuredClone(state.settings);
     },

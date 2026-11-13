@@ -5,6 +5,7 @@ import { EntryEditor, TextBlock } from '../components/editors';
 import { ImageViewer } from '../components/Photos';
 import { RichEditor, type RichEditorHandle } from '../components/RichEditor';
 import { MarkToolbar, RichLines } from '../components/RichText';
+import { ReportNotice } from '../components/ReportNotice';
 import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal, Segmented, Select, Spinner, StageChip } from '../components/ui';
 import { affiliationOf, canEditDaily, canReviewDaily, canSetDayStatus, canViewDept, headedDepartments, isInternalMember, isWorkday, writesDaily } from '../lib/access';
 import { newId } from '../lib/api';
@@ -144,6 +145,7 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
             <DailyPhotos date={date} siteId={site.id} authorId={me.id} photos={data.photos} editable={editable} onChanged={reload} />
           </SiteBlockTitle>
         )}
+        {editable && <ReportNotice className="mt-3" />}
         <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} written={written} />
       </Card>
     );
@@ -190,6 +192,7 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
           )}
         </div>
       )}
+      {editable && <ReportNotice className="mt-4" />}
       <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} written={written} />
     </Card>
   );

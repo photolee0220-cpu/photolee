@@ -11,6 +11,7 @@ import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes, triggerDownload } from '../../lib/fileTypes';
 import { buildMediaZip, downloadMediaZip, estimateBytes, zipFileName } from '../../lib/mediaZip';
 import { SUMMARY_MODELS } from '../../lib/models';
+import { DEFAULT_AI, DEFAULT_REPORT_NOTICE, settingsChanged } from '../../lib/settings';
 import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage, type Affiliation } from '../../lib/types';
 import { currentWeekId, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
@@ -1086,17 +1087,27 @@ function AiSettings() {
   const { toast } = useStore();
   const [model, setModel] = useState<string | null>(null);
   const [layers, setLayers] = useState('');
+  const [ai, setAi] = useState(DEFAULT_AI);
+  const [notice, setNotice] = useState(DEFAULT_REPORT_NOTICE);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    api.getSettings().then((s) => { setModel(s.summaryModel); setLayers(s.layersUrl ?? ''); }).catch(() => setModel(SUMMARY_MODELS[0].id));
+    api.getSettings().then((s) => {
+      setModel(s.summaryModel); setLayers(s.layersUrl ?? ''); setAi({ ...DEFAULT_AI, ...(s.ai ?? {}) }); setNotice(s.reportNotice ?? DEFAULT_REPORT_NOTICE);
+    }).catch(() => setModel(SUMMARY_MODELS[0].id));
   }, []);
 
-  const save = async (next: { summaryModel?: string; layersUrl?: string }, msg: string) => {
+  const save = async (next: { summaryModel?: string; layersUrl?: string; ai?: typeof ai; reportNotice?: string }, msg: string) => {
     setSaving(true);
     try {
-      const s = await api.admin.saveSettings({ summaryModel: next.summaryModel ?? model ?? SUMMARY_MODELS[0].id, layersUrl: next.layersUrl ?? layers });
+      const s = await api.admin.saveSettings({
+        summaryModel: next.summaryModel ?? model ?? SUMMARY_MODELS[0].id, layersUrl: next.layersUrl ?? layers,
+        ai: next.ai ?? ai, reportNotice: next.reportNotice ?? notice,
+      });
       setModel(s.summaryModel);
       setLayers(s.layersUrl ?? '');
+      setAi({ ...DEFAULT_AI, ...(s.ai ?? {}) });
+      setNotice(s.reportNotice ?? DEFAULT_REPORT_NOTICE);
+      settingsChanged(s);
       toast(msg);
     } catch (e) {
       toast(e instanceof Error ? e.message : '저장하지 못했습니다.', 'error');
@@ -1109,7 +1120,17 @@ function AiSettings() {
   return (
     <div className="max-w-[720px]">
       <h1 className="text-[20px] font-extrabold">AI 설정</h1>
-      <p className="mb-4 text-[13px] text-ink-3">대표님 대시보드 검색창의 AI 답변에 쓰는 모델입니다. 비용은 보고 약 1만 6천 자를 읽을 때의 어림값이며, 대표님이 질문할 때만 쓰입니다. 기간을 넓히면 읽는 보고가 늘어 비용도 늘어납니다.</p>
+      <p className="mb-3 text-[13px] text-ink-3">AI 기능은 여기서 켜고 끌 수 있습니다. 끄면 화면에서 사라지고 서버도 요청을 거절해 비용이 나가지 않습니다.</p>
+      <div className="mb-8 space-y-3 rounded-2xl border border-line bg-surface p-4 shadow-card">
+        <Toggle checked={ai.master} disabled={saving} onChange={(v) => void save({ ai: { ...ai, master: v } }, v ? 'AI 기능을 켰습니다' : 'AI 기능을 모두 껐습니다')}
+          label={<>AI 기능 전체 <span className="text-ink-3">끄면 아래 기능이 모두 멈춥니다</span></>} />
+        <div className={cx('space-y-3 border-t border-line pt-3', !ai.master && 'opacity-50')}>
+          <Toggle checked={ai.ask} disabled={saving || !ai.master} onChange={(v) => void save({ ai: { ...ai, ask: v } }, v ? '대표님 검색창 AI 답변을 켰습니다' : '대표님 검색창 AI 답변을 껐습니다')}
+            label={<>대표님 검색창 AI 답변 <span className="text-ink-3">끄면 원문 검색만 됩니다</span></>} />
+        </div>
+      </div>
+      <h2 className="text-[18px] font-extrabold">사용할 AI 모델</h2>
+      <p className="mb-4 mt-1 text-[13px] text-ink-3">대표님 대시보드 검색창의 AI 답변에 쓰는 모델입니다. 비용은 보고 약 1만 6천 자를 읽을 때의 어림값이며, 대표님이 질문할 때만 쓰입니다. 기간을 넓히면 읽는 보고가 늘어 비용도 늘어납니다.</p>
       {model == null ? <Spinner /> : (
         <div className="space-y-2" role="radiogroup" aria-label="AI 모델">
           {SUMMARY_MODELS.map((m) => {
@@ -1130,6 +1151,17 @@ function AiSettings() {
           })}
         </div>
       )}
+
+      <h2 className="mt-10 text-[18px] font-extrabold">보고 칸 안내 문구</h2>
+      <p className="mb-3 text-[13px] text-ink-3">일일보고·주간보고 작성 칸 아래에 작은 글씨로 보입니다. 비워 두면 표시하지 않습니다.</p>
+      <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void save({ reportNotice: notice }, notice.trim() ? '안내 문구를 저장했습니다' : '안내 문구를 비웠습니다 (표시 안 함)'); }}>
+        <textarea id="report-notice" value={notice} onChange={(e) => setNotice(e.target.value)} rows={3} maxLength={300}
+          className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[14px] leading-[1.6] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20" />
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={saving}>저장</Button>
+          <Button type="button" tone="ghost" disabled={saving} onClick={() => { setNotice(DEFAULT_REPORT_NOTICE); void save({ reportNotice: DEFAULT_REPORT_NOTICE }, '기본 문구로 되돌렸습니다'); }}>기본 문구로</Button>
+        </div>
+      </form>
 
       <h2 className="mt-10 text-[18px] font-extrabold">레이어스 연결</h2>
       <p className="mb-3 text-[13px] text-ink-3">대표님 화면의 '레이어스' 버튼을 누르면 이 주소가 새 창으로 열립니다. 레이어스 시스템이 생기면 주소를 넣어 주세요.</p>

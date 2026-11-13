@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { isWeekLocked } from '../lib/access';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
 import { PendingFeedbackBanner } from '../components/PendingFeedback';
+import { ReportNotice } from '../components/ReportNotice';
 import { AttachmentList, attachmentsFor, FileCount } from '../components/Attachments';
 import { DirectiveBox, EntryEditor, Feedback, SectionEditor, TextBlock } from '../components/editors';
 import { dueInfo } from '../components/SiteCard';
@@ -62,6 +63,7 @@ export function MyWeek() {
             onSave={(content) => saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id, content })}
           />
         )}
+        {!locked && <ReportNotice />}
         <AttachmentList target={{ kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id }} editable={!locked} />
         <Feedback entry={mine} />
       </div>
@@ -125,7 +127,8 @@ export function MyWeek() {
               <Button size="sm" tone="ghost" onClick={() => setOpenSites(new Set())}><ChevronsDownUp size={15} />모두 접기</Button>
             )}
           </div>
-          <p className="mb-4 text-[12.5px] text-ink-3">현장 이름을 누르면 작성 칸이 열립니다. 우리 부서가 맡은 현장만 쓰면 됩니다.</p>
+          <p className="mb-1 text-[12.5px] text-ink-3">현장 이름을 누르면 작성 칸이 열립니다. 우리 부서가 맡은 현장만 쓰면 됩니다.</p>
+          {!locked && <ReportNotice className="mb-4" />}
           <div className="space-y-6">
             {snap.stages.map((st) => {
               const list = filtered.filter((s) => s.stage === st.id);

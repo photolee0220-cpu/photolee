@@ -3,7 +3,7 @@ import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf, triggerDownload } from './fileTypes';
-import type { AiSummary, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
+import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
 
 const BUCKET = 'site-photos';
 const FILES = 'report-files';
@@ -371,9 +371,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     },
 
     async getSettings() {
-      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url'])) as Row[];
-      const get = (k: string) => rows.find((r) => r.key === k)?.value as string | undefined;
-      return { summaryModel: get('summary_model') || DEFAULT_SUMMARY_MODEL, layersUrl: get('layers_url') ?? '' };
+      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice'])) as Row[];
+      const get = (k: string) => rows.find((r) => r.key === k)?.value;
+      return {
+        summaryModel: (get('summary_model') as string) || DEFAULT_SUMMARY_MODEL,
+        layersUrl: (get('layers_url') as string) ?? '',
+        ai: get('ai_enabled') as AppSettings['ai'] | undefined,
+        reportNotice: get('report_notice') as string | undefined,
+      };
     },
 
     subscribe(fn) {
@@ -624,6 +629,8 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         check(await sb.from('app_settings').upsert([
           { key: 'summary_model', value: next.summaryModel, updated_at: at },
           { key: 'layers_url', value: (next.layersUrl ?? '').trim(), updated_at: at },
+          ...(next.ai ? [{ key: 'ai_enabled', value: next.ai, updated_at: at }] : []),
+          ...(next.reportNotice !== undefined ? [{ key: 'report_notice', value: next.reportNotice.trim(), updated_at: at }] : []),
         ]));
         return { ...next, layersUrl: (next.layersUrl ?? '').trim() };
       },

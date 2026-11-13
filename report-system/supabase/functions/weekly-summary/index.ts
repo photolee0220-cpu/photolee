@@ -84,6 +84,11 @@ Deno.serve(async (req) => {
   if (typeof prompt !== 'string' || !prompt.trim() || (!askMode && (siteMode ? typeof siteId !== 'string' : typeof weekId !== 'string'))) return json({ error: '요청 형식이 맞지 않습니다.' }, 400);
   if (prompt.length > 400_000) return json({ error: '보낼 보고가 너무 많습니다. 기간을 줄여 주세요.' }, 413);
 
+  // 관리자가 AI 기능을 꺼 두었으면 요청하지 않는다 (비용 없음)
+  const { data: aiRow } = await service.from('app_settings').select('value').eq('key', 'ai_enabled').maybeSingle();
+  const ai = { master: true, ask: true, ...((aiRow?.value as Record<string, boolean> | null) ?? {}) };
+  if (!ai.master || (askMode && !ai.ask)) return json({ error: '관리자가 AI 기능을 꺼 두었습니다.' }, 403);
+
   // 관리자 페이지 > 설정에서 고른 모델 (기본 Haiku 5.5)
   const { data: setting } = await service.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle();
   const model = MODELS.includes(setting?.value) ? (setting!.value as string) : MODELS[0];

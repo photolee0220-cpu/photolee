@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { buildAskPrompt, queryTerms, rank, snippet, splitRefs, type Labeled, type Lookup } from '../lib/ask';
 import { api } from '../lib/client';
 import { summaryModel } from '../lib/models';
+import { aiOn, useAppSettings } from '../lib/settings';
 import type { AskAnswer, SearchDoc } from '../lib/types';
 import { shiftDay, todayIso } from '../lib/week';
 import { useStore } from '../state/store';
@@ -19,6 +20,8 @@ interface Result { question: string; matches: Labeled[]; byRef: Map<string, Labe
 /** 대표님 대시보드 맨 위 검색창: 보고 원문 검색 + AI 답변(출처 포함) */
 export function AskPanel() {
   const { snap } = useStore();
+  const settings = useAppSettings();
+  const aiEnabled = aiOn(settings, 'ask');
   const [q, setQ] = useState('');
   const [period, setPeriod] = useState<Period>('31');
   const [kind, setKind] = useState<Kind>('all');
@@ -49,6 +52,7 @@ export function AskPanel() {
       const matches = ranked.filter((d) => d.score > 0).sort((a, b) => b.score - a.score || b.date.localeCompare(a.date)).slice(0, 30);
       const base = { question: text, matches, byRef, total: pool.length };
       if (!pool.length) { setRes({ ...base, ai: null, aiError: '이 기간에 보고가 없습니다.', sent: 0, partial: false }); return; }
+      if (!aiEnabled) { setRes({ ...base, ai: null, aiError: null, sent: 0, partial: false }); return; }
       const { prompt, sent, partial } = buildAskPrompt(text, ranked, `${PERIOD_LABEL[period]} · ${kind === 'all' ? '주간+일일' : kind === 'weekly' ? '주간보고' : '일일보고'}`);
       setRes({ ...base, ai: null, aiError: null, sent: sent.length, partial });
       try {
@@ -70,16 +74,16 @@ export function AskPanel() {
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void ask(q); }}>
         <div className="relative min-w-0 flex-1">
           <Sparkles size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand" />
-          <input id="ask-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="무엇이든 물어보세요 · 예: 가나다교회 레미콘 관련 내용 정리해줘"
+          <input id="ask-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={aiEnabled ? '무엇이든 물어보세요 · 예: 가나다교회 레미콘 관련 내용 정리해줘' : '보고 검색 · 예: 가나다교회 레미콘'}
             className="h-12 w-full rounded-xl border border-line-strong bg-surface pl-10 pr-3 text-[15px] placeholder:text-ink-3 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10" />
         </div>
-        <Button tone="primary" type="submit" disabled={busy || !q.trim()} className="!h-12 !px-5">{busy ? <Spinner /> : <Search size={17} />}묻기</Button>
+        <Button tone="primary" type="submit" disabled={busy || !q.trim()} className="!h-12 !px-5">{busy ? <Spinner /> : <Search size={17} />}{aiEnabled ? '묻기' : '검색'}</Button>
       </form>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Segmented<Period> value={period} onChange={(v) => setPeriod(v)} options={[{ id: '7', label: '1주' }, { id: '31', label: '1개월' }, { id: '92', label: '3개월' }, { id: '0', label: '전체' }]} />
         <Segmented<Kind> value={kind} onChange={(v) => setKind(v)} options={[{ id: 'all', label: '주간+일일' }, { id: 'weekly', label: '주간' }, { id: 'daily', label: '일일' }]} />
       </div>
-      {!res && !busy && (
+      {!res && !busy && aiEnabled && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {SUGGEST.map((s) => (
             <button key={s} type="button" onClick={() => void ask(s)} className="rounded-full border border-line-strong bg-surface px-3 py-1 text-[12.5px] font-semibold text-ink-2 hover:border-brand hover:text-brand-ink">{s}</button>
@@ -88,8 +92,8 @@ export function AskPanel() {
       )}
 
       {res && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1.25fr_1fr]">
-          <section className="rounded-xl border border-brand/25 bg-brand-soft/50 p-4">
+        <div className={cx('mt-4 grid gap-4', aiEnabled && 'lg:grid-cols-[1.25fr_1fr]')}>
+          {aiEnabled && <section className="rounded-xl border border-brand/25 bg-brand-soft/50 p-4">
             <h3 className="mb-2 flex items-center gap-1.5 text-[14px] font-bold"><Sparkles size={15} className="text-brand" />AI 답변</h3>
             {res.ai ? (
               <>
@@ -114,7 +118,7 @@ export function AskPanel() {
                 <p className="mt-2.5 text-[11.5px] text-ink-3">{summaryModel(res.ai.model).name} · 보고 {res.total}건 중 {res.sent}건 참고{res.partial && '(관련 높은 것만)'} · AI 답변은 틀릴 수 있으니 출처를 눌러 원문을 확인하세요</p>
               </>
             ) : res.aiError ? <p className="text-[13.5px] text-ink-2">{res.aiError}</p> : <p className="flex items-center gap-2 text-[13.5px] text-ink-3"><Spinner />보고 {res.sent}건을 읽고 답을 정리하는 중</p>}
-          </section>
+          </section>}
 
           <section>
             <h3 className="mb-2 text-[14px] font-bold">관련 보고 원문 <span className="text-ink-3">{res.matches.length}건</span></h3>

@@ -380,6 +380,10 @@ export interface AppSettings {
   summaryModel: string;
   /** 레이어스 시스템 주소 (대표님 화면의 레이어스 버튼) */
   layersUrl?: string;
+  /** AI 기능 스위치 (관리자): 전체, 대표님 검색 답변 */
+  ai?: { master: boolean; ask: boolean };
+  /** 보고 칸 아래 안내 문구 (비우면 표시 안 함) */
+  reportNotice?: string;
 }
 
 export interface Seed {
