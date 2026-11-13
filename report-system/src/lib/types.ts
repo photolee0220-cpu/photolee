@@ -389,6 +389,8 @@ export interface AppSettings {
   reportNotice?: string;
   /** 작성 안내 확인 번호: 올리면 모든 직원이 다시 확인한다 */
   noticeVersion?: number;
+  /** 첫 로그인 작성 안내 확인을 받을지 (기본 꺼짐: 규칙이 정해지면 관리자가 켠다) */
+  ackEnabled?: boolean;
 }
 
 export interface Seed {

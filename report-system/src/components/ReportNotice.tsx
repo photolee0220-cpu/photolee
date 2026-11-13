@@ -25,7 +25,7 @@ export function NoticeAckGate() {
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  if (!s || !snap || done) return null;
+  if (!s || !snap || done || !s.ackEnabled) return null;
   const writer = writesDaily(me) || writesWeekly(me, snap.departments);
   if (!writer || (me.noticeAckVersion ?? 0) >= (s.noticeVersion ?? 1)) return null;
   const notice = (s.reportNotice ?? DEFAULT_REPORT_NOTICE).trim();

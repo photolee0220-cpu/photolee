@@ -372,7 +372,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     },
 
     async getSettings() {
-      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice', 'notice_version'])) as Row[];
+      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice', 'notice_version', 'notice_ack_enabled'])) as Row[];
       const get = (k: string) => rows.find((r) => r.key === k)?.value;
       return {
         summaryModel: (get('summary_model') as string) || DEFAULT_SUMMARY_MODEL,
@@ -380,6 +380,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         ai: get('ai_enabled') as AppSettings['ai'] | undefined,
         reportNotice: get('report_notice') as string | undefined,
         noticeVersion: Number(get('notice_version') ?? 1) || 1,
+        ackEnabled: get('notice_ack_enabled') === true,
       };
     },
 
@@ -638,6 +639,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           ...(next.ai ? [{ key: 'ai_enabled', value: next.ai, updated_at: at }] : []),
           ...(next.reportNotice !== undefined ? [{ key: 'report_notice', value: next.reportNotice.trim(), updated_at: at }] : []),
           ...(next.noticeVersion ? [{ key: 'notice_version', value: next.noticeVersion, updated_at: at }] : []),
+          ...(next.ackEnabled !== undefined ? [{ key: 'notice_ack_enabled', value: next.ackEnabled, updated_at: at }] : []),
         ]));
         return { ...next, layersUrl: (next.layersUrl ?? '').trim() };
       },

@@ -767,7 +767,7 @@ export const demoApi: Api = {
     },
     async saveSettings(next) {
       requireAdmin();
-      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice, noticeVersion: next.noticeVersion ?? state.settings.noticeVersion ?? 1 };
+      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice, noticeVersion: next.noticeVersion ?? state.settings.noticeVersion ?? 1, ackEnabled: next.ackEnabled ?? state.settings.ackEnabled ?? false };
       persist();
       return structuredClone(state.settings);
     },
