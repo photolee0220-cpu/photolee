@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-12T04:53:25Z",
+  "at": "2026-11-13T05:28:18Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -19,12 +19,12 @@
     {
       "check": "인원 목록",
       "ok": true,
-      "detail": "18명"
+      "detail": "43명"
     },
     {
       "check": "보고 칸",
       "ok": true,
-      "detail": "131칸"
+      "detail": "136칸"
     },
     {
       "check": "현장",
@@ -179,7 +179,7 @@
     {
       "check": "백업 만들기",
       "ok": true,
-      "detail": "최신 백업 165995바이트"
+      "detail": "최신 백업 190534바이트"
     },
     {
       "check": "알림 서버: 서명 키",
@@ -269,7 +269,7 @@
     {
       "check": "인원 소속·일일보고 대상 칸",
       "ok": true,
-      "detail": "{\"affiliation\":\"hq\",\"daily_enabled\":true}"
+      "detail": "{\"affiliation\":\"site\",\"daily_enabled\":true}"
     },
     {
       "check": "부서 안 보고·부서장 칸",
