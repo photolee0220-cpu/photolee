@@ -8,7 +8,7 @@ import { api } from '../lib/client';
 import { byId, has, personEntry } from '../lib/derive';
 import { currentWeekId, deadlineText, shiftWeek, weekLabel } from '../lib/week';
 import { useStore, type View } from '../state/store';
-import { canSeeAll, headedDepartments, isInternalMember, isReviewer, writesDaily } from '../lib/access';
+import { canSeeAll, headedDepartments, isReviewer, writesDaily, writesWeekly } from '../lib/access';
 import type { Department } from '../lib/types';
 import { NotificationButton, NotificationGate } from './Notifications';
 import { Avatar, Badge, cx, IconButton } from './ui';
@@ -17,9 +17,10 @@ type NavItem = { id: View; label: string; icon: ReactNode };
 
 export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean, departments: Department[] = []): NavItem[] {
   const items: NavItem[] = [];
-  // 부서 안 보고 부서원: 부서장에게 일일보고만 쓴다
-  if (isInternalMember(me, departments)) {
+  // 부서원(부서 안 보고)·현장 직원: 일일보고만 쓴다 (주간보고 메뉴 없음)
+  if (me.departmentId && !isReviewer(me) && !canSeeAll(me) && !writesWeekly(me, departments)) {
     if (writesDaily(me)) items.push({ id: 'daily', label: '일일보고', icon: <ClipboardList size={18} /> });
+    if (headedDepartments(me, departments).length) items.push({ id: 'team', label: '부서원 보고', icon: <UsersRound size={18} /> });
     items.push({ id: 'calendar', label: '캘린더', icon: <CalendarDays size={18} /> });
     return items;
   }
@@ -125,7 +126,7 @@ function SearchPalette() {
       key: s.id, label: s.name, sub: `${snap.stages.find((x) => x.id === s.stage)?.short ?? ''} · ${s.process || s.note}`,
       run: () => openDrawer({ type: 'site', id: s.id }),
     }));
-    const people = snap.members.filter((m) => m.active && m.departmentId && !isReviewer(m) && (match(m.name) || match(depts.get(m.departmentId)?.name ?? '')))
+    const people = snap.members.filter((m) => writesWeekly(m, snap.departments) && (match(m.name) || match(depts.get(m.departmentId!)?.name ?? '')))
       .filter((m) => canSeeAll(me) || m.departmentId === me.departmentId || has(personEntry(snap.entries, m.id)?.content))
       .map((m) => ({ key: m.id, label: `${m.name} ${m.title}`, sub: depts.get(m.departmentId!)?.name ?? '', run: () => openDrawer({ type: 'person', id: m.id }) }));
     return [...sites, ...people].slice(0, 12);

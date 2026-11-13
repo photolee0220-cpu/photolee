@@ -2,8 +2,11 @@ import { MapPin, MessageSquareText } from 'lucide-react';
 import { stripMarks } from '../lib/marks';
 import { RichLines } from '../components/RichText';
 import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell';
-import { Avatar, Badge, Card, cx, Empty, Spinner } from '../components/ui';
-import { canViewDept, isInternalMember } from '../lib/access';
+import { Avatar, Badge, Card, cx, Empty, Segmented, Spinner } from '../components/ui';
+import { useState } from 'react';
+import { DailyBoard, DateSwitcher, useDaily } from './Daily';
+import { todayIso } from '../lib/week';
+import { canViewDept, writesWeekly } from '../lib/access';
 import { activeDepartments, commentsFor, firstLines, has, hasWritten, memberDirective, personEntry, siteWork } from '../lib/derive';
 import { headingText, isHeading } from '../lib/sections';
 import type { Entry, Member } from '../lib/types';
@@ -16,7 +19,7 @@ export function PeopleGrid({ compact, onlyDepartments }: { compact?: boolean; on
   const { snap, me, openDrawer } = useStore();
   if (!snap) return null;
   const depts = activeDepartments(snap).filter((d) => canViewDept(me, d.id, snap.grants) && (!onlyDepartments || onlyDepartments.includes(d.id)));
-  const people = depts.flatMap((d) => snap.members.filter((m) => m.active && m.departmentId === d.id && !isInternalMember(m, snap.departments)).map((m) => ({ m, dept: d })));
+  const people = depts.flatMap((d) => snap.members.filter((m) => m.departmentId === d.id && writesWeekly(m, snap.departments)).map((m) => ({ m, dept: d })));
   if (!people.length) return <Empty title="볼 수 있는 부서 보고가 없습니다" />;
 
   return (
@@ -107,13 +110,45 @@ function PersonCard({ member, deptName, siteWriter, onOpen }: { member: Member; 
   );
 }
 
+type PeopleTab = 'weekly' | 'daily';
+const PEOPLE_TAB = 'people-tab';
+
+/** 부서 보고: 주간보고(사람별 카드)와 일일보고(본사는 사람별, 현장은 현장별)를 나눠 본다 */
 export function People() {
   const { snap } = useStore();
+  const [tab, setTabState] = useState<PeopleTab>(() => {
+    try { return localStorage.getItem(PEOPLE_TAB) === 'daily' ? 'daily' : 'weekly'; } catch { return 'weekly'; }
+  });
+  const setTab = (t: PeopleTab) => { setTabState(t); try { localStorage.setItem(PEOPLE_TAB, t); } catch { /* 무시 */ } };
   if (!snap) return <div className="flex justify-center py-20"><Spinner /></div>;
+  const tabs = (
+    <Segmented<PeopleTab> value={tab} onChange={setTab} className="mb-5" options={[
+      { id: 'weekly', label: <span className="px-2 text-[14px]">주간보고</span> },
+      { id: 'daily', label: <span className="px-2 text-[14px]">일일보고</span> },
+    ]} />
+  );
   return (
     <div className="mx-auto max-w-[1400px]">
-      <PageHeader title="부서 보고" right={<WeekSwitcher />}><DeadlineBadge /><DiffModeSwitch /></PageHeader>
-      <PeopleGrid />
+      {tabs}
+      {tab === 'weekly' ? (
+        <>
+          <PageHeader title="부서 보고" right={<WeekSwitcher />}><DeadlineBadge /><DiffModeSwitch /></PageHeader>
+          <PeopleGrid />
+        </>
+      ) : <DailyPeople />}
     </div>
+  );
+}
+
+function DailyPeople() {
+  const [date, setDate] = useState(todayIso);
+  const { data, reload } = useDaily(date);
+  return (
+    <>
+      <PageHeader title="부서 보고" right={<DateSwitcher date={date} onChange={setDate} />}>
+        <span className="text-[13px] text-ink-3">일일보고 · 본사는 사람별, 현장은 현장별로 봅니다</span>
+      </PageHeader>
+      {data ? <DailyBoard date={date} data={data} reload={reload} /> : <div className="flex justify-center py-16"><Spinner /></div>}
+    </>
   );
 }

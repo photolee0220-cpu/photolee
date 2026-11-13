@@ -103,8 +103,9 @@ Deno.serve(async (req) => {
     if (action === 'deadline') {
       const week = currentWeek();
       const internal = await internalMemberIds(db);
-      const { data: all } = await db.from('members').select('id, name').eq('active', true).eq('is_ceo', false).eq('is_executive', false).not('department_id', 'is', null);
-      const members = (all ?? []).filter((m) => !internal.has(m.id));
+      const { data: all } = await db.from('members').select('id, name, affiliation').eq('active', true).eq('is_ceo', false).eq('is_executive', false).not('department_id', 'is', null);
+      // 현장 직원과 부서원은 일일보고만 쓰므로 주간보고 알림에서 뺀다
+      const members = (all ?? []).filter((m) => !internal.has(m.id) && m.affiliation !== 'site');
       // 쓴 사람: 부서 업무보고는 본인 칸, 현장 칸은 함께 쓴 사람 모두
       const { data: written } = await db.from('entries').select('kind, author_id, updated_by, writers').eq('week_id', week).neq('content', '');
       const done = new Set((written ?? []).flatMap((r) => (r.kind === 'dept' ? [r.author_id] : [r.updated_by, ...(r.writers ?? [])])));

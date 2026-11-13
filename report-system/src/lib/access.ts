@@ -80,6 +80,11 @@ export function isInternalMember(m: Pick<Member, 'id' | 'departmentId'>, departm
   return !!d?.internalReport && d.headId !== m.id;
 }
 
+/** 주간보고를 쓰는 사람: 부서원(부서 안 보고)과 현장 직원은 일일보고만 쓴다 */
+export function writesWeekly(m: Member, departments: Department[]): boolean {
+  return m.active && !!m.departmentId && !m.isCeo && !m.isExecutive && affiliationOf(m) !== 'site' && !isInternalMember(m, departments);
+}
+
 /** 내가 부서장인 '부서 안 보고' 부서 */
 export function headedDepartments(me: Member, departments: Department[]): Department[] {
   return departments.filter((d) => d.active && d.internalReport && d.headId === me.id);
