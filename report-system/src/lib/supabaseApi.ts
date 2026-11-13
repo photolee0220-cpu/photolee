@@ -18,6 +18,7 @@ const toMember = (r: Row): Member => ({
   id: r.id, username: r.username, name: r.name, title: r.title, departmentId: r.department_id,
   isCeo: r.is_ceo, isAdmin: r.is_admin, isExecutive: !!r.is_executive, active: r.active, mustChangePassword: r.must_change_password,
   affiliation: r.affiliation ?? 'hq', homeSiteId: r.home_site_id ?? null, dailyEnabled: r.daily_enabled !== false,
+  noticeAckVersion: r.notice_ack_version ?? 0, noticeAckAt: r.notice_ack_at ?? null,
 });
 const toDaily = (r: Row): DailyReport => ({
   id: r.id, date: r.date, authorId: r.author_id, departmentId: r.department_id, siteId: r.site_id, authorKind: r.author_kind,
@@ -371,13 +372,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     },
 
     async getSettings() {
-      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice'])) as Row[];
+      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice', 'notice_version'])) as Row[];
       const get = (k: string) => rows.find((r) => r.key === k)?.value;
       return {
         summaryModel: (get('summary_model') as string) || DEFAULT_SUMMARY_MODEL,
         layersUrl: (get('layers_url') as string) ?? '',
         ai: get('ai_enabled') as AppSettings['ai'] | undefined,
         reportNotice: get('report_notice') as string | undefined,
+        noticeVersion: Number(get('notice_version') ?? 1) || 1,
       };
     },
 
@@ -390,6 +392,10 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       }
       ch.subscribe();
       return () => { clearTimeout(t); sb.removeChannel(ch); };
+    },
+
+    async ackNotice() {
+      check(await sb.rpc('ack_report_notice'));
     },
 
     async editComment(id, content) {
@@ -631,6 +637,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           { key: 'layers_url', value: (next.layersUrl ?? '').trim(), updated_at: at },
           ...(next.ai ? [{ key: 'ai_enabled', value: next.ai, updated_at: at }] : []),
           ...(next.reportNotice !== undefined ? [{ key: 'report_notice', value: next.reportNotice.trim(), updated_at: at }] : []),
+          ...(next.noticeVersion ? [{ key: 'notice_version', value: next.noticeVersion, updated_at: at }] : []),
         ]));
         return { ...next, layersUrl: (next.layersUrl ?? '').trim() };
       },

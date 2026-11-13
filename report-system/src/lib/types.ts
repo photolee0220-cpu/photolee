@@ -86,6 +86,9 @@ export interface Member {
   homeSiteId?: string | null;
   /** 일일보고 작성 대상 (관리자가 끌 수 있다) */
   dailyEnabled?: boolean;
+  /** 업무보고 작성 안내를 확인한 번호와 시각 */
+  noticeAckVersion?: number;
+  noticeAckAt?: string | null;
 }
 
 export type Affiliation = 'hq' | 'site';
@@ -384,6 +387,8 @@ export interface AppSettings {
   ai?: { master: boolean; ask: boolean };
   /** 보고 칸 아래 안내 문구 (비우면 표시 안 함) */
   reportNotice?: string;
+  /** 작성 안내 확인 번호: 올리면 모든 직원이 다시 확인한다 */
+  noticeVersion?: number;
 }
 
 export interface Seed {

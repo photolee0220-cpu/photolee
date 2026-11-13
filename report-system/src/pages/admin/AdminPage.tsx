@@ -11,9 +11,10 @@ import { activeDepartments, isCompleted } from '../../lib/derive';
 import { formatBytes, triggerDownload } from '../../lib/fileTypes';
 import { buildMediaZip, downloadMediaZip, estimateBytes, zipFileName } from '../../lib/mediaZip';
 import { SUMMARY_MODELS } from '../../lib/models';
-import { DEFAULT_AI, DEFAULT_REPORT_NOTICE, settingsChanged } from '../../lib/settings';
+import { DEFAULT_AI, DEFAULT_REPORT_NOTICE, settingsChanged, useAppSettings } from '../../lib/settings';
+import { writesDaily, writesWeekly } from '../../lib/access';
 import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage, type Affiliation } from '../../lib/types';
-import { currentWeekId, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
+import { currentWeekId, formatDate, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
 
@@ -447,6 +448,7 @@ function MembersAdmin() {
   const [addAdmin, setAddAdmin] = useState('');
   const [q, setQ] = useState('');
   const [pushOn, setPushOn] = useState<Set<string>>(() => new Set());
+  const noticeVersion = useAppSettings()?.noticeVersion ?? 1;
   useEffect(() => { api.admin.pushMembers().then((ids) => setPushOn(new Set(ids))).catch(() => undefined); }, []);
   if (!snap) return <Spinner />;
   const depts = new Map(snap.departments.map((d) => [d.id, d]));
@@ -515,7 +517,10 @@ function MembersAdmin() {
                   <td className="px-3 py-2.5 font-mono text-[12.5px] text-ink-2">{m.username}</td>
                   <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}
                     {m.affiliation === 'site' && <span className="mt-0.5 block text-[12px] font-semibold text-brand-ink">현장 · {snap.sites.find((s) => s.id === m.homeSiteId)?.name ?? '현장 미지정'}</span>}</td>
-                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}{m.dailyEnabled === false && <Badge>일일보고 안 씀</Badge>}{snap.departments.some((d) => d.internalReport && d.headId === m.id) && <Badge tone="note">부서장</Badge>}</span></td>
+                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}{m.dailyEnabled === false && <Badge>일일보고 안 씀</Badge>}{snap.departments.some((d) => d.internalReport && d.headId === m.id) && <Badge tone="note">부서장</Badge>}</span>
+                    {(writesDaily(m) || writesWeekly(m, snap.departments)) && (
+                      <span className="mt-0.5 block text-[11.5px] text-ink-3">{m.noticeAckAt && (m.noticeAckVersion ?? 0) >= noticeVersion ? `안내 확인 ${formatDate(m.noticeAckAt)}` : <span className="font-semibold text-warn">안내 확인 전</span>}</span>
+                    )}</td>
                   <td className="px-3 py-2.5"><span className="flex items-center gap-1.5">{m.active ? (m.mustChangePassword ? <Badge tone="note">첫 로그인 전</Badge> : <Badge tone="ok">사용 중</Badge>) : <Badge>중지</Badge>}
                     {pushOn.has(m.id) && <span title="알림 켬" className="text-brand-ink"><Bell size={14} /></span>}</span></td>
                   <td className="px-3 py-2.5">
@@ -1081,6 +1086,32 @@ function BackupsCard() {
   );
 }
 
+/** 작성 안내 확인 현황과 '다시 확인받기' */
+function AckStatus({ version, saving, onReask }: { version: number; saving: boolean; onReask(): void }) {
+  const { snap } = useStore();
+  const [confirm, setConfirm] = useState(false);
+  if (!snap) return null;
+  const writers = snap.members.filter((m) => writesDaily(m) || writesWeekly(m, snap.departments));
+  const done = writers.filter((m) => (m.noticeAckVersion ?? 0) >= version);
+  const left = writers.filter((m) => (m.noticeAckVersion ?? 0) < version);
+  return (
+    <div className="mt-4 rounded-2xl border border-line bg-surface p-4 shadow-card">
+      <p className="text-[14px] font-bold">작성 안내 확인 <span className="text-ink-3">{done.length} / {writers.length}명</span></p>
+      <p className="mt-1 text-[12.5px] text-ink-3">보고를 쓰는 직원은 처음 접속할 때 안내를 읽고 [확인]을 누릅니다. 확인한 날짜는 인원 목록에서 볼 수 있습니다.</p>
+      {left.length > 0 && <p className="mt-2 text-[13px] text-ink-2"><b className="text-warn">확인 전</b> {left.map((m) => m.name).join(' · ')}</p>}
+      <div className="mt-3">
+        {confirm ? (
+          <span className="flex flex-wrap items-center gap-2 text-[13px]">
+            안내 문구를 바꿨다면 모든 직원이 다시 확인하게 할까요?
+            <Button size="sm" tone="primary" disabled={saving} onClick={() => { setConfirm(false); onReask(); }}>다시 확인받기</Button>
+            <Button size="sm" tone="ghost" onClick={() => setConfirm(false)}>취소</Button>
+          </span>
+        ) : <Button size="sm" onClick={() => setConfirm(true)}>모든 직원에게 다시 확인받기</Button>}
+      </div>
+    </div>
+  );
+}
+
 /* ───────────── AI 설정 ───────────── */
 
 function AiSettings() {
@@ -1089,20 +1120,22 @@ function AiSettings() {
   const [layers, setLayers] = useState('');
   const [ai, setAi] = useState(DEFAULT_AI);
   const [notice, setNotice] = useState(DEFAULT_REPORT_NOTICE);
+  const [version, setVersion] = useState(1);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     api.getSettings().then((s) => {
-      setModel(s.summaryModel); setLayers(s.layersUrl ?? ''); setAi({ ...DEFAULT_AI, ...(s.ai ?? {}) }); setNotice(s.reportNotice ?? DEFAULT_REPORT_NOTICE);
+      setModel(s.summaryModel); setLayers(s.layersUrl ?? ''); setAi({ ...DEFAULT_AI, ...(s.ai ?? {}) }); setNotice(s.reportNotice ?? DEFAULT_REPORT_NOTICE); setVersion(s.noticeVersion ?? 1);
     }).catch(() => setModel(SUMMARY_MODELS[0].id));
   }, []);
 
-  const save = async (next: { summaryModel?: string; layersUrl?: string; ai?: typeof ai; reportNotice?: string }, msg: string) => {
+  const save = async (next: { summaryModel?: string; layersUrl?: string; ai?: typeof ai; reportNotice?: string; noticeVersion?: number }, msg: string) => {
     setSaving(true);
     try {
       const s = await api.admin.saveSettings({
         summaryModel: next.summaryModel ?? model ?? SUMMARY_MODELS[0].id, layersUrl: next.layersUrl ?? layers,
-        ai: next.ai ?? ai, reportNotice: next.reportNotice ?? notice,
+        ai: next.ai ?? ai, reportNotice: next.reportNotice ?? notice, noticeVersion: next.noticeVersion ?? version,
       });
+      setVersion(s.noticeVersion ?? next.noticeVersion ?? version);
       setModel(s.summaryModel);
       setLayers(s.layersUrl ?? '');
       setAi({ ...DEFAULT_AI, ...(s.ai ?? {}) });
@@ -1162,6 +1195,7 @@ function AiSettings() {
           <Button type="button" tone="ghost" disabled={saving} onClick={() => { setNotice(DEFAULT_REPORT_NOTICE); void save({ reportNotice: DEFAULT_REPORT_NOTICE }, '기본 문구로 되돌렸습니다'); }}>기본 문구로</Button>
         </div>
       </form>
+      <AckStatus version={version} saving={saving} onReask={() => void save({ noticeVersion: version + 1 }, '모든 직원에게 다시 확인받습니다. 다음 접속 때 안내가 뜹니다')} />
 
       <h2 className="mt-10 text-[18px] font-extrabold">레이어스 연결</h2>
       <p className="mb-3 text-[13px] text-ink-3">대표님 화면의 '레이어스' 버튼을 누르면 이 주소가 새 창으로 열립니다. 레이어스 시스템이 생기면 주소를 넣어 주세요.</p>

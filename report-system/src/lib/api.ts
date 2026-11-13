@@ -22,6 +22,8 @@ export interface Api {
   signIn(username: string, password: string): Promise<Member>;
   signOut(): Promise<void>;
   changePassword(newPassword: string): Promise<void>;
+  /** 업무보고 작성 안내 [확인] 기록 */
+  ackNotice(): Promise<void>;
 
   loadWeek(weekId: WeekId): Promise<Snapshot>;
   listWeeks(): Promise<WeekSummary[]>;

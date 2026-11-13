@@ -57,7 +57,7 @@ function normalize(st: DemoState): DemoState {
   st.history ??= [];
   st.siteFields ??= structuredClone(DEFAULT_SITE_FIELDS);
   st.sites.forEach((s) => { s.extra ??= {}; });
-  st.members.forEach((m) => { m.isExecutive ??= false; m.affiliation ??= 'hq'; m.homeSiteId ??= null; m.dailyEnabled ??= true; });
+  st.members.forEach((m) => { m.isExecutive ??= false; m.affiliation ??= 'hq'; m.homeSiteId ??= null; m.dailyEnabled ??= true; m.noticeAckVersion ??= 1; });
   st.dayStatus ??= structuredClone((seed as Seed).dayStatus ?? []);
   // 예전 체험판 데이터에는 일일보고·일정이 없으므로 견본을 채운다
   st.daily ??= structuredClone((seed as Seed).daily ?? []);
@@ -178,6 +178,12 @@ export const demoApi: Api = {
     return delay(m);
   },
   async signOut() { setSession(null); },
+  async ackNotice() {
+    const m = me();
+    m.noticeAckVersion = state.settings.noticeVersion ?? 1;
+    m.noticeAckAt = new Date().toISOString();
+    persist();
+  },
   async changePassword(pw) {
     const m = me();
     state.passwords[m.username] = pw;
@@ -761,7 +767,7 @@ export const demoApi: Api = {
     },
     async saveSettings(next) {
       requireAdmin();
-      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice };
+      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice, noticeVersion: next.noticeVersion ?? state.settings.noticeVersion ?? 1 };
       persist();
       return structuredClone(state.settings);
     },

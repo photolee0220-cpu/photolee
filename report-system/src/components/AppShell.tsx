@@ -11,6 +11,7 @@ import { useStore, type View } from '../state/store';
 import { canSeeAll, headedDepartments, isReviewer, writesDaily, writesWeekly } from '../lib/access';
 import type { Department } from '../lib/types';
 import { NotificationButton, NotificationGate } from './Notifications';
+import { NoticeAckGate } from './ReportNotice';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
 type NavItem = { id: View; label: string; icon: ReactNode };
@@ -263,6 +264,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <BottomNav items={items} view={view} setView={setView} />
       <SearchPalette />
       <NotificationGate />
+      <NoticeAckGate />
       <Toasts />
     </div>
   );
