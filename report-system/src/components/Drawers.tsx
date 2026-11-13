@@ -106,7 +106,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
           directive={directive}
         />
 
-        {depts.filter((d) => wroteSite(d.id) || d.id === me.departmentId).map((d) => {
+        {depts.filter((d) => wroteSite(d.id) || (d.id === me.departmentId && !isReviewer(me) && !isWeekLocked(me, weekId))).map((d) => {
           const status = siteStatusOf(snap, site.id, d.id);
           if (!canViewDept(me, d.id, snap.grants)) {
             return (
@@ -123,7 +123,7 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
           const editable = !isReviewer(me) && !isWeekLocked(me, weekId) && canEditEntry(me, { kind: 'site', departmentId: d.id, authorId: null });
           return (
             <Block key={d.id} title={<>{d.name} <span className="font-medium text-ink-3">{deptPeople(d, snap.members)}</span></>}
-              right={has(e?.content) ? <Badge tone="brand">작성</Badge> : <Badge>미작성</Badge>}>
+              right={has(e?.content) ? <Badge tone="brand">작성</Badge> : null}>
               <EntryEditor
                 key={`${weekId}-${site.id}-${d.id}`}
                 value={e?.content ?? ''}
@@ -139,12 +139,9 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
           );
         })}
 
-        {/* 안 쓴 부서는 칸 대신 한 줄로 (내 부서 칸은 위에서 바로 쓸 수 있게 남겨 둔다) */}
-        {depts.some((d) => !wroteSite(d.id) && d.id !== me.departmentId) && (
-          <p className="rounded-xl border border-dashed border-line-strong px-4 py-2.5 text-[13px] text-ink-3">
-            <b className="mr-1.5 font-semibold text-ink-2">미작성</b>
-            {depts.filter((d) => !wroteSite(d.id) && d.id !== me.departmentId).map((d) => d.name).join(' · ')}
-          </p>
+        {/* 현장 보고는 일이 있는 부서만 쓰므로, 안 쓴 부서는 '미작성'으로 표시하지 않는다 */}
+        {!depts.some((d) => wroteSite(d.id)) && (
+          <p className="rounded-xl border border-dashed border-line-strong px-4 py-3 text-[13px] text-ink-3">이번 주에 이 현장 보고를 쓴 부서가 없습니다.</p>
         )}
 
         <SiteTimeline site={site} />

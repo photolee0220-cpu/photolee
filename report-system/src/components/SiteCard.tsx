@@ -83,15 +83,12 @@ export function SiteCard({ site, snap, onOpen }: { site: Site; snap: Snapshot; o
       )}
 
       <div className="mt-auto flex items-center gap-1.5 pt-3">
-        {siteDepartments(snap).map((d) => {
-          const done = !!siteStatusOf(snap, site.id, d.id);
-          return (
-            <span key={d.id} title={`${d.name} ${done ? '작성' : '미작성'}`}
-              className={cx('rounded-md px-1.5 py-0.5 text-[11px] font-semibold', done ? 'bg-brand-soft text-brand-ink' : 'bg-sunken text-ink-3')}>
-              {d.name.replace(/사업부|부$/, '').split('/')[0]}
-            </span>
-          );
-        })}
+        {/* 이번 주에 이 현장 보고를 쓴 부서만 표시 (일이 없는 부서는 쓰지 않으므로 '미작성'으로 보이지 않게) */}
+        {siteDepartments(snap).filter((d) => siteStatusOf(snap, site.id, d.id)).map((d) => (
+          <span key={d.id} title={`${d.name} 작성`} className="rounded-md bg-brand-soft px-1.5 py-0.5 text-[11px] font-semibold text-brand-ink">
+            {d.name.replace(/사업부|부$/, '').split('/')[0]}
+          </span>
+        ))}
         <span className="ml-auto flex items-center gap-2.5">
           <PhotoCount count={snap.photos.filter((p) => p.siteId === site.id).length} />
           {feedback > 0 && <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-ink"><MessageSquareText size={13} />{feedback}</span>}
