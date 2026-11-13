@@ -1,1 +1,1 @@
-apply 0012 daily photo delete 2026-11-12T04:49:03Z
+deploy functions (weekly reminder skips site staff) 2026-11-13T05:25:29Z
