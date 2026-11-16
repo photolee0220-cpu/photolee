@@ -99,6 +99,18 @@ jobs:
             out.matches = Number(((await p.getByText(/관련 보고 원문/).first().innerText().catch(() => '')).match(/(\d+)건/) ?? [0, 0])[1]);
             out.ok = out.answerLines > 0 && out.refs > 0 && !!out.model;
             out.pageErrors = errors.slice(0, 3);
+            // 안전 당부 초안(AI): 지어낸 시험 문장으로만 확인하고 건수만 남긴다
+            try {
+              const cfg = await (await fetch(process.env.SITE + '/config.js?' + Date.now())).text();
+              const anon = (cfg.match(/supabaseAnonKey: '([^']*)'/) || [])[1];
+              const r = await fetch(`https://${process.env.REF}.supabase.co/functions/v1/weekly-summary`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', apikey: anon, Authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ mode: 'safety', prompt: '아래 현장별 보고로 안전 당부를 현장마다 하나씩 써라.\n### siteId=test-site · 시험 현장\n일일보고: 내일 3층 슬래브 콘크리트 타설 예정 (펌프카 1대)\n(찾은 위험 작업: 콘크리트 타설)' }),
+              });
+              const j = await r.json();
+              out.safety = { status: r.status, tips: Array.isArray(j.tips) ? j.tips.length : 0, matchedSite: Array.isArray(j.tips) && j.tips.some((t) => t.siteId === 'test-site'), error: j.error ? String(j.error).slice(0, 80) : undefined };
+            } catch (e) { out.safety = { error: String(e).slice(0, 120) }; }
             await b.close();
           })().catch((e) => { out.error = String(e).slice(0, 300); }).finally(() => {
             fs.writeFileSync(process.env.RUNNER_TEMP + '/ai-check.json', JSON.stringify(out, null, 2));
