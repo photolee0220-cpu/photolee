@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
-import { pendingTalk } from './talkPending';
+import { createSupabaseTalk } from './supabaseTalk';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf, triggerDownload } from './fileTypes';
 import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
@@ -106,6 +106,8 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       width: r.width ?? 0, height: r.height ?? 0, createdAt: r.created_at, url: urls.get(r.storage_path) ?? '',
     }));
   }
+
+  const talk = createSupabaseTalk(sb, currentMember);
 
   async function adminCall(body: Row) {
     const { data, error } = await sb.functions.invoke('admin-users', { body });
@@ -393,7 +395,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       };
     },
 
-    talk: pendingTalk,
+    talk,
 
     subscribe(fn) {
       let t: ReturnType<typeof setTimeout> | undefined;
@@ -526,6 +528,8 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           ...en.map((e) => ({ id: e.id, kind: 'weekly' as const, date: e.week_id, siteId: e.site_id, departmentId: e.department_id, memberId: e.kind === 'dept' ? e.author_id : null, content: e.content })),
           ...dv.map((d) => ({ id: d.id, kind: 'directive' as const, date: d.week_id, siteId: d.site_id, departmentId: null, memberId: d.member_id, content: d.content, status: d.status ?? 'open' })),
           ...dl.map((r) => ({ id: r.id, kind: 'daily' as const, date: r.date, siteId: r.site_id, departmentId: r.department_id, memberId: r.author_id, content: r.content })),
+          // 현장 자료(회의록·공사일보·공정표)에서 뽑은 글자
+          ...(await talk.docs.corpus(from)),
         ];
       },
       async answer(prompt) {

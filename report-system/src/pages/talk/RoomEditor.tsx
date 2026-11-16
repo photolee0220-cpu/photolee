@@ -4,7 +4,7 @@ import { api } from '../../lib/client';
 import { activeDepartments, byId } from '../../lib/derive';
 import { DEFAULT_TALK_SETTINGS, isBuiltinRoom, type ChatRoom, type TalkSettings } from '../../lib/talkTypes';
 import { useStore } from '../../state/store';
-import { Avatar, Badge, Button, Card, cx, Field, Input, Modal, Select, Spinner, Toggle } from '../../components/ui';
+import { Avatar, Button, Card, cx, Field, Input, Modal, Select, Spinner, Toggle } from '../../components/ui';
 import { RoomIcon } from './Chat';
 import { refreshTalk } from './useTalk';
 
@@ -123,7 +123,6 @@ export function AdminRooms() {
       <Card className="p-5">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="text-[16px] font-bold">채팅방</h3>
-          <Badge tone="note">체험판</Badge>
           <Button tone="primary" size="sm" className="ml-auto" onClick={() => setEdit('new')}><Plus size={15} />방 만들기</Button>
         </div>
         <p className="mb-3 text-[13px] text-ink-3">방 이름을 넣고 인원을 고르면 방이 생깁니다. 현장을 연결하면 현장방이 됩니다. 문의방·안전방은 기본 방이라 인원만 바꿉니다. 1:1 대화는 두 사람만 볼 수 있어 여기에 나오지 않습니다.</p>

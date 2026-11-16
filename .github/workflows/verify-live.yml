@@ -167,6 +167,35 @@ jobs:
           [ "$c" = 403 ] && rec "알림 서버: 일일보고 마감 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 일일보고 마감 비밀값 확인" 0 "HTTP $c"
           r=$(curl -sS "$URL/rest/v1/app_settings?select=key&key=eq.layers_url" "${H[@]}" | jq 'length')
           [ "$r" = 1 ] && rec "레이어스 주소 설정 칸" 1 "ok" || rec "레이어스 주소 설정 칸" 0 "$r"
+          # 0015: 소통 (공지·채팅방·문의·현장 자료·안전 제안) — 건수와 성공 여부만 남긴다
+          for t in chat_rooms chat_room_members chat_messages notices notice_reads inquiries site_docs safety_tips; do
+            r=$(curl -sS "$URL/rest/v1/$t?select=*&limit=1" "${H[@]}")
+            echo "$r" | jq -e 'type == "array"' >/dev/null && rec "소통 표: $t" 1 "읽기 가능(관리자)" || rec "소통 표: $t" 0 "$(echo "$r" | head -c 150)"
+          done
+          for t in chat_messages notices site_docs; do
+            a=$(curl -sS "$URL/rest/v1/$t?select=id" -H "apikey: $ANON" | jq 'length')
+            [ "$a" = 0 ] && rec "$t: 로그인 안 한 사람 차단" 1 "0건" || rec "$t: 로그인 안 한 사람 차단" 0 "$a"
+          done
+          n=$(curl -sS "$URL/rest/v1/chat_rooms?select=id&kind=in.(inquiry,safety)" "${H[@]}" | jq 'length')
+          [ "$n" = 2 ] && rec "소통: 기본 방(문의·안전)" 1 "2개" || rec "소통: 기본 방(문의·안전)" 0 "$n"
+          cr=$(curl -sS -X POST "$URL/rest/v1/rpc/admin_save_room" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg me "$ME" '{p_id:null,p_name:"점검용 임시 방",p_site:null,p_meeting_dow:null,p_members:[$me]}')")
+          RID=$(echo "$cr" | jq -r '.id // empty')
+          sm=$(curl -sS -X POST "$URL/rest/v1/rpc/send_message" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg r "$RID" '{p_room:$r,p_text:"점검용 메시지"}')")
+          tr=$(curl -sS -X POST "$URL/rest/v1/rpc/talk_rooms" "${H[@]}" -H "Content-Type: application/json" -d '{}')
+          TP="room/$RID/verify-$(date +%s).jpg"
+          up=$(curl -sS -X POST "$URL/storage/v1/object/talk-files/$TP" "${H[@]}" -H "Content-Type: image/jpeg" --data-binary @"$RUNNER_TEMP/t.jpg")
+          del=$(curl -sS -X DELETE "$URL/storage/v1/object/talk-files" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg p "$TP" '{prefixes:[$p]}')")
+          dr=$(curl -sS -X POST "$URL/rest/v1/rpc/admin_delete_room" "${H[@]}" -H "Content-Type: application/json" -d "$(jq -n --arg r "$RID" '{p_id:$r}')")
+          left=$(curl -sS "$URL/rest/v1/chat_rooms?select=id&id=eq.$RID" "${H[@]}" | jq 'length')
+          [ -n "$RID" ] && echo "$sm" | jq -e '.id' >/dev/null && echo "$tr" | jq -e --arg r "$RID" 'map(select(.room.id == $r)) | length == 1' >/dev/null && [ "$left" = 0 ] \
+            && rec "소통: 방 만들기·메시지·지우기" 1 "ok (점검용 방 지움)" || rec "소통: 방 만들기·메시지·지우기" 0 "room=$(echo "$cr" | head -c 100) msg=$(echo "$sm" | head -c 100) left=$left"
+          echo "$up" | jq -e '.Key // .key // .Id // .id' >/dev/null && echo "$del" | jq -e 'length == 1' >/dev/null && rec "소통 파일 저장소" 1 "올리기·지우기 ok" || rec "소통 파일 저장소" 0 "up=$(echo "$up" | head -c 160) del=$(echo "$del" | head -c 100)"
+          nt=$(curl -sS -X POST "$URL/rest/v1/rpc/save_notice" "${H[@]}" -H "Content-Type: application/json" -d '{"p_id":null,"p_title":"점검","p_body":"","p_require_ack":false,"p_pinned":false}')
+          echo "$nt" | grep -q "대표님만" && rec "공지: 기본은 대표님만 쓰기" 1 "관리자 거절 확인" || rec "공지: 기본은 대표님만 쓰기" 0 "$(echo "$nt" | head -c 150)"
+          c=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/notify" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"action":"chat","secret":"wrong"}')
+          [ "$c" = 403 ] && rec "알림 서버: 채팅 알림 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 채팅 알림 비밀값 확인" 0 "HTTP $c"
+          f=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d '{"mode":"safety","prompt":"점검"}')
+          echo "$f" | grep -q "대표님만" && rec "서버 기능: 안전 당부 초안(AI)" 1 "응답 정상(관리자는 대표 전용이라 거절)" || rec "서버 기능: 안전 당부 초안(AI)" 0 "$(echo "$f" | head -c 200)"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()

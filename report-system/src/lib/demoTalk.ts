@@ -1,6 +1,7 @@
 import { ApiError, newId } from './api';
 import { blobToDataUrl, shrinkImage } from './image';
 import { pdfText } from './pdfPages';
+import { ruleText, safetyHits, stripMarks as strip } from './safetyRules';
 import {
   DEFAULT_TALK_SETTINGS, INQUIRY_STAGES, MINUTES, isBuiltinRoom, type ChatAttachment, type ChatMessage, type ChatRoom, type Inquiry, type Notice,
   type RoomSummary, type SafetyTip, type SiteDoc, type TalkApi, type TalkSettings,
@@ -24,6 +25,7 @@ export interface DemoTalkCtx {
   appendDirective(target: { memberId: string } | { siteId: string }, line: string): void;
   createSite(s: Site): void;
   emit(): void;
+  subscribe(fn: () => void): () => void;
 }
 
 interface TalkState {
@@ -43,23 +45,6 @@ interface TalkState {
 const KEY = 'sadakdari-report-demo-talk-v1';
 const MB = 1024 * 1024;
 const delay = <T,>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 40));
-
-/* ───────── 위험 작업 → 주의 문구 (체험판 예시 규칙. 실제는 AI가 보고를 읽고 문장을 만든다) ───────── */
-const RULES: { re: RegExp; label: string; tip: string }[] = [
-  { re: /타설|레미콘|펌프카/, label: '콘크리트 타설', tip: '펌프카 아웃트리거 받침과 지반 확인, 타설 중 거푸집·동바리 변형 감시, 신호수 배치' },
-  { re: /거푸집|동바리/, label: '거푸집·동바리', tip: '설치 상태와 동바리 간격·수직도를 타설 전에 다시 확인' },
-  { re: /비계|난간|고소|개구부/, label: '고소 작업', tip: '작업 전 난간·발판 고정 확인, 안전대 걸이 사용, 개구부 덮개 점검' },
-  { re: /크레인|양중|인양/, label: '양중 작업', tip: '신호수 지정, 작업 반경 출입 통제, 줄걸이·슬링 점검' },
-  { re: /반입|하역|철근 \d+톤|자재/, label: '자재 반입', tip: '하역 구간 출입 통제, 장비와 사람 동선 분리' },
-  { re: /용접|절단|화기|단열재/, label: '화기·단열재', tip: '단열재 주변 화기작업 금지, 화재감시자 배치와 소화기 비치' },
-  { re: /굴착|흙막이|터파기/, label: '굴착', tip: '흙막이 변위 확인, 굴착면 접근 통제, 장비 후진 경보' },
-  { re: /비 예보|강풍|우천|폭우/, label: '기상 악화', tip: '외부·고소 작업 중지 기준 공유, 가설 전기 누전 점검' },
-  { re: /신규 근로자|신규자/, label: '신규 근로자', tip: '신규 근로자 작업 전 교육과 숙련자 짝 배치' },
-];
-
-function strip(s: string) {
-  return s.replace(/\[\/?(b|red|blue|hl)\]/g, '').replace(/\s+/g, ' ').trim();
-}
 
 export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   let st: TalkState = load();
@@ -240,6 +225,8 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         settings: structuredClone(st.settings),
       });
     },
+
+    subscribe: (fn) => ctx.subscribe(fn),
 
     async messages(roomId) {
       const m = ctx.me();
@@ -504,19 +491,19 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         const m = ctx.me();
         if (!m.isCeo) return [];
         const until = shiftDay(date, 3);
+        const from = shiftDay(date, -1);
         const out: SafetyTip[] = [];
         for (const site of ctx.sites().filter((s) => !s.archived)) {
           const lines = [
-            ...ctx.daily().filter((r) => r.date === date && r.siteId === site.id).flatMap((r) => strip(r.content).split(/ ?[-■•] /).map((l) => l.trim()).filter(Boolean).map((l) => `일일보고 (${nameOf(r.authorId)}): ${l}`)),
+            ...ctx.daily().filter((r) => r.date >= from && r.date <= date && r.siteId === site.id).flatMap((r) => strip(r.content).split(/ ?[-■•] /).map((l) => l.trim()).filter(Boolean).map((l) => `일일보고 (${nameOf(r.authorId)}): ${l}`)),
             ...ctx.events().filter((e) => e.siteId === site.id && e.startDate >= date && e.startDate <= until).map((e) => `일정 ${e.startDate.slice(5).replace('-', '/')}: ${e.title}`),
           ];
-          const hits = RULES.map((rule) => ({ rule, src: lines.filter((l) => rule.re.test(l)) })).filter((h) => h.src.length);
+          const hits = safetyHits(lines);
           if (!hits.length) continue;
           const key = `${date}|${site.id}`;
           const status = st.tips[key] ?? 'new';
           const roomIds = st.rooms.filter((r) => (r.kind === 'safety') || (r.kind === 'site' && r.siteId === site.id)).map((r) => r.id);
-          const text = `[${site.name} 안전 당부]\n${hits.map((h) => `· ${h.rule.label}: ${h.rule.tip}`).join('\n')}\n작업 전 TBM에서 꼭 공유하고, 조치 결과는 일일보고에 남겨 주세요.`;
-          out.push({ id: key, date, siteId: site.id, sources: [...new Set(hits.flatMap((h) => h.src))].slice(0, 5), text, roomIds, status });
+          out.push({ id: key, date, siteId: site.id, sources: [...new Set(hits.flatMap((h) => h.src))].slice(0, 5), text: ruleText(site.name, hits), roomIds, status });
         }
         return delay(out);
       },

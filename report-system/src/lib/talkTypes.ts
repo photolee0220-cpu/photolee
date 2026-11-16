@@ -35,6 +35,8 @@ export interface ChatAttachment {
   kind: 'image' | 'file';
   /** 체험판은 data URL, 서버는 잠깐 쓰는 서명 주소 */
   url: string;
+  /** 서버 저장 위치 */
+  path?: string;
   size: number;
   width?: number;
   height?: number;
@@ -218,6 +220,8 @@ export interface NoticeInput {
 export interface TalkApi {
   /** 내가 들어 있는 방, 공지, (문의방 인원이면) 문의 카드, (현장방 인원이면) 회의록 */
   load(): Promise<TalkSnapshot>;
+  /** 소통 데이터가 바뀌면 호출된다 (실시간) */
+  subscribe(onChange: () => void): () => void;
   messages(roomId: string): Promise<ChatMessage[]>;
   send(input: SendMessageInput): Promise<ChatMessage>;
   /** 본인 메시지 고치기 (고친 기록은 남는다) */
@@ -257,8 +261,8 @@ export interface TalkApi {
     corpus(from: string): Promise<SearchDoc[]>;
   };
   safety: {
-    /** 그날 보고·앞으로 3일 일정에서 찾은 제안 (대표님만) */
-    suggestions(date: string): Promise<SafetyTip[]>;
+    /** 어제·오늘 보고와 앞으로 3일 일정에서 찾은 제안 (대표님만). refresh면 새로 찾는다 */
+    suggestions(date: string, refresh?: boolean): Promise<SafetyTip[]>;
     send(tip: SafetyTip, text: string, roomIds: string[]): Promise<void>;
     dismiss(tip: SafetyTip): Promise<void>;
   };

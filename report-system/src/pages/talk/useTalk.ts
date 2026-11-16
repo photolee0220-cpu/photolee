@@ -21,7 +21,7 @@ export function useTalk() {
   const [data, setData] = useState<TalkSnapshot | null>(cache);
   useEffect(() => {
     listeners.add(setData);
-    unsub ??= api.subscribe(() => void refreshTalk().catch(() => undefined));
+    unsub ??= api.talk.subscribe(() => void refreshTalk().catch(() => undefined));
     void refreshTalk().catch(() => undefined);
     return () => {
       listeners.delete(setData);
@@ -41,5 +41,5 @@ export function talkBadge(data: TalkSnapshot | null, me: Member): number {
   return msgs + data.notices.filter((n) => noticeOpen(n, me)).length;
 }
 
-/** 소통 메뉴는 승인 전까지 체험판에서만 보인다 */
-export const talkAvailable = () => api.mode === 'demo';
+/** 소통 메뉴 (체험판·실제 서버 모두) */
+export const talkAvailable = () => true;

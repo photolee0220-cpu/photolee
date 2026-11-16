@@ -684,6 +684,7 @@ export const demoApi: Api = {
     },
     createSite(site) { state.sites.push(site); persist(); },
     emit: () => listeners.forEach((l) => l()),
+    subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
   }),
 
   admin: {

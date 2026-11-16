@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, ShieldAlert, Send, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/client';
 import type { SafetyTip } from '../../lib/talkTypes';
-import { dayLabel, todayIso } from '../../lib/week';
+import { todayIso } from '../../lib/week';
 import { useStore } from '../../state/store';
 import { Badge, Button, Card, cx, Spinner } from '../../components/ui';
 import { refreshTalk, talkAvailable, useTalk } from './useTalk';
@@ -15,8 +15,12 @@ export function SafetyCard() {
   const [tips, setTips] = useState<SafetyTip[] | null>(null);
   const [open, setOpen] = useState(true);
   const date = todayIso();
-  const load = () => { api.talk.safety.suggestions(date).then(setTips).catch(() => setTips([])); };
-  useEffect(load, [date]);
+  const [busy, setBusy] = useState(false);
+  const load = (refresh = false) => {
+    setBusy(true);
+    api.talk.safety.suggestions(date, refresh).then(setTips).catch(() => setTips([])).finally(() => setBusy(false));
+  };
+  useEffect(() => load(), [date]);
   if (!me.isCeo || !talkAvailable() || !tips || !tips.some((t) => t.status === 'new')) return null;
   const pending = tips.filter((t) => t.status === 'new');
   const sites = new Map((snap?.sites ?? []).map((s) => [s.id, s]));
@@ -26,7 +30,7 @@ export function SafetyCard() {
         <ShieldAlert size={18} className="text-danger" />
         <span className="text-[15.5px] font-bold">안전 전달 제안</span>
         <Badge tone="danger">{pending.length}건</Badge>
-        <span className="hidden text-[12.5px] text-ink-3 sm:inline">{dayLabel(date)} 보고와 앞으로 3일 일정에서 찾았습니다</span>
+        <span className="hidden text-[12.5px] text-ink-3 sm:inline">어제·오늘 현장 보고와 앞으로 3일 일정에서 찾았습니다</span>
         <span className="ml-auto text-ink-3">{open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</span>
       </button>
       {open && (
@@ -37,7 +41,10 @@ export function SafetyCard() {
           ))}
         </div>
       )}
-      <p className="mt-3 text-[11.5px] text-ink-3">AI가 보고 내용을 읽고 만든 초안입니다. 고쳐서 보내세요. 보낸 내용은 방에 기록으로 남습니다.</p>
+      <div className="mt-3 flex items-center gap-2">
+        <p className="min-w-0 flex-1 text-[11.5px] text-ink-3">보고에서 위험 작업을 찾아 만든 초안입니다 (AI를 켜 두면 AI가 씁니다). 고쳐서 보내세요. 보낸 내용은 방에 기록으로 남습니다.</p>
+        <Button size="sm" tone="ghost" disabled={busy} onClick={() => load(true)}>{busy ? <Spinner /> : null}다시 찾기</Button>
+      </div>
     </Card>
   );
 }

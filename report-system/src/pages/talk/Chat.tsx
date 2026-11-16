@@ -281,7 +281,7 @@ export function Conversation({ summary, query = '', inquiryId, onRoom }: { summa
     } catch (e) { toast(e instanceof Error ? e.message : '불러오지 못했습니다.', 'error'); }
   }, [room.id, toast]);
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => api.subscribe(() => void load()), [load]);
+  useEffect(() => api.talk.subscribe(() => void load()), [load]);
   const shown = useMemo(() => (msgs ?? []).filter((m) => (!inquiryId || m.inquiryId === inquiryId) && (!query.trim() || m.text.includes(query.trim()))), [msgs, inquiryId, query]);
   useEffect(() => {
     const el = scroller.current;

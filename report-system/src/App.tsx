@@ -17,6 +17,7 @@ import { People } from './pages/People';
 import { Shared } from './pages/Shared';
 import { StoreProvider, useStore } from './state/store';
 import { TalkPage } from './pages/talk/TalkPage';
+import { clearTalk } from './pages/talk/useTalk';
 
 const LOGGED_OUT = 'sadakdari-demo-logged-out';
 
@@ -35,8 +36,9 @@ export default function App() {
     })();
   }, []);
 
-  const onSignOut = useCallback(() => { safeSession(LOGGED_OUT, '1'); setMe(null); }, []);
-  const onSwitch = useCallback((m: Member) => setMe(m), []);
+  // 다른 사람으로 바뀌면 앞 사람의 소통 기록이 잠깐이라도 보이지 않게 비운다
+  const onSignOut = useCallback(() => { safeSession(LOGGED_OUT, '1'); clearTalk(); setMe(null); }, []);
+  const onSwitch = useCallback((m: Member) => { clearTalk(); setMe(m); }, []);
 
   if (missingServerConfig) return <ServerNotConnected />;
   if (me === undefined) return <div className="flex min-h-full items-center justify-center"><Spinner className="h-6 w-6" /></div>;
