@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-16T04:32:20Z",
+  "at": "2026-11-16T07:00:07Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -179,7 +179,7 @@
     {
       "check": "백업 만들기",
       "ok": true,
-      "detail": "최신 백업 248088바이트"
+      "detail": "최신 백업 251155바이트"
     },
     {
       "check": "알림 서버: 서명 키",
@@ -305,6 +305,91 @@
       "check": "레이어스 주소 설정 칸",
       "ok": true,
       "detail": "ok"
+    },
+    {
+      "check": "소통 표: chat_rooms",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: chat_room_members",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: chat_messages",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: notices",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: notice_reads",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: inquiries",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: site_docs",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "소통 표: safety_tips",
+      "ok": true,
+      "detail": "읽기 가능(관리자)"
+    },
+    {
+      "check": "chat_messages: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "notices: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "site_docs: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "소통: 기본 방(문의·안전)",
+      "ok": true,
+      "detail": "2개"
+    },
+    {
+      "check": "소통: 방 만들기·메시지·지우기",
+      "ok": true,
+      "detail": "ok (점검용 방 지움)"
+    },
+    {
+      "check": "소통 파일 저장소",
+      "ok": true,
+      "detail": "올리기·지우기 ok"
+    },
+    {
+      "check": "공지: 기본은 대표님만 쓰기",
+      "ok": true,
+      "detail": "관리자 거절 확인"
+    },
+    {
+      "check": "알림 서버: 채팅 알림 비밀값 확인",
+      "ok": true,
+      "detail": "틀린 값 거절(403)"
+    },
+    {
+      "check": "서버 기능: 안전 당부 초안(AI)",
+      "ok": true,
+      "detail": "응답 정상(관리자는 대표 전용이라 거절)"
     }
   ]
 }
