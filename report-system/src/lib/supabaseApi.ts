@@ -308,6 +308,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       return toDirective(check(await sb.rpc('set_directive_status', { p_directive: id, p_status: status })) as Row);
     },
 
+    async mySiteReports() {
+      const me = await currentMember();
+      if (!me?.departmentId) return [];
+      const rows = check(await sb.from('entries').select('site_id, week_id').eq('kind', 'site').eq('department_id', me.departmentId)
+        .neq('content', '').or(`updated_by.eq.${me.id},writers.cs.{${me.id}}`).limit(5000)) as Row[];
+      return rows.map((r) => ({ siteId: r.site_id as string, weekId: r.week_id as string }));
+    },
+
     async directiveHistory() {
       const rows = check(await sb.from('directives').select('*').in('target_kind', ['site', 'member']).neq('content', '')
         .order('week_id', { ascending: false }).limit(2000)) as Row[];

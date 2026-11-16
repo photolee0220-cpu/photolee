@@ -34,12 +34,12 @@ export function canEditEntry(me: Member, e: Pick<Entry, 'kind' | 'departmentId' 
   return !!me.departmentId && me.departmentId === e.departmentId;
 }
 
-export function canViewDirective(me: Member, d: Directive, members: Member[], grants: Grant[]): boolean {
+export function canViewDirective(me: Member, d: Directive): boolean {
   if (canSeeAll(me)) return true;
   if (d.targetKind === 'site') return true;
   if (d.targetKind === 'misc') return d.slot === 'special';
-  const target = members.find((m) => m.id === d.memberId);
-  return canViewDept(me, target?.departmentId ?? null, grants);
+  // 개인 지시는 본인만 (공유 부서라도 남의 지시는 안 보인다. 공유는 주간보고 내용만)
+  return d.memberId === me.id;
 }
 
 /** 회계 현황은 대표와 회계팀만 */

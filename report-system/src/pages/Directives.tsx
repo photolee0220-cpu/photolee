@@ -20,17 +20,21 @@ export function DirectivesPage() {
   const [period, setPeriod] = useState<Period>('3');
   const [status, setStatus] = useState<StatusFilter>('todo');
   const [q, setQ] = useState('');
+  const [myReports, setMyReports] = useState<Set<string> | null>(null);
   useEffect(() => {
     api.directiveHistory().then(setList).catch((e) => { toast(e instanceof Error ? e.message : '불러오지 못했습니다.', 'error'); setList([]); });
-  }, [toast]);
+    if (canSeeAll(me)) setMyReports(new Set());
+    else api.mySiteReports().then((xs) => setMyReports(new Set(xs.map((x) => `${x.weekId}|${x.siteId}`)))).catch(() => setMyReports(new Set()));
+  }, [toast, me]);
 
-  const writesSites = !!snap?.departments.find((d) => d.id === me.departmentId)?.writesSites;
   const sites = useMemo(() => new Map((snap?.sites ?? []).map((s) => [s.id, s])), [snap]);
   const members = useMemo(() => new Map((snap?.members ?? []).map((m) => [m.id, m])), [snap]);
-  if (!snap || !list) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (!snap || !list || !myReports) return <div className="flex justify-center py-20"><Spinner /></div>;
 
-  // 대표·관리자·본부장은 전체, 직원은 내 개인 지시와 (현장 보고 부서면) 현장 지시
-  const mine = list.filter((d) => canSeeAll(me) || (d.targetKind === 'member' ? d.memberId === me.id : writesSites));
+  // 대표·관리자·본부장은 전체. 직원은 내 개인 지시와, 그 주에 내가 보고한 현장의 지시만
+  // (공유 부서는 주간보고 내용만 함께 보고 지시사항은 섞이지 않는다)
+  const mine = list.filter((d) => canSeeAll(me)
+    || (d.targetKind === 'member' ? d.memberId === me.id : myReports.has(`${d.weekId}|${d.siteId}`)));
   const cutoff = period === '0' ? '' : toIsoDate(new Date(Date.now() - Number(period) * 30.5 * 86400000));
   const label = (d: Directive) => {
     if (d.targetKind === 'site') return sites.get(d.siteId ?? '')?.name ?? '현장';
@@ -54,7 +58,7 @@ export function DirectivesPage() {
   return (
     <div className="mx-auto max-w-[900px]">
       <PageHeader title="지시사항">
-        <span className="text-[13px] text-ink-3">지난 주차 지시도 처리 상태를 바꿀 수 있습니다{canSeeAll(me) ? '' : ' · 내 개인 지시와 우리 부서가 쓰는 현장 지시'}</span>
+        <span className="text-[13px] text-ink-3">지난 주차 지시도 처리 상태를 바꿀 수 있습니다{canSeeAll(me) ? '' : ' · 내 개인 지시와 내가 보고한 현장의 지시'}</span>
       </PageHeader>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">

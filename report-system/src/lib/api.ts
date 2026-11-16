@@ -49,6 +49,8 @@ export interface Api {
   setDirectiveStatus(id: string, status: DirectiveStatus): Promise<Directive>;
   /** 지난 주차까지 모든 지시사항 (볼 수 있는 것만), 최신 주차부터 */
   directiveHistory(): Promise<Directive[]>;
+  /** 내가 쓴(또는 함께 고친) 현장 보고의 주차·현장. 지시사항 탭에서 '내 현장 지시'만 고를 때 쓴다 */
+  mySiteReports(): Promise<{ siteId: string; weekId: string }[]>;
   /** 확인 전인 대표·본부장 피드백 (지난 주차 포함) */
   pendingFeedback(): Promise<PendingFeedback[]>;
   /** 보고 칸의 예전 내용, 최신순 */

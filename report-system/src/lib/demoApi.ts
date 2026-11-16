@@ -4,6 +4,7 @@ import { ApiError, newId, type Api, type SiteHistoryItem, type WeekSummary } fro
 import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { shiftDay } from './week';
+import { wroteEntry } from './derive';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable, triggerDownload } from './fileTypes';
 import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type CalendarEvent, type DayStatus, type DailyComment, type DailyPhoto, type DailyReport, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
@@ -143,7 +144,7 @@ function visibleEntries(m: Member, list: Entry[]) {
   return list.filter((e) => canViewDept(m, e.departmentId, state.grants));
 }
 function visibleDirectives(m: Member, list: Directive[]) {
-  return list.filter((d) => canViewDirective(m, d, state.members, state.grants));
+  return list.filter((d) => canViewDirective(m, d));
 }
 
 /** 일일보고 열람: 부서원(부서 안 보고) 보고는 그 부서 안과 관리자만, 나머지는 부서 열람 규칙대로 */
@@ -409,6 +410,12 @@ export const demoApi: Api = {
     d.statusAt = new Date().toISOString();
     persist();
     return structuredClone(d);
+  },
+
+  async mySiteReports() {
+    const m = me();
+    return delay(state.entries.filter((e) => e.kind === 'site' && e.siteId && e.departmentId === m.departmentId && wroteEntry(e, m.id))
+      .map((e) => ({ siteId: e.siteId!, weekId: e.weekId })));
   },
 
   async directiveHistory() {

@@ -2,7 +2,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Download, History, Lock } from 
 import { stripMarks } from '../lib/marks';
 import { RichLines } from './RichText';
 import { useEffect, useState, type ReactNode } from 'react';
-import { canEditEntry, canViewDept, isReviewer, isWeekLocked } from '../lib/access';
+import { canEditEntry, canSeeAll, canViewDept, isReviewer, isWeekLocked } from '../lib/access';
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
@@ -205,14 +205,14 @@ function PersonDrawer({ id, onClose }: { id: string; onClose(): void }) {
       title={<span className="flex items-center gap-2.5"><Avatar id={person.id} name={person.name} size={32} />{person.name} {person.title}</span>}
       subtitle={`${dept?.name ?? ''} · ${weekLabel(weekId)}`}>
       <div className="space-y-4">
-        <DirectiveBox
+        {(canSeeAll(me) || person.id === me.id) && <DirectiveBox
           key={`${weekId}-${person.id}`}
           value={directive?.content ?? ''}
           prevContent={prevDirective?.content}
           editable={me.isCeo}
           onSave={(content) => saveDirective({ weekId, targetKind: 'member', siteId: null, memberId: person.id, slot: null, content })}
           directive={directive}
-        />
+        />}
         {dept?.writesSites && (
           <Block title={<>현장 보고 <span className="font-medium text-ink-3">{work.filter((x) => x.kind === 'site').length}곳</span></>}>
             {work.length === 0 ? <p className="text-[13px] text-ink-3">이번 주에 작성한 현장 보고가 없습니다.</p> : (
