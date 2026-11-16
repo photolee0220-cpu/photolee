@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Download, History, Lock } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Download, History, Lock } from 'lucide-react';
 import { stripMarks } from '../lib/marks';
 import { RichLines } from './RichText';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -6,7 +6,7 @@ import { canEditEntry, canViewDept, isReviewer, isWeekLocked } from '../lib/acce
 import type { SiteHistoryItem } from '../lib/api';
 import { api } from '../lib/client';
 import {
-  activeDirectives, byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork, wroteEntry,
+  activeDirectives, byId, commentsFor, has, hasWritten, memberDirective, personEntry, reporters, siteDepartments, siteDirective, siteEntry, siteStatusOf, siteWork, visibleSites, wroteEntry,
 } from '../lib/derive';
 import { DIRECTIVE_STATUS, isBuildStage, type Comment, type Site, type Department, type Directive, type DirectiveStatus, type Entry, type Member } from '../lib/types';
 import { currentWeekId, formatDate, relativeTime, shiftWeek, toIsoDate, weekLabel } from '../lib/week';
@@ -52,6 +52,38 @@ function deptPeople(d: Department, members: Member[]) {
   return members.filter((m) => m.active && m.departmentId === d.id).map((m) => m.name).join(', ');
 }
 
+/** 회의 때 현장을 차례로 넘겨 보는 바. 순서는 직원 작성 화면과 같은 표준 순서(visibleSites) */
+function SiteNav({ id }: { id: string }) {
+  const { snap, openDrawer } = useStore();
+  const list = snap ? visibleSites(snap) : [];
+  const i = list.findIndex((s) => s.id === id);
+  const prev = i > 0 ? list[i - 1] : null;
+  const next = i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === 'ArrowLeft' && prev) openDrawer({ type: 'site', id: prev.id });
+      if (e.key === 'ArrowRight' && next) openDrawer({ type: 'site', id: next.id });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [prev, next, openDrawer]);
+  if (i < 0) return null;
+  const btn = 'flex min-w-0 flex-1 items-center gap-1 rounded-lg px-2 py-2 text-[13px] font-semibold text-ink-2 hover:bg-sunken disabled:opacity-35 disabled:hover:bg-transparent';
+  return (
+    <div className="flex items-center gap-2">
+      <button type="button" className={btn} disabled={!prev} onClick={() => prev && openDrawer({ type: 'site', id: prev.id })}>
+        <ChevronLeft size={17} className="shrink-0" /><span className="truncate">{prev ? prev.name : '처음'}</span>
+      </button>
+      <span className="shrink-0 text-[12px] font-bold tabular text-ink-3">{i + 1} / {list.length}</span>
+      <button type="button" className={cx(btn, 'justify-end text-right')} disabled={!next} onClick={() => next && openDrawer({ type: 'site', id: next.id })}>
+        <span className="truncate">{next ? next.name : '마지막'}</span><ChevronRight size={17} className="shrink-0" />
+      </button>
+    </div>
+  );
+}
+
 function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
   const { snap, me, weekId, saveEntry, saveDirective } = useStore();
 
@@ -72,6 +104,8 @@ function SiteDrawer({ id, onClose }: { id: string; onClose(): void }) {
       title={site.name}
       subtitle={<span className="flex flex-wrap items-center gap-1.5"><StageChip stage={site.stage} />{[site.note, site.process].filter(Boolean).join(' · ')}</span>}
       headerRight={me.isAdmin ? <SiteMediaButton site={site} /> : undefined}
+      footer={<SiteNav id={site.id} />}
+      bodyKey={site.id}
     >
       <div className="space-y-4">
         <SiteInfo site={site} />

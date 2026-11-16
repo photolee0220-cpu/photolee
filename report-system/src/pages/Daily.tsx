@@ -15,6 +15,7 @@ import { shrinkImage } from '../lib/image';
 import { DAY_STATUS, type Affiliation, type DailyComment, type DailyPhoto, type DailySnapshot, type DayStatus, type DayStatusKind, type Department, type Member, type Site, type Snapshot } from '../lib/types';
 import { dayLabel, dowOf, relativeTime, shiftDay, todayIso } from '../lib/week';
 import { useStore } from '../state/store';
+import { useFollowToday } from '../lib/useToday';
 
 /* ───────────── 데이터 ───────────── */
 
@@ -75,7 +76,7 @@ export function DateSwitcher({ date, onChange }: { date: string; onChange(d: str
 
 export function DailyPage() {
   const { snap, me } = useStore();
-  const [date, setDate] = useState(todayIso);
+  const [date, setDate] = useFollowToday();
   const { data, reload, setData } = useDaily(date);
   if (!snap) return <div className="flex justify-center py-20"><Spinner /></div>;
   const mine = writesDaily(me);
@@ -319,7 +320,8 @@ function DailyFeedback({ date, member, comments, onChanged, compact, written }: 
   }
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
-    try { await fn(); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : '처리하지 못했습니다.', 'error'); } finally { setBusy(false); }
+    // 실패해도(예: 그새 직원이 확인함) 최신 상태로 다시 읽어 화면을 맞춘다
+    try { await fn(); await onChanged(); } catch (e) { toast(e instanceof Error ? e.message : '처리하지 못했습니다.', 'error'); setEditing(null); await onChanged(); } finally { setBusy(false); }
   };
   const send = () => act(async () => { if (draft.trim()) { await api.daily.addComment(date, member.id, draft.trim()); setDraft(''); } });
 
@@ -699,7 +701,7 @@ function PhotoRow({ data, authorId, siteId }: { data: DailySnapshot; authorId: s
 
 export function TeamDailyPage() {
   const { snap, me } = useStore();
-  const [date, setDate] = useState(todayIso);
+  const [date, setDate] = useFollowToday();
   const { data, reload } = useDaily(date);
   const depts: Department[] = snap ? headedDepartments(me, snap.departments) : [];
   const [deptId, setDeptId] = useState<string | null>(null);

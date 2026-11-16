@@ -156,8 +156,9 @@ function useEscape(onClose: () => void) {
 }
 
 /** 오른쪽에서 열리는 상세 패널. 휴대폰에서는 전체 화면 */
-export function Sheet({ open, onClose, title, subtitle, children, width = 640, headerRight }: {
+export function Sheet({ open, onClose, title, subtitle, children, width = 640, headerRight, footer, bodyKey }: {
   open: boolean; onClose(): void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; width?: number; headerRight?: ReactNode;
+  footer?: ReactNode; bodyKey?: string;
 }) {
   useEscape(onClose);
   if (!open) return null;
@@ -179,7 +180,8 @@ export function Sheet({ open, onClose, title, subtitle, children, width = 640, h
           {headerRight}
           <IconButton label="닫기" onClick={onClose}><X size={20} /></IconButton>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">{children}</div>
+        <div key={bodyKey} className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">{children}</div>
+        {footer && <footer className="border-t border-line bg-surface px-3 py-2">{footer}</footer>}
       </section>
     </div>,
     document.body,

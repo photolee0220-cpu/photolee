@@ -6,13 +6,14 @@ import { Badge, Button, Card, cx, Empty, Progress, Segmented, Select, Spinner } 
 import { canViewFinance, isReviewer } from '../lib/access';
 import { activeDirectives, hasWritten, isCompleted, reporters, visibleSites } from '../lib/derive';
 import { isBuildStage, type Site, type Stage } from '../lib/types';
-import { dday, todayIso } from '../lib/week';
+import { dday } from '../lib/week';
 import { DailyBoard, DateSwitcher, useDaily } from './Daily';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
 import { DiffModeSwitch } from '../components/DiffText';
 import { AskPanel } from '../components/AskPanel';
 import { PeopleGrid } from './People';
+import { useFollowToday } from '../lib/useToday';
 
 type SortKey = 'order' | 'progress' | 'due';
 type DashTab = 'weekly' | 'daily';
@@ -38,7 +39,7 @@ export function Dashboard() {
 
 function DailyDashboard({ tabs }: { tabs: React.ReactNode }) {
   const { me } = useStore();
-  const [date, setDate] = useState(todayIso);
+  const [date, setDate] = useFollowToday();
   const { data, reload } = useDaily(date);
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -248,7 +249,8 @@ function Tile({ label, icon, children, onClick }: { label: string; icon: React.R
 }
 
 function ProgressChart({ sites, onOpen }: { sites: Site[]; onOpen(id: string): void }) {
-  const rows = sites.filter((s) => s.progress != null).sort((a, b) => (a.progress ?? 0) - (b.progress ?? 0));
+  // 회의 때 직원 보고 순서와 같도록 표준 현장 순서(visibleSites) 그대로 둔다
+  const rows = sites.filter((s) => s.progress != null);
   const others = sites.filter((s) => s.progress == null);
   if (!rows.length) return <Empty title="공정율이 입력된 현장이 없습니다" />;
   return (

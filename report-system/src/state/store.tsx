@@ -104,6 +104,24 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
 
   useEffect(() => api.subscribe(() => load(weekRef.current, true)), [load]);
 
+  // 화면을 켜 둔 채 주가 바뀌면(월요일 아침 등) 보고 있던 '이번 주'를 새 주로 옮긴다.
+  // 지난 주를 일부러 골라 보는 중이면 그대로 둔다.
+  useEffect(() => {
+    let current = currentWeekId();
+    const check = () => {
+      const now = currentWeekId();
+      if (now === current) return;
+      const old = current;
+      current = now;
+      if (weekRef.current === old) { setWeekIdState(now); weekRef.current = now; load(now, true); }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', check);
+    const t = setInterval(check, 60_000);
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', check); clearInterval(t); };
+  }, [load]);
+
   const setWeekId = useCallback((w: WeekId) => {
     setWeekIdState(w);
     weekRef.current = w;

@@ -19,6 +19,7 @@ function useAutosave(value: string, save: (v: string) => Promise<unknown>) {
   const [text, setText] = useState(value);
   const [state, setState] = useState<SaveState>('idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const dirty = useRef(false);
   const focused = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -40,18 +41,38 @@ function useAutosave(value: string, save: (v: string) => Promise<unknown>) {
       await saveRef.current(latest.current);
       setState('saved');
       setSavedAt(new Date());
-    } catch {
+      setError(null);
+    } catch (e) {
       dirty.current = true;
       setState('error');
+      setError(e instanceof Error && e.message ? e.message : null);
     }
   };
 
   useEffect(() => () => { void flush(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 휴대폰에서 쓰다가 바로 잠그거나 앱을 바꾸면 0.9초 대기 중인 저장이 사라질 수 있다 → 화면이 가려지는 순간 바로 저장.
+  // 저장이 실패했으면 다시 연결되거나 화면으로 돌아왔을 때 다시 시도한다
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') void flush(); };
+    const retry = () => { if (dirty.current && !focused.current) void flush(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') retry(); };
+    document.addEventListener('visibilitychange', onHide);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('online', retry);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('online', retry);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     text,
     state,
     savedAt,
+    error,
     change(v: string) {
       setText(v);
       dirty.current = true;
@@ -69,9 +90,9 @@ function useAutosave(value: string, save: (v: string) => Promise<unknown>) {
   };
 }
 
-function SaveIndicator({ state, savedAt }: { state: SaveState; savedAt: Date | null }) {
+function SaveIndicator({ state, savedAt, error }: { state: SaveState; savedAt: Date | null; error?: string | null }) {
   if (state === 'saving') return <span className="inline-flex items-center gap-1.5 text-ink-3"><Spinner className="h-3 w-3" />저장 중</span>;
-  if (state === 'error') return <span className="text-danger">저장하지 못했습니다. 인터넷 연결을 확인해 주세요.</span>;
+  if (state === 'error') return <span className="font-semibold text-danger">저장하지 못했습니다. {error && !/fetch|network/i.test(error) ? error : '인터넷 연결을 확인해 주세요.'}</span>;
   if (state === 'saved' && savedAt)
     return <span className="inline-flex items-center gap-1 text-ok"><Check size={13} />저장됨 {String(savedAt.getHours()).padStart(2, '0')}:{String(savedAt.getMinutes()).padStart(2, '0')}</span>;
   return null;
@@ -138,7 +159,7 @@ export function EntryEditor({ value, editable, onSave, placeholder, prevContent,
       <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center justify-between gap-2 text-[12px]">
         <div className="text-ink-3">{meta}</div>
         <div className="flex items-center gap-3">
-          <SaveIndicator state={a.state} savedAt={a.savedAt} />
+          <SaveIndicator state={a.state} savedAt={a.savedAt} error={a.error} />
           {has(prevContent) && !has(a.text) && (
             <button type="button" onClick={() => a.replace(prevContent!)} className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline">
               <History size={13} />지난주 내용 불러오기
@@ -253,7 +274,7 @@ export function SectionEditor({ value, onSave, prevContent, meta, placeholder }:
         </button>
         <div className="flex items-center gap-3">
           <span className="text-ink-3">{meta}</span>
-          <SaveIndicator state={a.state} savedAt={a.savedAt} />
+          <SaveIndicator state={a.state} savedAt={a.savedAt} error={a.error} />
           {has(prevContent) && !has(a.text) && (
             <button type="button" onClick={() => a.replace(prevContent!)} className="inline-flex items-center gap-1 font-semibold text-brand-ink hover:underline">
               <History size={13} />지난주 내용 불러오기
@@ -293,7 +314,7 @@ export function DirectiveBox({ value, editable, onSave, label = '대표님 지�
     <div className="rounded-xl border border-note-line bg-note px-3.5 py-3">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-[12px] font-bold tracking-wide text-note-ink">{label}</span>
-        {editable && <span className="flex items-center gap-2 text-[12px]"><MarkToolbar onApply={(m) => ref.current?.applyMark(m)} /><SaveIndicator state={a.state} savedAt={a.savedAt} /></span>}
+        {editable && <span className="flex items-center gap-2 text-[12px]"><MarkToolbar onApply={(m) => ref.current?.applyMark(m)} /><SaveIndicator state={a.state} savedAt={a.savedAt} error={a.error} /></span>}
       </div>
       {editable ? (
         <>
@@ -405,7 +426,7 @@ function EntryHistoryModal({ entry, onClose }: { entry: Entry; onClose(): void }
 
 /** 칸별 피드백 대화 */
 export function Feedback({ entry }: { entry: Entry | undefined }) {
-  const { me, snap, addComment, editComment, acknowledge, deleteComment, toast } = useStore();
+  const { me, snap, addComment, editComment, acknowledge, deleteComment, toast, reload } = useStore();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
@@ -459,7 +480,7 @@ export function Feedback({ entry }: { entry: Entry | undefined }) {
                   <RichEditor value={editing.text} onChange={(text) => setEditing({ id: c.id, text })}
                     className="min-h-[40px] rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13.5px] leading-[1.5] focus:border-brand focus:ring-2 focus:ring-brand/20" />
                   <div className="flex gap-1.5">
-                    <Button size="sm" tone="primary" disabled={!editing.text.trim()} onClick={() => editComment(c.id, editing.text.trim()).then(() => setEditing(null)).catch((e) => toast(e instanceof Error ? e.message : '고치지 못했습니다.', 'error'))}>저장</Button>
+                    <Button size="sm" tone="primary" disabled={!editing.text.trim()} onClick={() => editComment(c.id, editing.text.trim()).then(() => setEditing(null)).catch((e) => { toast(e instanceof Error ? e.message : '고치지 못했습니다.', 'error'); setEditing(null); void reload(); })}>저장</Button>
                     <Button size="sm" tone="ghost" onClick={() => setEditing(null)}>취소</Button>
                   </div>
                 </div>

@@ -59,8 +59,12 @@ export function commentsFor(list: Comment[], entryId: string | undefined): Comme
   return list.filter((c) => c.entryId === entryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+/** 현장 표준 순서: 단계(공사·CM·영업…) 순서 → 같은 단계 안에서는 관리자가 정한 순서.
+ *  대표님 화면·직원 작성 화면·현장 넘겨보기가 모두 이 순서를 쓴다 */
 export function visibleSites(snap: Snapshot): Site[] {
-  return snap.sites.filter((s) => !s.archived).sort((a, b) => a.sort - b.sort);
+  const order = new Map(snap.stages.map((s, i) => [s.id, i]));
+  return snap.sites.filter((s) => !s.archived)
+    .sort((a, b) => (order.get(a.stage) ?? 99) - (order.get(b.stage) ?? 99) || a.sort - b.sort);
 }
 
 export function isCompleted(s: Site): boolean {

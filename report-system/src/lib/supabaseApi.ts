@@ -391,8 +391,26 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
       for (const table of ['entries', 'directives', 'comments', 'sites', 'photos', 'attachments', 'stages', 'daily_reports', 'daily_photos', 'daily_comments', 'day_status', 'calendar_events', 'departments', 'members']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, debounced);
       }
-      ch.subscribe();
-      return () => { clearTimeout(t); sb.removeChannel(ch); };
+      // 휴대폰이 잠기거나 앱을 내려 두면 실시간 연결이 끊겨 그 사이 바뀐 내용(예: 피드백 확인)을 놓친다.
+      // 다시 연결되거나 화면으로 돌아오면 한 번 새로 읽고, 화면을 보고 있는 동안에는 1분마다 새로 읽는다
+      let first = true;
+      ch.subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+        if (first) { first = false; return; }
+        debounced();
+      });
+      const onVisible = () => { if (document.visibilityState === 'visible') debounced(); };
+      document.addEventListener('visibilitychange', onVisible);
+      window.addEventListener('focus', onVisible);
+      window.addEventListener('online', debounced);
+      const tick = setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine) fn(); }, 60_000);
+      return () => {
+        clearTimeout(t); clearInterval(tick);
+        document.removeEventListener('visibilitychange', onVisible);
+        window.removeEventListener('focus', onVisible);
+        window.removeEventListener('online', debounced);
+        sb.removeChannel(ch);
+      };
     },
 
     async ackNotice() {

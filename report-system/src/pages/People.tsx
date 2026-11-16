@@ -5,7 +5,6 @@ import { DeadlineBadge, PageHeader, WeekSwitcher } from '../components/AppShell'
 import { Avatar, Badge, Card, cx, Empty, Segmented, Spinner } from '../components/ui';
 import { useState } from 'react';
 import { DailyBoard, DateSwitcher, useDaily } from './Daily';
-import { todayIso } from '../lib/week';
 import { canViewDept, writesWeekly } from '../lib/access';
 import { activeDepartments, commentsFor, firstLines, has, hasWritten, memberDirective, personEntry, siteWork } from '../lib/derive';
 import { headingText, isHeading } from '../lib/sections';
@@ -13,6 +12,7 @@ import type { Entry, Member } from '../lib/types';
 import { relativeTime } from '../lib/week';
 import { useStore } from '../state/store';
 import { DiffModeSwitch, DiffText } from '../components/DiffText';
+import { useFollowToday } from '../lib/useToday';
 
 /** 부서별, 사람별 보고 카드. 모두 같은 크기이고 앞부분만 보이며, 누르면 전체를 연다 */
 export function PeopleGrid({ compact, onlyDepartments }: { compact?: boolean; onlyDepartments?: string[] }) {
@@ -141,7 +141,7 @@ export function People() {
 }
 
 function DailyPeople() {
-  const [date, setDate] = useState(todayIso);
+  const [date, setDate] = useFollowToday();
   const { data, reload } = useDaily(date);
   return (
     <>
