@@ -259,6 +259,8 @@ export interface TalkApi {
     requestMinutes(siteId: string): Promise<void>;
     /** 대표님 AI 검색용: from 이후 자료 중 글자가 있는 것 */
     corpus(from: string): Promise<SearchDoc[]>;
+    /** 제목·메모·파일 이름·본문(PDF 글자)에 검색어가 들어간 자료 id (볼 수 있는 것만) */
+    search(q: string): Promise<string[]>;
   };
   safety: {
     /** 어제·오늘 보고와 앞으로 3일 일정에서 찾은 제안 (대표님만). refresh면 새로 찾는다 */

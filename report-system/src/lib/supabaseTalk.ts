@@ -254,6 +254,15 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
         if (path) await sb.storage.from(FILES).remove([path]);
       },
       async requestMinutes(siteId) { check(await sb.rpc('request_minutes', { p_site: siteId })); },
+      async search(q) {
+        // PostgREST 조건식에 쓰이는 글자는 뺀다
+        const t = q.trim().replace(/[,()%*\\]/g, ' ').trim();
+        if (!t) return [];
+        const p = `%${t}%`;
+        const rows = check(await sb.from('site_docs').select('id')
+          .or(`title.ilike.${p},note.ilike.${p},file_name.ilike.${p},text.ilike.${p}`).limit(500)) as Row[];
+        return rows.map((r) => r.id as string);
+      },
       async corpus(from) {
         const m = await me();
         if (!m.isCeo) return [];

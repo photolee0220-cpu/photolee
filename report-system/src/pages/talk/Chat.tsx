@@ -423,7 +423,7 @@ function MessageRow({ m, mine, grouped, author, members, quoted, unread, highlig
                   </div>
                 )}
                 {files.map((a) => (
-                  <a key={a.id} href={a.url} download={a.name} className={cx('mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold', mine && !m.safety ? 'bg-white/15' : 'bg-sunken')}>
+                  <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className={cx('mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold', mine && !m.safety ? 'bg-white/15' : 'bg-sunken')}>
                     <FileText size={15} className="shrink-0" /><span className="truncate">{a.name}</span><span className="shrink-0 text-[11px] opacity-70">{Math.max(1, Math.round(a.size / 1024))}KB</span>
                   </a>
                 ))}

@@ -29,7 +29,7 @@ export interface DemoTalkCtx {
 }
 
 interface TalkState {
-  v: 2;
+  v: 3;
   rooms: ChatRoom[];
   messages: ChatMessage[];
   /** roomId → memberId → 마지막으로 읽은 때 */
@@ -54,7 +54,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   function load(): TalkState {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 2) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
+      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 3) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
     } catch { /* 처음부터 */ }
     return fresh();
   }
@@ -163,7 +163,15 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       doc('공사일보', shiftDay(ctx.today(), -1), '공사일보', '3층 기둥 타설 완료 (레미콘 18대)', 'daily-log-sample.pdf', chief, 1),
       doc('주간공정표', shiftDay(ctx.today(), 3), '주간 공정표 (10/26~10/31)', '3층 슬래브 타설 화요일', 'weekly-schedule-sample.pdf', build[0], 0),
     ].filter(Boolean) as SiteDoc[];
-    return { v: 2, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
+    // 공사일보는 평일마다 (달력 견본)
+    for (let i = 2; i <= 16; i++) {
+      const day = shiftDay(ctx.today(), -i);
+      const dow = new Date(`${day}T00:00:00`).getDay();
+      if (dow === 0 || dow === 6) continue;
+      const x = doc('공사일보', day, '공사일보', '', 'daily-log-sample.pdf', chief, i);
+      if (x) docs.push(x);
+    }
+    return { v: 3, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
   }
 
   /* ───────── 권한 ───────── */
@@ -476,6 +484,12 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         const others = room.memberIds.filter((id) => id !== m.id);
         post(room.id, m.id, '이번 주 정기회의 회의록이 아직 없습니다. 회의 후 회의록(PDF 또는 사진)을 [자료] 칸에 올려 주세요.', { system: true, mentions: others });
         save();
+      },
+      async search(q) {
+        const m = ctx.me();
+        const t = q.trim();
+        if (!t) return [];
+        return delay(st.docs.filter((d) => canSeeDocs(m, d.siteId) && `${d.title} ${d.note} ${d.fileName} ${d.text}`.includes(t)).map((d) => d.id));
       },
       async corpus(from) {
         const m = ctx.me();

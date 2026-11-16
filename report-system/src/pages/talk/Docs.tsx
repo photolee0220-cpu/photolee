@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, FileText, FolderOpen, Image as ImageIcon, Megaphone, Search, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Image as ImageIcon, List, Megaphone, Search, Trash2, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../../lib/client';
@@ -11,6 +11,100 @@ import { Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal, Select
 import { refreshTalk } from './useTalk';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+/** 매일 쓰는 자료: 달력으로 먼저 보여 준다 */
+const DAILY_LOG = '공사일보';
+
+/** 검색어: 제목·메모·파일 이름은 바로, 본문(PDF 글자)은 서버에서 찾는다. 검색어가 없으면 null */
+function useDocSearch(q: string): ((d: SiteDoc) => boolean) | null {
+  const [hits, setHits] = useState<Set<string>>(new Set());
+  const t = q.trim();
+  useEffect(() => {
+    if (!t) { setHits(new Set()); return; }
+    const timer = setTimeout(() => { api.talk.docs.search(t).then((ids) => setHits(new Set(ids))).catch(() => undefined); }, 350);
+    return () => clearTimeout(timer);
+  }, [t]);
+  if (!t) return null;
+  return (d) => `${d.title} ${d.note} ${d.fileName}`.includes(t) || hits.has(d.id);
+}
+
+const addMonth = (ym: string, n: number) => {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** 공사일보 달력: 날짜마다 올라온 일보. 하루에 하나면 바로 열고, 여러 개면 고른다 */
+function DocCalendar({ docs, siteNames, onOpen }: { docs: SiteDoc[]; siteNames?: Map<string, string>; onOpen(d: SiteDoc): void }) {
+  const today = todayIso();
+  const [month, setMonth] = useState(() => (docs.map((d) => d.docDate).sort().pop() ?? today).slice(0, 7));
+  const [pick, setPick] = useState<string | null>(null);
+  const byDay = new Map<string, SiteDoc[]>();
+  docs.forEach((d) => byDay.set(d.docDate, [...(byDay.get(d.docDate) ?? []), d]));
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(y, m - 1, 1).getDay();
+  const days = new Date(y, m, 0).getDate();
+  const cells: (string | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)];
+  const inMonth = [...byDay.keys()].filter((k) => k.startsWith(month)).length;
+  const picked = pick ? byDay.get(pick) ?? [] : [];
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-1">
+        <button onClick={() => setMonth(addMonth(month, -1))} className="rounded-lg p-1.5 text-ink-2 hover:bg-sunken" aria-label="지난달"><ChevronLeft size={18} /></button>
+        <p className="min-w-[96px] text-center text-[15px] font-bold tabular">{y}년 {m}월</p>
+        <button onClick={() => setMonth(addMonth(month, 1))} className="rounded-lg p-1.5 text-ink-2 hover:bg-sunken" aria-label="다음 달"><ChevronRight size={18} /></button>
+        {month !== today.slice(0, 7) && <button onClick={() => setMonth(today.slice(0, 7))} className="ml-1 rounded-full bg-sunken px-2.5 py-0.5 text-[12px] font-semibold text-ink-2">이번 달</button>}
+        <span className="ml-auto text-[12.5px] text-ink-3">이번 달 {inMonth}일 올라옴</span>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {DOW.map((d, i) => <p key={d} className={cx('py-1 text-[12px] font-semibold', i === 0 ? 'text-danger' : i === 6 ? 'text-brand-ink' : 'text-ink-3')}>{d}</p>)}
+        {cells.map((iso, i) => {
+          if (!iso) return <div key={`e${i}`} />;
+          const list = byDay.get(iso) ?? [];
+          const dow = (first + Number(iso.slice(8)) - 1) % 7;
+          return (
+            <button key={iso} disabled={!list.length} onClick={() => (list.length === 1 ? onOpen(list[0]) : setPick(iso))}
+              className={cx('flex min-h-[56px] flex-col items-center justify-start rounded-lg border px-0.5 py-1 sm:min-h-[64px]',
+                list.length ? 'border-brand/40 bg-brand-soft hover:border-brand' : 'border-transparent',
+                iso === today && 'ring-2 ring-brand/50')}>
+              <span className={cx('text-[13px] font-semibold tabular', dow === 0 ? 'text-danger' : list.length ? 'text-ink' : 'text-ink-3')}>{Number(iso.slice(8))}</span>
+              {list.length > 0 && (
+                <span className="mt-0.5 flex items-center gap-0.5 text-[11px] font-bold text-brand-ink">
+                  <FileText size={11} />{siteNames ? `${new Set(list.map((d) => d.siteId)).size}곳` : list.length > 1 ? list.length : ''}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {pick && (
+        <Modal open onClose={() => setPick(null)} title={`${dayLabel(pick)} 공사일보`} width={440}>
+          <ul className="divide-y divide-line">
+            {picked.map((d) => (
+              <li key={d.id}>
+                <button onClick={() => { setPick(null); onOpen(d); }} className="flex w-full items-center gap-2 py-2.5 text-left hover:bg-sunken/60">
+                  <FileText size={16} className="shrink-0 text-ink-3" />
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">{siteNames?.get(d.siteId) ? `${siteNames.get(d.siteId)} · ` : ''}{d.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ViewToggle({ value, onChange }: { value: 'cal' | 'list'; onChange(v: 'cal' | 'list'): void }) {
+  return (
+    <div className="flex rounded-lg bg-sunken p-0.5">
+      {([['cal', '달력', CalendarDays], ['list', '목록', List]] as const).map(([id, label, Icon]) => (
+        <button key={id} onClick={() => onChange(id)} className={cx('flex items-center gap-1 rounded-md px-2.5 py-1 text-[12.5px] font-semibold', value === id ? 'bg-surface text-ink shadow-card' : 'text-ink-3')}>
+          <Icon size={14} />{label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** 가장 최근 정기회의 날 (오늘 포함) */
 export function lastMeetingDate(dow: number, today = todayIso()): string {
@@ -38,8 +132,12 @@ export function DocsTab({ room, docs, data }: { room: ChatRoom; docs: SiteDoc[];
   const [upload, setUpload] = useState(false);
   const [view, setView] = useState<SiteDoc | null>(null);
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
+  const [mode, setMode] = useState<'cal' | 'list'>('cal');
+  const match = useDocSearch(q);
   const missing = minutesMissing(room, docs);
-  const list = docs.filter((d) => cat === '전체' || d.category === cat);
+  const list = docs.filter((d) => (cat === '전체' || d.category === cat) && (!match || match(d)));
+  const calendar = cat === DAILY_LOG && !match && mode === 'cal';
   const request = async () => {
     setBusy(true);
     try { await api.talk.docs.requestMinutes(room.siteId!); await refreshTalk(); toast('현장방에 회의록 요청을 남기고 알림을 보냈습니다.'); } catch (e) { toast(e instanceof Error ? e.message : '요청하지 못했습니다.', 'error'); } finally { setBusy(false); }
@@ -55,6 +153,13 @@ export function DocsTab({ room, docs, data }: { room: ChatRoom; docs: SiteDoc[];
         </div>
         <Button size="sm" tone="primary" className="ml-auto" onClick={() => setUpload(true)}><Upload size={15} />자료 올리기</Button>
       </div>
+      <div className="mb-3 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-[320px]">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="자료 검색 (제목·내용)" className="!h-9 pl-8" />
+        </div>
+        {cat === DAILY_LOG && !match && <ViewToggle value={mode} onChange={setMode} />}
+      </div>
       <p className="mb-3 text-[12.5px] text-ink-3">{room.meetingDow != null ? <>정기회의 <b className="text-ink-2">매주 {DOW[room.meetingDow]}요일</b> · </> : null}채팅에 붙인 파일도 종류를 고르면 여기에 모입니다.</p>
       {missing && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-warn/40 bg-warn/10 px-3.5 py-2.5">
@@ -63,10 +168,14 @@ export function DocsTab({ room, docs, data }: { room: ChatRoom; docs: SiteDoc[];
           <Button size="sm" disabled={busy} onClick={() => void request()}>{busy ? <Spinner /> : <Megaphone size={14} />}회의록 요청</Button>
         </div>
       )}
-      {!list.length && <Empty title="올라온 자료가 없습니다">PDF·사진을 올리면 휴대폰에서도 그림으로 바로 보입니다.</Empty>}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {list.map((d) => <DocCard key={d.id} d={d} onOpen={() => setView(d)} />)}
-      </div>
+      {calendar ? <DocCalendar docs={list} onOpen={setView} /> : (
+        <>
+          {!list.length && <Empty title={match ? '찾는 말이 들어간 자료가 없습니다' : '올라온 자료가 없습니다'}>{match ? 'PDF 안의 글자까지 찾습니다. 다른 말로 찾아보세요.' : 'PDF·사진을 올리면 휴대폰에서도 그림으로 바로 보입니다.'}</Empty>}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {list.map((d) => <DocCard key={d.id} d={d} onOpen={() => setView(d)} />)}
+          </div>
+        </>
+      )}
       {upload && <UploadModal siteId={room.siteId!} cats={cats} defaultCat={cat === '전체' ? cats[0] : cat}
         defaultDate={(c) => (c === MINUTES && room.meetingDow != null ? lastMeetingDate(room.meetingDow) : todayIso())} onClose={() => setUpload(false)} />}
       {view && <DocViewer d={view} onClose={() => setView(null)} />}
@@ -162,12 +271,17 @@ export function DocsLibrary({ data }: { data: TalkSnapshot }) {
   const [q, setQ] = useState('');
   const [view, setView] = useState<SiteDoc | null>(null);
   const [upload, setUpload] = useState(false);
+  const [mode, setMode] = useState<'cal' | 'list'>('cal');
+  const match = useDocSearch(q);
   const allSites = useMemo(() => (snap ? visibleSites(snap) : []), [snap]);
   const sites = allSites.filter((s) => data.docs.some((d) => d.siteId === s.id) || data.rooms.some((r) => r.room.siteId === s.id));
   const names = new Map(allSites.map((s) => [s.id, s.name]));
   const from = period === '0' ? '' : shiftDay(todayIso(), -Number(period));
   const list = data.docs.filter((d) => (!site || d.siteId === site) && (cat === '전체' || d.category === cat) && (!from || d.docDate >= from)
-    && (!q.trim() || `${d.title} ${d.note} ${d.fileName}`.includes(q.trim())));
+    && (!match || match(d)));
+  // 공사일보는 달력으로 (달을 넘겨 보므로 기간 필터는 쓰지 않는다)
+  const calendar = cat === DAILY_LOG && !match && mode === 'cal';
+  const calDocs = data.docs.filter((d) => d.category === DAILY_LOG && (!site || d.siteId === site));
   // 회의록 미등록 현장 (정기회의 요일이 정해진 현장방)
   const missing = data.rooms.map((r) => r.room).filter((r) => r.kind === 'site').map((r) => ({ r, day: minutesMissing(r, data.docs) })).filter((x) => x.day);
   const uploadable = allSites.filter((s) => me.isCeo || me.isAdmin || data.rooms.some((r) => r.room.siteId === s.id));
@@ -184,14 +298,15 @@ export function DocsLibrary({ data }: { data: TalkSnapshot }) {
         </Select>
         <div className="relative min-w-[180px] flex-1 sm:max-w-[280px]">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목·메모·파일 이름" className="!h-9 pl-8" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색 (제목·메모·PDF 내용)" className="!h-9 pl-8" />
         </div>
         {uploadable.length > 0 && <Button size="sm" tone="primary" className="ml-auto" onClick={() => setUpload(true)}><Upload size={15} />자료 올리기</Button>}
       </div>
-      <div className="mb-4 flex flex-wrap gap-1">
+      <div className="mb-4 flex flex-wrap items-center gap-1">
         {['전체', ...cats].map((c) => (
           <button key={c} onClick={() => setCat(c)} className={cx('rounded-full px-3 py-1 text-[13px] font-semibold', cat === c ? 'bg-ink text-bg' : 'bg-sunken text-ink-2 hover:text-ink')}>{c}</button>
         ))}
+        {cat === DAILY_LOG && !match && <span className="ml-auto"><ViewToggle value={mode} onChange={setMode} /></span>}
       </div>
       {missing.length > 0 && (
         <div className="mb-4 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3">
@@ -201,7 +316,7 @@ export function DocsLibrary({ data }: { data: TalkSnapshot }) {
           </div>
         </div>
       )}
-      {!list.length ? <Empty title="조건에 맞는 자료가 없습니다" icon={<FolderOpen size={22} />} /> : (
+      {calendar ? <Card className="p-4"><DocCalendar docs={calDocs} siteNames={site ? undefined : names} onOpen={setView} /></Card> : !list.length ? <Empty title="조건에 맞는 자료가 없습니다" icon={<FolderOpen size={22} />} /> : (
         <Card className="overflow-hidden">
           <ul className="divide-y divide-line">
             {list.map((d) => {
@@ -258,7 +373,7 @@ export function DocViewer({ d, onClose }: { d: SiteDoc; onClose(): void }) {
           <p className="truncate text-[15px] font-bold">{d.category} · {d.title}</p>
           <p className="truncate text-[12px] text-white/70">{site?.name} · {dayLabel(d.docDate)}{total ? ` · ${total}쪽` : ''}</p>
         </div>
-        <a href={d.url} download={d.fileName} className="flex h-9 items-center gap-1.5 rounded-lg bg-white/15 px-3 text-[13px] font-semibold hover:bg-white/25"><Download size={15} />원본</a>
+        <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center gap-1.5 rounded-lg bg-white/15 px-3 text-[13px] font-semibold hover:bg-white/25"><Download size={15} />원본</a>
         {(d.uploadedBy === me.id || me.isAdmin || me.isCeo) && (
           <IconButton label="지우기" className="!text-white hover:!bg-white/15" onClick={() => {
             if (!confirm('이 자료를 지울까요?')) return;
