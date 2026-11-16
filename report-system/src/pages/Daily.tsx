@@ -10,7 +10,7 @@ import { Avatar, Badge, Button, Card, cx, Empty, Field, IconButton, Input, Modal
 import { affiliationOf, canEditDaily, canReviewDaily, canSetDayStatus, canViewDept, headedDepartments, isInternalMember, isWorkday, writesDaily } from '../lib/access';
 import { newId } from '../lib/api';
 import { api } from '../lib/client';
-import { activeDepartments, byId, has, visibleSites } from '../lib/derive';
+import { activeDepartments, byId, has, siteRank, visibleSites } from '../lib/derive';
 import { shrinkImage } from '../lib/image';
 import { DAY_STATUS, type Affiliation, type DailyComment, type DailyPhoto, type DailySnapshot, type DayStatus, type DayStatusKind, type Department, type Member, type Site, type Snapshot } from '../lib/types';
 import { dayLabel, dowOf, relativeTime, shiftDay, todayIso } from '../lib/week';
@@ -152,7 +152,8 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
     );
   }
 
-  const siteIds = [...new Set([...myRows.filter((r) => r.siteId).map((r) => r.siteId!), ...added])];
+  const rank = siteRank(snap);
+  const siteIds = [...new Set([...myRows.filter((r) => r.siteId).map((r) => r.siteId!).sort((x, y) => rank(x) - rank(y)), ...added])];
   const remaining = visibleSites(snap).filter((s) => !siteIds.includes(s.id));
   const removeSite = async (id: string) => {
     if (has(content(id)) && !window.confirm('이 현장 칸을 지울까요? 쓴 내용도 함께 지워집니다.')) return;
@@ -551,6 +552,7 @@ function HqBoard({ date, data, people, reload }: { date: string; data: DailySnap
   if (!snap) return null;
   if (!people.length) return <Empty title="볼 수 있는 본사 인원이 없습니다" />;
   const sites = byId(snap.sites);
+  const rank = siteRank(snap);
   const depts = byId(activeDepartments(snap));
   // 부서 순서대로 한 격자에. 작성한 사람이 앞에
   const order = new Map(activeDepartments(snap).map((d, i) => [d.id, i]));
@@ -560,7 +562,7 @@ function HqBoard({ date, data, people, reload }: { date: string; data: DailySnap
       {list.map((m) => {
         const rows = data.reports.filter((r) => r.authorId === m.id);
         const general = rows.find((r) => !r.siteId);
-        const siteRows = rows.filter((r) => r.siteId);
+        const siteRows = rows.filter((r) => r.siteId).sort((x, y) => rank(x.siteId) - rank(y.siteId));
         const latest = rows.map((r) => r.updatedAt).sort().pop();
         const written = wrote(data, m.id);
         return (

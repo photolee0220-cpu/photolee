@@ -87,11 +87,18 @@ export function firstLines(text: string, n = 3): string {
 }
 
 /** 현장 보고 부서 사람이 이번 주 마지막으로 고친 현장 칸 */
+/** 현장 id → 표준 순서 번호 (보관된 현장은 맨 뒤) */
+export function siteRank(snap: Snapshot): (siteId: string | null | undefined) => number {
+  const order = new Map(visibleSites(snap).map((s, i) => [s.id, i]));
+  return (id) => (id ? order.get(id) ?? 1e6 : -1);
+}
+
+/** 대표님이 직원을 눌렀을 때 나오는 현장 보고. 직원 '내 보고' 화면과 같은 순서 */
 export function siteWork(snap: Snapshot, memberId: string): Entry[] {
-  const order = new Map(snap.sites.map((s, i) => [s.id, i]));
+  const rank = siteRank(snap);
   return snap.entries
     .filter((e) => e.kind === 'site' && wroteEntry(e, memberId))
-    .sort((a, b) => (order.get(a.siteId!) ?? 0) - (order.get(b.siteId!) ?? 0));
+    .sort((a, b) => rank(a.siteId) - rank(b.siteId));
 }
 
 /** 이 현장 칸을 그 부서가 이번 주에 썼는지 (내용 열람 권한과 관계없이 알 수 있다) */
