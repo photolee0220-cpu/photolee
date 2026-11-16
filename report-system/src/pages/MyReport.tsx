@@ -7,7 +7,7 @@ import { PhotoStrip } from '../components/Photos';
 import { dueInfo } from '../components/SiteCard';
 import { Badge, cx, Segmented, Spinner, StageChip } from '../components/ui';
 import { isReviewer } from '../lib/access';
-import { byId, commentsFor, has, memberDirective, personEntry, siteDirective, visibleSites } from '../lib/derive';
+import { byId, commentsFor, has, memberDirective, personEntry, siteDirective, siteWork } from '../lib/derive';
 import { headingText, isHeading } from '../lib/sections';
 import { DIRECTIVE_STATUS, type Directive, type Entry } from '../lib/types';
 import { relativeTime, weekLabel } from '../lib/week';
@@ -30,13 +30,12 @@ export function MyReport() {
   const dept = snap.departments.find((d) => d.id === me.departmentId);
   if (!dept || isReviewer(me)) return null;
 
-  const order = new Map(snap.stages.map((s, i) => [s.id, i]));
-  // 현장 칸은 부서가 함께 쓰므로 우리 부서가 이번 주에 쓴 현장을 모두 보여준다
+  // 본인이 쓴 현장만, 대표님이 이 사람을 눌렀을 때와 같은 목록·순서(siteWork)
+  const siteById = byId(snap.sites);
   const sites = dept.writesSites
-    ? visibleSites(snap)
-      .map((site) => ({ site, entry: snap.entries.find((e) => e.kind === 'site' && e.siteId === site.id && e.departmentId === dept.id) }))
-      .filter((x) => has(x.entry?.content))
-      .sort((a, b) => (order.get(a.site.stage) ?? 0) - (order.get(b.site.stage) ?? 0) || a.site.sort - b.site.sort)
+    ? siteWork(snap, me.id)
+      .map((entry) => ({ site: siteById.get(entry.siteId!)!, entry }))
+      .filter((x) => x.site)
     : [];
   const mine = personEntry(snap.entries, me.id);
   const myDirective = memberDirective(snap.directives, me.id);
@@ -53,8 +52,8 @@ export function MyReport() {
       <div className="sticky top-14 z-20 -mx-4 mb-5 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur lg:top-0">
         <div className="flex items-center gap-3">
           <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
-            {sites.map(({ site }) => (
-              <button key={site.id} onClick={() => jump(`r-${site.id}`)} className="shrink-0 rounded-full border border-line bg-surface px-3 py-1 text-[13px] font-semibold text-ink-2 hover:border-brand hover:text-brand-ink">{site.name}</button>
+            {sites.map(({ site, entry }) => (
+              <button key={entry.id} onClick={() => jump(`r-${site.id}`)} className="shrink-0 rounded-full border border-line bg-surface px-3 py-1 text-[13px] font-semibold text-ink-2 hover:border-brand hover:text-brand-ink">{site.name}</button>
             ))}
             <button onClick={() => jump('r-dept')} className="shrink-0 rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-[13px] font-semibold text-brand-ink">부서 업무보고</button>
           </div>
@@ -71,7 +70,7 @@ export function MyReport() {
           <h2 className="mb-3 flex items-center gap-2 text-[18px] font-extrabold"><MapPin size={18} className="text-brand" />현장별 보고 <span className="text-ink-3">{sites.length}곳</span></h2>
           {sites.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-line-strong px-4 py-6 text-center text-[14px] text-ink-3">
-              {weekLabel(weekId)}에 우리 부서가 쓴 현장 보고가 없습니다. <button onClick={() => setView('mine')} className="font-semibold text-brand-ink hover:underline">이번 주 작성으로 가기</button>
+              {weekLabel(weekId)}에 내가 쓴 현장 보고가 없습니다. <button onClick={() => setView('mine')} className="font-semibold text-brand-ink hover:underline">이번 주 작성으로 가기</button>
             </p>
           ) : (
             <div className="space-y-4">
@@ -80,7 +79,7 @@ export function MyReport() {
                 const files = attachmentsFor(snap.attachments, { kind: 'site', siteId: site.id, departmentId: dept.id, authorId: null }).length;
                 const photos = snap.photos.filter((p) => p.siteId === site.id && p.departmentId === dept.id).length;
                 return (
-                  <article key={site.id} id={`r-${site.id}`} className="scroll-mt-32 rounded-2xl border border-line bg-surface p-5 shadow-card">
+                  <article key={entry.id} id={`r-${site.id}`} className="scroll-mt-32 rounded-2xl border border-line bg-surface p-5 shadow-card">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-[22px] font-extrabold tracking-tight">{site.name}</h3>
                       <StageChip stage={site.stage} />

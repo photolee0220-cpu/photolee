@@ -96,8 +96,9 @@ export function siteRank(snap: Snapshot): (siteId: string | null | undefined) =>
 /** 대표님이 직원을 눌렀을 때 나오는 현장 보고. 직원 '내 보고' 화면과 같은 순서 */
 export function siteWork(snap: Snapshot, memberId: string): Entry[] {
   const rank = siteRank(snap);
+  const dept = snap.members.find((m) => m.id === memberId)?.departmentId;
   return snap.entries
-    .filter((e) => e.kind === 'site' && wroteEntry(e, memberId))
+    .filter((e) => e.kind === 'site' && e.departmentId === dept && wroteEntry(e, memberId))
     .sort((a, b) => rank(a.siteId) - rank(b.siteId));
 }
 
