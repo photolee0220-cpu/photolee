@@ -1,13 +1,18 @@
 {
-  "at": "2026-11-13T15:28:26.985Z",
+  "at": "2026-11-16T07:01:13.389Z",
   "ok": true,
   "notifyGate": "shown, skipped",
-  "seconds": 40,
-  "answerLines": 29,
-  "refs": 40,
-  "sources": 34,
+  "seconds": 32,
+  "answerLines": 13,
+  "refs": 25,
+  "sources": 20,
   "model": "Claude Haiku 5.5",
-  "used": "보고 198건 중 198건",
+  "used": "보고 236건 중 236건",
   "matches": 30,
-  "pageErrors": []
+  "pageErrors": [],
+  "safety": {
+    "status": 200,
+    "tips": 1,
+    "matchedSite": true
+  }
 }
