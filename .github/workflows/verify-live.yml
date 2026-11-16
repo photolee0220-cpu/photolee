@@ -190,6 +190,8 @@ jobs:
           [ -n "$RID" ] && echo "$sm" | jq -e '.id' >/dev/null && echo "$tr" | jq -e --arg r "$RID" 'map(select(.room.id == $r)) | length == 1' >/dev/null && [ "$left" = 0 ] \
             && rec "소통: 방 만들기·메시지·지우기" 1 "ok (점검용 방 지움)" || rec "소통: 방 만들기·메시지·지우기" 0 "room=$(echo "$cr" | head -c 100) msg=$(echo "$sm" | head -c 100) left=$left"
           echo "$up" | jq -e '.Key // .key // .Id // .id' >/dev/null && echo "$del" | jq -e 'length == 1' >/dev/null && rec "소통 파일 저장소" 1 "올리기·지우기 ok" || rec "소통 파일 저장소" 0 "up=$(echo "$up" | head -c 160) del=$(echo "$del" | head -c 100)"
+          sq=$(curl -sS -G "$URL/rest/v1/site_docs" "${H[@]}" --data-urlencode "select=id" --data-urlencode "or=(title.ilike.%점검%,note.ilike.%점검%,file_name.ilike.%점검%,text.ilike.%점검%)" --data-urlencode "limit=5")
+          echo "$sq" | jq -e 'type == "array"' >/dev/null && rec "자료 검색(제목·본문)" 1 "$(echo "$sq" | jq 'length')건" || rec "자료 검색(제목·본문)" 0 "$(echo "$sq" | head -c 150)"
           nt=$(curl -sS -X POST "$URL/rest/v1/rpc/save_notice" "${H[@]}" -H "Content-Type: application/json" -d '{"p_id":null,"p_title":"점검","p_body":"","p_require_ack":false,"p_pinned":false}')
           echo "$nt" | grep -q "대표님만" && rec "공지: 기본은 대표님만 쓰기" 1 "관리자 거절 확인" || rec "공지: 기본은 대표님만 쓰기" 0 "$(echo "$nt" | head -c 150)"
           c=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/notify" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"action":"chat","secret":"wrong"}')
