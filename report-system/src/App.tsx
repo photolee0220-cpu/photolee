@@ -16,6 +16,7 @@ import { MyWeek } from './pages/MyWeek';
 import { People } from './pages/People';
 import { Shared } from './pages/Shared';
 import { StoreProvider, useStore } from './state/store';
+import { TalkPage } from './pages/talk/TalkPage';
 
 const LOGGED_OUT = 'sadakdari-demo-logged-out';
 
@@ -60,6 +61,7 @@ function Routes() {
       {view === 'daily' && <DailyPage />}
       {view === 'team' && <TeamDailyPage />}
       {view === 'calendar' && <CalendarPage />}
+      {view === 'talk' && <TalkPage />}
       {view === 'people' && <People />}
       {view === 'mine' && <MyWeek />}
       {view === 'shared' && <Shared />}

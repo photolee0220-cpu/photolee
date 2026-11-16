@@ -5,6 +5,7 @@ import { blobToDataUrl } from './image';
 import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { shiftDay } from './week';
 import { wroteEntry } from './derive';
+import { createDemoTalk, resetDemoTalk } from './demoTalk';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable, triggerDownload } from './fileTypes';
 import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type CalendarEvent, type DayStatus, type DailyComment, type DailyPhoto, type DailyReport, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
@@ -660,6 +661,29 @@ export const demoApi: Api = {
     return () => { listeners.delete(fn); };
   },
 
+  talk: createDemoTalk({
+    me,
+    members: () => state.members,
+    departments: () => state.departments,
+    sites: () => state.sites,
+    stages: () => state.stages,
+    daily: () => state.daily,
+    events: () => state.events,
+    today: () => demoToday,
+    appendDirective(target, line) {
+      const isSite = 'siteId' in target;
+      const input = { weekId: demoReportWeek, targetKind: (isSite ? 'site' : 'member') as 'site' | 'member', siteId: isSite ? target.siteId : null, memberId: isSite ? null : target.memberId, slot: null };
+      let d = state.directives.find((x) => x.weekId === input.weekId && x.targetKind === input.targetKind && x.siteId === input.siteId && x.memberId === input.memberId && x.slot === null);
+      if (!d) { d = { id: newId('dv'), ...input, content: '', updatedAt: '', status: 'open', statusBy: null, statusAt: null }; state.directives.push(d); }
+      d.content = d.content.trim() ? `${d.content.trimEnd()}\n- ${line}` : `- ${line}`;
+      d.updatedAt = new Date().toISOString();
+      if (d.status === 'done') { d.status = 'open'; d.statusBy = null; d.statusAt = null; }
+      persist();
+    },
+    createSite(site) { state.sites.push(site); persist(); },
+    emit: () => listeners.forEach((l) => l()),
+  }),
+
   admin: {
     async saveSite(site) {
       requireAdmin();
@@ -852,6 +876,7 @@ export const demoApi: Api = {
     },
     reset() {
       state = fresh();
+      resetDemoTalk();
       persist();
     },
   },

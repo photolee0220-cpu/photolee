@@ -1,5 +1,5 @@
 import {
-  BookOpen, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
+  BookOpen, MessagesSquare, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -12,11 +12,19 @@ import { canSeeAll, headedDepartments, isReviewer, writesDaily, writesWeekly } f
 import type { Department } from '../lib/types';
 import { NotificationButton, NotificationGate } from './Notifications';
 import { NoticeAckGate } from './ReportNotice';
+import { talkAvailable, talkBadge, useTalk } from '../pages/talk/useTalk';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
-type NavItem = { id: View; label: string; icon: ReactNode };
+type NavItem = { id: View; label: string; icon: ReactNode; badge?: number };
 
 export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean, departments: Department[] = []): NavItem[] {
+  const items = baseNavItems(me, hasShared, departments);
+  // 소통은 모두에게, 앞쪽에 (휴대폰 아래 메뉴에서 바로 보이게)
+  if (talkAvailable()) items.splice(Math.min(1, items.length), 0, { id: 'talk', label: '소통', icon: <MessagesSquare size={18} /> });
+  return items;
+}
+
+function baseNavItems(me: ReturnType<typeof useStore>['me'], hasShared: boolean, departments: Department[] = []): NavItem[] {
   const items: NavItem[] = [];
   // 부서원(부서 안 보고)·현장 직원: 일일보고만 쓴다 (주간보고 메뉴 없음)
   if (me.departmentId && !isReviewer(me) && !canSeeAll(me) && !writesWeekly(me, departments)) {
@@ -191,7 +199,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { me, snap, view, setView, setSearchOpen, signOut } = useStore();
   const { isDark, toggle } = useTheme();
   const hasShared = !!snap?.grants.some((g) => g.viewerDepartmentId === me.departmentId);
-  const items = navItems(me, hasShared, snap?.departments ?? []);
+  const talk = useTalk();
+  const badge = talkAvailable() ? talkBadge(talk.data, me) : 0;
+  const items = navItems(me, hasShared, snap?.departments ?? []).map((it) => (it.id === 'talk' ? { ...it, badge } : it));
   const dept = snap?.departments.find((d) => d.id === me.departmentId);
 
   return (
@@ -217,6 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className={cx('flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium transition-colors',
                   view === it.id ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-ink-2 hover:bg-sunken hover:text-ink')}>
                 {it.icon}{it.label}
+                {!!it.badge && <span className="ml-auto rounded-full bg-danger px-1.5 text-[11px] font-bold leading-[18px] text-white">{it.badge > 99 ? '99+' : it.badge}</span>}
               </button>
             ))}
             <div className="mx-3 my-3 h-px bg-line" />
@@ -314,6 +325,7 @@ function BottomNav({ items, view, setView }: { items: NavItem[]; view: View; set
         {shown.map((it) => (
           <button key={it.id} onClick={() => { setMore(false); setView(it.id); }} className={cx(btn, view === it.id ? 'text-brand-ink' : 'text-ink-3')}>
             {view === it.id && <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-brand" />}
+            {!!it.badge && <span className="absolute left-1/2 top-1 ml-1.5 rounded-full bg-danger px-1 text-[10px] font-bold leading-[15px] text-white">{it.badge > 99 ? '99+' : it.badge}</span>}
             {it.icon}{it.label}
           </button>
         ))}

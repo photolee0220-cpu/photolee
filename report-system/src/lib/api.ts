@@ -2,6 +2,7 @@ import type {
   AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary, SiteField, PendingFeedback, MediaItem,
   CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus, SearchDoc, AskAnswer,
 } from './types';
+import type { TalkApi } from './talkTypes';
 
 export interface WeekSummary {
   weekId: WeekId;
@@ -100,6 +101,8 @@ export interface Api {
   };
   /** 다른 사람이 바꾼 내용이 생기면 호출된다 */
   subscribe(onChange: () => void): () => void;
+  /** 소통: 공지·채팅방·문의·회의록 (체험판 먼저) */
+  talk: TalkApi;
 
   admin: {
     saveSite(site: Site): Promise<Site>;

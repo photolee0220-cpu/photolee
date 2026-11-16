@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, type Api, type SiteHistoryItem } from './api';
 import { DEFAULT_SUMMARY_MODEL } from './models';
+import { pendingTalk } from './talkPending';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf, triggerDownload } from './fileTypes';
 import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
@@ -391,6 +392,8 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         ackEnabled: get('notice_ack_enabled') === true,
       };
     },
+
+    talk: pendingTalk,
 
     subscribe(fn) {
       let t: ReturnType<typeof setTimeout> | undefined;

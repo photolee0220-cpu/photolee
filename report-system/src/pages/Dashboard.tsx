@@ -12,6 +12,7 @@ import { useStore } from '../state/store';
 import { useExport } from './useExport';
 import { DiffModeSwitch } from '../components/DiffText';
 import { AskPanel } from '../components/AskPanel';
+import { SafetyCard } from './talk/SafetyCard';
 import { PeopleGrid } from './People';
 import { useFollowToday } from '../lib/useToday';
 
@@ -33,7 +34,7 @@ export function Dashboard() {
     ]} />
   );
   // 대표님: 맨 위 검색창 (주간·일일 탭 어디서나)
-  const top = <>{me.isCeo && <div className="mx-auto max-w-[1400px]"><AskPanel /></div>}{tabs}</>;
+  const top = <>{me.isCeo && <div className="mx-auto max-w-[1400px]"><AskPanel /><SafetyCard /></div>}{tabs}</>;
   return tab === 'daily' ? <DailyDashboard tabs={top} /> : <WeeklyDashboard tabs={top} />;
 }
 

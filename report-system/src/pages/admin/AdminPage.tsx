@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Bell, Building2, CheckCircle2, DatabaseBackup, Download, HardDrive, KeyRound, Layers, ListPlus, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
+  ArchiveRestore, ArrowDown, ArrowLeft, ArrowUp, Bell, Building2, CheckCircle2, DatabaseBackup, Download, HardDrive, KeyRound, Layers, ListPlus, MessagesSquare, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Logo } from '../../components/AppShell';
@@ -17,8 +17,10 @@ import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteFiel
 import { currentWeekId, formatDate, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
+import { AdminRooms } from '../talk/RoomEditor';
+import { talkAvailable } from '../talk/useTalk';
 
-type Tab = 'sites' | 'members' | 'depts' | 'weeks' | 'storage' | 'ai';
+type Tab = 'sites' | 'members' | 'depts' | 'rooms' | 'weeks' | 'storage' | 'ai';
 
 export function AdminPage() {
   const { me, setView } = useStore();
@@ -27,6 +29,7 @@ export function AdminPage() {
     { id: 'sites', label: '현장 관리', icon: <Building2 size={16} /> },
     { id: 'members', label: '인원·관리자', icon: <Users size={16} /> },
     { id: 'depts', label: '부서·열람 권한', icon: <ShieldCheck size={16} /> },
+    ...(talkAvailable() ? [{ id: 'rooms' as Tab, label: '채팅방', icon: <MessagesSquare size={16} /> }] : []),
     { id: 'weeks', label: '주차·내려받기', icon: <Download size={16} /> },
     { id: 'storage', label: '저장 공간', icon: <HardDrive size={16} /> },
     { id: 'ai', label: 'AI 설정', icon: <Sparkles size={16} /> },
@@ -56,6 +59,7 @@ export function AdminPage() {
         {tab === 'sites' && <SitesAdmin />}
         {tab === 'members' && <MembersAdmin />}
         {tab === 'depts' && <DeptsAdmin />}
+        {tab === 'rooms' && <AdminRooms />}
         {tab === 'weeks' && <WeeksAdmin />}
         {tab === 'storage' && <StorageAdmin />}
         {tab === 'ai' && <AiSettings />}
