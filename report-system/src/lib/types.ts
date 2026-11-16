@@ -467,7 +467,7 @@ export interface NewMemberInput {
 /** 대표님 검색·AI 질문에 쓰는 보고 한 칸 */
 export interface SearchDoc {
   id: string;
-  kind: 'weekly' | 'daily' | 'directive';
+  kind: 'weekly' | 'daily' | 'directive' | 'doc';
   /** 주간·지시는 보고일(월요일), 일일은 그날 */
   date: string;
   siteId: string | null;
@@ -477,6 +477,9 @@ export interface SearchDoc {
   content: string;
   /** 지시사항 처리 상태 */
   status?: DirectiveStatus;
+  /** 현장 자료(회의록 등): 종류와 제목 */
+  docCategory?: string;
+  docTitle?: string;
 }
 
 export interface AskAnswer {

@@ -1,10 +1,12 @@
 import { ApiError, newId } from './api';
 import { blobToDataUrl, shrinkImage } from './image';
+import { pdfText } from './pdfPages';
 import {
-  DEFAULT_TALK_SETTINGS, INQUIRY_STAGES, type ChatAttachment, type ChatMessage, type ChatRoom, type Inquiry, type Minutes, type Notice,
-  type RoomSummary, type SafetyTip, type TalkApi, type TalkSettings,
+  DEFAULT_TALK_SETTINGS, INQUIRY_STAGES, MINUTES, isBuiltinRoom, type ChatAttachment, type ChatMessage, type ChatRoom, type Inquiry, type Notice,
+  type RoomSummary, type SafetyTip, type SiteDoc, type TalkApi, type TalkSettings,
 } from './talkTypes';
-import type { CalendarEvent, DailyReport, Department, Member, Site, StageDef } from './types';
+import type { CalendarEvent, DailyReport, Department, Member, SearchDoc, Site, StageDef } from './types';
+import sampleText from './demoDocText.json';
 import { shiftDay } from './week';
 
 /** 체험판 소통(공지·채팅) 서버. 보고 데이터와 따로 브라우저에 저장한다 */
@@ -25,14 +27,14 @@ export interface DemoTalkCtx {
 }
 
 interface TalkState {
-  v: 1;
+  v: 2;
   rooms: ChatRoom[];
   messages: ChatMessage[];
   /** roomId → memberId → 마지막으로 읽은 때 */
   reads: Record<string, Record<string, string>>;
   notices: Notice[];
   inquiries: Inquiry[];
-  minutes: Minutes[];
+  docs: SiteDoc[];
   /** `${date}|${siteId}` → 처리 상태 */
   tips: Record<string, 'sent' | 'dismissed'>;
   settings: TalkSettings;
@@ -67,7 +69,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   function load(): TalkState {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 1) return s; }
+      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 2) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
     } catch { /* 처음부터 */ }
     return fresh();
   }
@@ -110,7 +112,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
     ];
     const say = (roomId: string, authorId: string | undefined, text: string, min: number, extra: Partial<ChatMessage> = {}): ChatMessage | null => (authorId ? {
       id: newId('msg'), roomId, authorId, text, attachments: [], replyToId: null, mentions: [], createdAt: ago(min), editedAt: null, deleted: false,
-      inquiryId: null, directive: null, safety: false, system: false, ...extra,
+      inquiryId: null, directive: null, safety: false, system: false, hidden: null, docCategory: null, ...extra,
     } : null);
     const s1 = sites[0]; const s2 = sites[1];
     const r1 = rooms.find((r) => r.siteId === s1?.id); const r2 = rooms.find((r) => r.siteId === s2?.id);
@@ -165,11 +167,18 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         reads: Object.fromEntries(allIds.map((id) => [id, ago(60 * 24 * 2)])), acks: {},
       },
     ];
-    const minutes: Minutes[] = s1 && chief ? [{
-      id: 'mn_1', siteId: s1.id, meetingDate: shiftDay(ctx.today(), -9), title: '주간 공정회의 (감리단·협력업체)', note: '감리단 지적사항 3건, 다음 주 타설 일정 확정',
-      fileName: '주간공정회의록-견본.pdf', fileType: 'pdf', url: `${import.meta.env.BASE_URL}demo/minutes-sample.pdf`, size: 0, uploadedBy: chief, createdAt: ago(60 * 24 * 9),
-    }] : [];
-    return { v: 1, rooms, messages, reads, notices, inquiries, minutes, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
+    const base = import.meta.env.BASE_URL;
+    const txt = sampleText as Record<string, string>;
+    const doc = (category: string, docDate: string, title: string, note: string, file: string, by: string | undefined, daysAgo: number): SiteDoc | null => (s1 && by ? {
+      id: newId('doc'), siteId: s1.id, category, docDate, title, note, fileName: file, fileType: 'pdf', url: `${base}demo/${file}`, size: 0,
+      text: txt[file] ?? '', uploadedBy: by, createdAt: ago(60 * 24 * daysAgo), messageId: null,
+    } : null);
+    const docs = [
+      doc(MINUTES, shiftDay(ctx.today(), -9), '주간 공정회의 (감리단·협력업체)', '감리단 지적사항 3건, 다음 주 타설 일정 확정', 'minutes-sample.pdf', chief, 9),
+      doc('공사일보', shiftDay(ctx.today(), -1), '공사일보', '3층 기둥 타설 완료 (레미콘 18대)', 'daily-log-sample.pdf', chief, 1),
+      doc('주간공정표', shiftDay(ctx.today(), 3), '주간 공정표 (10/26~10/31)', '3층 슬래브 타설 화요일', 'weekly-schedule-sample.pdf', build[0], 0),
+    ].filter(Boolean) as SiteDoc[];
+    return { v: 2, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
   }
 
   /* ───────── 권한 ───────── */
@@ -181,7 +190,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
     return r;
   }
   const inInquiryRoom = (m: Member) => st.rooms.some((r) => r.kind === 'inquiry' && r.memberIds.includes(m.id));
-  const canSeeMinutes = (m: Member, siteId: string) => m.isCeo || m.isAdmin || m.isExecutive
+  const canSeeDocs = (m: Member, siteId: string) => m.isCeo || m.isAdmin || m.isExecutive
     || st.rooms.some((r) => r.kind === 'site' && r.siteId === siteId && r.memberIds.includes(m.id));
 
   function summary(r: ChatRoom, m: Member): RoomSummary {
@@ -207,7 +216,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   function post(roomId: string, authorId: string, text: string, extra: Partial<ChatMessage> = {}): ChatMessage {
     const msg: ChatMessage = {
       id: newId('msg'), roomId, authorId, text, attachments: [], replyToId: null, mentions: [], createdAt: new Date().toISOString(), editedAt: null, deleted: false,
-      inquiryId: null, directive: null, safety: false, system: false, ...extra,
+      inquiryId: null, directive: null, safety: false, system: false, hidden: null, docCategory: null, ...extra,
     };
     st.messages.push(msg);
     (st.reads[roomId] ??= {})[authorId] = msg.createdAt;
@@ -219,14 +228,15 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   return {
     async load() {
       const m = ctx.me();
-      const rooms = myRooms(m).map((r) => summary(r, m))
+      const showMsg = (x: ChatMessage | null) => (x && x.hidden && !m.isAdmin ? { ...x, text: '', attachments: [] } : x);
+      const rooms = myRooms(m).map((r) => { const x = summary(r, m); x.last = showMsg(x.last); return x; })
         .sort((a, b) => (b.last?.createdAt ?? '').localeCompare(a.last?.createdAt ?? ''));
-      const siteIds = new Set(ctx.sites().map((s) => s.id).filter((id) => canSeeMinutes(m, id)));
+      const siteIds = new Set(ctx.sites().map((s) => s.id).filter((id) => canSeeDocs(m, id)));
       return delay({
         rooms,
         notices: structuredClone(st.notices).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt)),
         inquiries: inInquiryRoom(m) ? structuredClone(st.inquiries) : [],
-        minutes: structuredClone(st.minutes.filter((x) => siteIds.has(x.siteId))).sort((a, b) => b.meetingDate.localeCompare(a.meetingDate)),
+        docs: structuredClone(st.docs.filter((x) => siteIds.has(x.siteId))).sort((a, b) => b.docDate.localeCompare(a.docDate) || b.createdAt.localeCompare(a.createdAt)),
         settings: structuredClone(st.settings),
       });
     },
@@ -234,10 +244,11 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
     async messages(roomId) {
       const m = ctx.me();
       roomFor(roomId, m);
-      return delay(structuredClone(st.messages.filter((x) => x.roomId === roomId)));
+      // 가린 메시지는 관리자만 내용을 본다
+      return delay(structuredClone(st.messages.filter((x) => x.roomId === roomId)).map((x) => (x.hidden && !m.isAdmin ? { ...x, text: '', attachments: [] } : x)));
     },
 
-    async send({ roomId, text, files = [], replyToId = null, inquiryId = null }) {
+    async send({ roomId, text, files = [], replyToId = null, inquiryId = null, docCategory = null }) {
       const m = ctx.me();
       const r = roomFor(roomId, m);
       const body = text.trim();
@@ -245,7 +256,19 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       const attachments = await Promise.all(files.map(toAttachment));
       const names = ctx.members().filter((x) => r.memberIds.includes(x.id) && x.id !== m.id);
       const mentions = names.filter((x) => body.includes(`@${x.name}`)).map((x) => x.id);
-      const msg = post(roomId, m.id, body, { attachments, replyToId, mentions, inquiryId });
+      const toDocs = !!(docCategory && r.siteId && files.length);
+      const msg = post(roomId, m.id, body, { attachments, replyToId, mentions, inquiryId, docCategory: toDocs ? docCategory : null });
+      if (toDocs) {
+        for (const [i, f] of files.entries()) {
+          const a = attachments[i];
+          const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+          st.docs.push({
+            id: newId('doc'), siteId: r.siteId!, category: docCategory!, docDate: ctx.today(), title: f.name.replace(/\.[^.]+$/, ''), note: body.slice(0, 80),
+            fileName: f.name, fileType: a.kind === 'image' ? 'image' : isPdf ? 'pdf' : 'file', url: a.url, size: a.size,
+            text: isPdf ? await pdfText(a.url).catch(() => '') : '', uploadedBy: m.id, createdAt: msg.createdAt, messageId: msg.id,
+          });
+        }
+      }
       if (inquiryId) { const q = st.inquiries.find((x) => x.id === inquiryId); if (q) q.lastActivityAt = msg.createdAt; }
       save();
       return structuredClone(msg);
@@ -265,9 +288,22 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
     async deleteMessage(id) {
       const m = ctx.me();
       const msg = st.messages.find((x) => x.id === id);
-      if (!msg || msg.authorId !== m.id) throw new ApiError('본인 메시지만 지울 수 있습니다.');
-      if (Date.now() - Date.parse(msg.createdAt) > st.settings.deleteMinutes * 60000) throw new ApiError(`보낸 뒤 ${st.settings.deleteMinutes}분이 지나 지울 수 없습니다. 고치기는 됩니다.`);
+      if (!msg) throw new ApiError('메시지를 찾을 수 없습니다.');
+      if (!m.isAdmin) {
+        if (msg.authorId !== m.id) throw new ApiError('본인 메시지만 지울 수 있습니다.');
+        if (Date.now() - Date.parse(msg.createdAt) > st.settings.deleteMinutes * 60000) throw new ApiError(`보낸 뒤 ${st.settings.deleteMinutes}분이 지나 지울 수 없습니다. 고치기는 됩니다.`);
+      }
       msg.deleted = true; msg.text = ''; msg.attachments = [];
+      st.docs = st.docs.filter((d) => d.messageId !== msg.id);
+      save();
+    },
+
+    async hideMessage(id, hidden) {
+      const m = ctx.me();
+      if (!m.isAdmin) throw new ApiError('관리자만 가릴 수 있습니다.');
+      const msg = st.messages.find((x) => x.id === id);
+      if (!msg) throw new ApiError('메시지를 찾을 수 없습니다.');
+      msg.hidden = hidden ? { by: m.id, at: new Date().toISOString() } : null;
       save();
     },
 
@@ -328,7 +364,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
     notices: {
       async save(n) {
         const m = ctx.me();
-        if (!isTop(m)) throw new ApiError('공지는 대표님과 관리자만 쓸 수 있습니다.');
+        if (!(m.isCeo || (m.isAdmin && st.settings.adminCanNotice))) throw new ApiError('전체 공지는 대표님만 쓸 수 있습니다.');
         if (!n.title.trim()) throw new ApiError('제목을 입력하세요.');
         const now = new Date().toISOString();
         let x = n.id ? st.notices.find((y) => y.id === n.id) : undefined;
@@ -338,7 +374,8 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         return structuredClone(x);
       },
       async remove(id) {
-        if (!isTop(ctx.me())) throw new ApiError('공지는 대표님과 관리자만 지울 수 있습니다.');
+        const m = ctx.me();
+        if (!(m.isCeo || (m.isAdmin && st.settings.adminCanNotice))) throw new ApiError('공지는 대표님만 지울 수 있습니다.');
         st.notices = st.notices.filter((x) => x.id !== id);
         save();
       },
@@ -412,42 +449,53 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       },
     },
 
-    minutes: {
-      async upload({ siteId, meetingDate, title, note, file }) {
+    docs: {
+      async upload({ siteId, category, docDate, title, note, file }) {
         const m = ctx.me();
-        if (!canSeeMinutes(m, siteId)) throw new ApiError('이 현장방 인원만 회의록을 올릴 수 있습니다.');
+        if (!canSeeDocs(m, siteId)) throw new ApiError('이 현장방 인원만 자료를 올릴 수 있습니다.');
         const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-        if (!isPdf && !file.type.startsWith('image/')) throw new ApiError('PDF나 사진 파일만 올릴 수 있습니다.');
+        const isImage = file.type.startsWith('image/');
         let url: string; let size = file.size;
-        if (isPdf) {
-          if (file.size > 3 * MB) throw new ApiError('체험판은 3MB 이하 PDF만 올릴 수 있습니다.');
-          url = await blobToDataUrl(file);
+        if (isImage) {
+          const sh = await shrinkImage(file, 2000, 0.8);
+          url = await blobToDataUrl(sh.blob); size = sh.blob.size;
         } else {
-          const s = await shrinkImage(file, 2000, 0.8);
-          url = await blobToDataUrl(s.blob); size = s.blob.size;
+          if (file.size > 3 * MB) throw new ApiError('체험판은 3MB 이하 파일만 올릴 수 있습니다.');
+          url = await blobToDataUrl(file);
         }
-        const x: Minutes = { id: newId('mn'), siteId, meetingDate, title: title.trim() || '주간 공정회의', note: note.trim(), fileName: file.name, fileType: isPdf ? 'pdf' : 'image', url, size, uploadedBy: m.id, createdAt: new Date().toISOString() };
-        st.minutes.push(x);
+        const x: SiteDoc = {
+          id: newId('doc'), siteId, category, docDate, title: title.trim() || category, note: note.trim(), fileName: file.name,
+          fileType: isPdf ? 'pdf' : isImage ? 'image' : 'file', url, size, text: isPdf ? await pdfText(url).catch(() => '') : '',
+          uploadedBy: m.id, createdAt: new Date().toISOString(), messageId: null,
+        };
+        st.docs.push(x);
         const room = st.rooms.find((r) => r.kind === 'site' && r.siteId === siteId);
-        if (room) post(room.id, m.id, `회의록을 올렸습니다: ${x.title} (${meetingDate})`, { system: true });
+        if (room) post(room.id, m.id, `${category}를 올렸습니다: ${x.title} (${docDate})`, { system: true });
         save();
         return structuredClone(x);
       },
       async remove(id) {
         const m = ctx.me();
-        const x = st.minutes.find((y) => y.id === id);
+        const x = st.docs.find((y) => y.id === id);
         if (!x) return;
         if (x.uploadedBy !== m.id && !isTop(m)) throw new ApiError('올린 사람과 관리자만 지울 수 있습니다.');
-        st.minutes = st.minutes.filter((y) => y.id !== id);
+        st.docs = st.docs.filter((y) => y.id !== id);
         save();
       },
-      async request(siteId) {
+      async requestMinutes(siteId) {
         const m = ctx.me();
         const room = st.rooms.find((r) => r.kind === 'site' && r.siteId === siteId);
         if (!room || !room.memberIds.includes(m.id)) throw new ApiError('이 현장방 인원만 요청할 수 있습니다.');
         const others = room.memberIds.filter((id) => id !== m.id);
-        post(room.id, m.id, '이번 주 정기회의 회의록이 아직 없습니다. 회의 후 회의록(PDF 또는 사진)을 [회의록] 칸에 올려 주세요.', { system: true, mentions: others });
+        post(room.id, m.id, '이번 주 정기회의 회의록이 아직 없습니다. 회의 후 회의록(PDF 또는 사진)을 [자료] 칸에 올려 주세요.', { system: true, mentions: others });
         save();
+      },
+      async corpus(from) {
+        const m = ctx.me();
+        if (!m.isCeo) return [];
+        return delay(st.docs.filter((d) => d.docDate >= from && d.text.trim()).map((d): SearchDoc => ({
+          id: d.id, kind: 'doc', date: d.docDate, siteId: d.siteId, departmentId: null, memberId: d.uploadedBy, content: `${d.title}\n${d.note}\n${d.text}`.trim(), docCategory: d.category, docTitle: d.title,
+        })));
       },
     },
 
@@ -495,8 +543,9 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         if (!ctx.me().isAdmin) throw new ApiError('관리자만 방을 관리할 수 있습니다.');
         if (r.kind === 'dm') throw new ApiError('1:1 대화방은 관리할 수 없습니다.');
         if (!r.name.trim()) throw new ApiError('방 이름을 입력하세요.');
-        if (r.kind === 'site' && !r.siteId) throw new ApiError('현장방은 현장을 골라야 합니다.');
-        const next = { ...r, name: r.name.trim(), memberIds: [...new Set(r.memberIds)] };
+        // 종류는 따로 고르지 않는다: 현장을 연결하면 현장방, 아니면 일반 방 (문의방·안전방은 처음부터 있는 방)
+        const kind = isBuiltinRoom(r) ? r.kind : r.siteId ? 'site' : 'group';
+        const next: ChatRoom = { ...r, kind, siteId: isBuiltinRoom(r) ? null : r.siteId, meetingDow: kind === 'site' ? r.meetingDow : null, name: r.name.trim(), memberIds: [...new Set(r.memberIds)] };
         const i = st.rooms.findIndex((x) => x.id === r.id);
         if (i >= 0) st.rooms[i] = next; else { st.rooms.push(next); st.reads[next.id] = {}; }
         save();
@@ -504,6 +553,8 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       },
       async deleteRoom(id) {
         if (!ctx.me().isAdmin) throw new ApiError('관리자만 방을 지울 수 있습니다.');
+        const r = st.rooms.find((x) => x.id === id);
+        if (r && isBuiltinRoom(r)) throw new ApiError('문의방·안전방은 기본 방이라 지울 수 없습니다. 인원만 바꿀 수 있습니다.');
         st.rooms = st.rooms.filter((x) => x.id !== id);
         st.messages = st.messages.filter((x) => x.roomId !== id);
         delete st.reads[id];

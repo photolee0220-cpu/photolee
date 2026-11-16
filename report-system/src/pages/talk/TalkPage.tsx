@@ -5,6 +5,7 @@ import { Empty, Segmented, Spinner } from '../../components/ui';
 import { useStore } from '../../state/store';
 import { RoomList, RoomView } from './Chat';
 import { NoticeList } from './Notices';
+import { DocsLibrary } from './Docs';
 import { noticeOpen, useTalk } from './useTalk';
 
 function useDesktop() {
@@ -24,7 +25,7 @@ export function TalkPage() {
   const { me } = useStore();
   const { data } = useTalk();
   const desktop = useDesktop();
-  const [tab, setTab] = useState<'chat' | 'notice'>('chat');
+  const [tab, setTab] = useState<'chat' | 'notice' | 'docs'>('chat');
   const [roomId, setRoomId] = useState<string | null>(null);
   useEffect(() => {
     if (desktop && !roomId && data?.rooms.length) setRoomId(data.rooms[0].room.id);
@@ -40,9 +41,10 @@ export function TalkPage() {
   const unreadMsgs = data.rooms.filter((r) => !r.room.mutedBy.includes(me.id)).reduce((n, r) => n + r.unread, 0);
   const openNotices = data.notices.filter((n) => noticeOpen(n, me)).length;
   const tabs = (
-    <Segmented<'chat' | 'notice'> value={tab} onChange={setTab} options={[
+    <Segmented<'chat' | 'notice' | 'docs'> value={tab} onChange={setTab} options={[
       { id: 'chat', label: `채팅방${unreadMsgs ? ` ${unreadMsgs}` : ''}` },
       { id: 'notice', label: `공지${openNotices ? ` ${openNotices}` : ''}` },
+      { id: 'docs', label: '자료실' },
     ]} />
   );
 
@@ -52,6 +54,7 @@ export function TalkPage() {
         <span className="text-[13px] text-ink-3">공지·채팅방·문의·회의록을 한곳에서</span>
       </PageHeader>
       {tab === 'notice' && <NoticeList notices={data.notices} />}
+      {tab === 'docs' && <DocsLibrary data={data} />}
       {tab === 'chat' && (desktop ? (
         <div className="grid h-[calc(100dvh-190px)] min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           <div className="min-h-0 border-r border-line"><RoomList data={data} activeId={roomId} onOpen={setRoomId} /></div>

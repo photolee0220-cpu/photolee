@@ -11,9 +11,9 @@ import { TextBlock } from './editors';
 import { Badge, Button, Card, cx, Modal, Segmented, Spinner } from './ui';
 
 type Period = '7' | '31' | '92' | '0';
-type Kind = 'all' | 'weekly' | 'daily';
+type Kind = 'all' | 'weekly' | 'daily' | 'doc';
 const PERIOD_LABEL: Record<Period, string> = { '7': '최근 1주', '31': '최근 1개월', '92': '최근 3개월', '0': '전체 기간' };
-const SUGGEST = ['미완료 지시사항 정리해줘', '이번 주 이슈 있는 현장 알려줘', '지난주보다 크게 바뀐 현장은?', '최근 안전 관련 내용 정리해줘'];
+const SUGGEST = ['지난주 현장 회의록 정리해줘', '미완료 지시사항 정리해줘', '이번 주 이슈 있는 현장 알려줘', '지난주보다 크게 바뀐 현장은?', '최근 안전 관련 내용 정리해줘'];
 
 interface Result { question: string; matches: Labeled[]; byRef: Map<string, Labeled>; ai: AskAnswer | null; aiError: string | null; sent: number; total: number; partial: boolean }
 
@@ -46,14 +46,14 @@ export function AskPanel() {
       const from = period === '0' ? '2000-01-01' : shiftDay(todayIso(), -Number(period));
       let docs = cache.current.get(from);
       if (!docs) { docs = await api.ask.corpus(from); cache.current.set(from, docs); }
-      const pool = docs.filter((d) => kind === 'all' || (kind === 'daily' ? d.kind === 'daily' : d.kind !== 'daily'));
+      const pool = docs.filter((d) => kind === 'all' || (kind === 'daily' ? d.kind === 'daily' : kind === 'doc' ? d.kind === 'doc' : d.kind === 'weekly' || d.kind === 'directive'));
       const ranked = rank(pool, text, lookup);
       const byRef = new Map(ranked.map((d) => [d.ref, d]));
       const matches = ranked.filter((d) => d.score > 0).sort((a, b) => b.score - a.score || b.date.localeCompare(a.date)).slice(0, 30);
       const base = { question: text, matches, byRef, total: pool.length };
       if (!pool.length) { setRes({ ...base, ai: null, aiError: '이 기간에 보고가 없습니다.', sent: 0, partial: false }); return; }
       if (!aiEnabled) { setRes({ ...base, ai: null, aiError: null, sent: 0, partial: false }); return; }
-      const { prompt, sent, partial } = buildAskPrompt(text, ranked, `${PERIOD_LABEL[period]} · ${kind === 'all' ? '주간+일일' : kind === 'weekly' ? '주간보고' : '일일보고'}`);
+      const { prompt, sent, partial } = buildAskPrompt(text, ranked, `${PERIOD_LABEL[period]} · ${kind === 'all' ? '주간+일일+자료' : kind === 'weekly' ? '주간보고' : kind === 'doc' ? '현장 자료' : '일일보고'}`);
       setRes({ ...base, ai: null, aiError: null, sent: sent.length, partial });
       try {
         const ai = await api.ask.answer(prompt);
@@ -81,7 +81,7 @@ export function AskPanel() {
       </form>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Segmented<Period> value={period} onChange={(v) => setPeriod(v)} options={[{ id: '7', label: '1주' }, { id: '31', label: '1개월' }, { id: '92', label: '3개월' }, { id: '0', label: '전체' }]} />
-        <Segmented<Kind> value={kind} onChange={(v) => setKind(v)} options={[{ id: 'all', label: '주간+일일' }, { id: 'weekly', label: '주간' }, { id: 'daily', label: '일일' }]} />
+        <Segmented<Kind> value={kind} onChange={(v) => setKind(v)} options={[{ id: 'all', label: '전체' }, { id: 'weekly', label: '주간' }, { id: 'daily', label: '일일' }, { id: 'doc', label: '자료' }]} />
       </div>
       {!res && !busy && aiEnabled && (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -128,7 +128,7 @@ export function AskPanel() {
                   <li key={d.ref}>
                     <button type="button" onClick={() => setOpen(d)} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-left hover:border-line-strong hover:bg-sunken/60">
                       <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-3">
-                        <Badge tone={d.kind === 'daily' ? 'neutral' : d.kind === 'directive' ? 'note' : 'brand'}>{d.kind === 'daily' ? '일일' : d.kind === 'directive' ? '지시' : '주간'}</Badge>
+                        <Badge tone={d.kind === 'daily' ? 'neutral' : d.kind === 'directive' ? 'note' : d.kind === 'doc' ? 'ok' : 'brand'}>{d.kind === 'daily' ? '일일' : d.kind === 'directive' ? '지시' : d.kind === 'doc' ? (d.docCategory ?? '자료') : '주간'}</Badge>
                         <span className="truncate">{d.label}</span>
                       </span>
                       <span className="mt-1 block text-[13px] leading-[1.55] text-ink-2">{highlight(snippet(d.content, terms), terms)}</span>
@@ -162,8 +162,8 @@ function DocModal({ doc, onClose }: { doc: Labeled; onClose(): void }) {
     else if (doc.memberId) openDrawer({ type: 'person', id: doc.memberId });
   };
   return (
-    <Modal open onClose={onClose} title={`${doc.ref} · ${doc.kind === 'daily' ? '일일보고' : doc.kind === 'directive' ? '대표 지시' : '주간보고'}`} width={600}
-      footer={<>{doc.kind !== 'daily' && <Button onClick={go}>그 주 보고 열기<ChevronRight size={15} /></Button>}<Button tone="primary" onClick={onClose}>닫기</Button></>}>
+    <Modal open onClose={onClose} title={`${doc.ref} · ${doc.kind === 'daily' ? '일일보고' : doc.kind === 'directive' ? '대표 지시' : doc.kind === 'doc' ? (doc.docCategory ?? '현장 자료') : '주간보고'}`} width={600}
+      footer={<>{doc.kind !== 'daily' && doc.kind !== 'doc' && <Button onClick={go}>그 주 보고 열기<ChevronRight size={15} /></Button>}<Button tone="primary" onClick={onClose}>닫기</Button></>}>
       <p className={cx('mb-3 text-[13px] font-semibold text-ink-3')}>{doc.label}</p>
       <TextBlock text={doc.content} />
     </Modal>

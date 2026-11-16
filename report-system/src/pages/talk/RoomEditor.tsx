@@ -2,19 +2,13 @@ import { Plus, Search, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/client';
 import { activeDepartments, byId } from '../../lib/derive';
-import { DEFAULT_TALK_SETTINGS, ROOM_KIND_LABEL, type ChatRoom, type RoomKind, type TalkSettings } from '../../lib/talkTypes';
+import { DEFAULT_TALK_SETTINGS, isBuiltinRoom, type ChatRoom, type TalkSettings } from '../../lib/talkTypes';
 import { useStore } from '../../state/store';
 import { Avatar, Badge, Button, Card, cx, Field, Input, Modal, Select, Spinner, Toggle } from '../../components/ui';
 import { RoomIcon } from './Chat';
 import { refreshTalk } from './useTalk';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-const KIND_HINT: Record<Exclude<RoomKind, 'dm'>, string> = {
-  group: '부서방·소장방처럼 정해진 사람끼리 이야기하는 방',
-  site: '현장 하나의 방. [회의록] 칸이 붙고 정기회의 요일을 정할 수 있습니다',
-  inquiry: '신규 교회건축 문의 카드(단계·담당자)와 카드별 대화',
-  safety: '안전 당부를 남기는 방. 대표님의 안전 전달 제안이 이 방으로 갑니다',
-};
 
 export function blankRoom(): ChatRoom {
   return { id: `room_${Date.now().toString(36)}`, kind: 'group', name: '', siteId: null, memberIds: [], pinned: '', pinnedBy: null, pinnedAt: null, mutedBy: [], meetingDow: null, sort: 100, createdAt: new Date().toISOString() };
@@ -24,6 +18,7 @@ export function blankRoom(): ChatRoom {
 export function RoomEditor({ room, onClose, onSaved }: { room: ChatRoom | null; onClose(): void; onSaved(): void }) {
   const { snap, toast } = useStore();
   const [r, setR] = useState<ChatRoom>(room ?? blankRoom());
+  const builtin = isBuiltinRoom(r);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const members = (snap?.members ?? []).filter((m) => m.active);
@@ -50,32 +45,29 @@ export function RoomEditor({ room, onClose, onSaved }: { room: ChatRoom | null; 
   return (
     <Modal open onClose={onClose} title={room ? '방 관리' : '새 채팅방'} width={620}
       footer={<>
-        {room && <Button tone="ghost" className="mr-auto !text-danger" disabled={busy} onClick={() => void remove()}><Trash2 size={15} />방 지우기</Button>}
+        {room && !builtin && <Button tone="ghost" className="mr-auto !text-danger" disabled={busy} onClick={() => void remove()}><Trash2 size={15} />방 지우기</Button>}
         <Button onClick={onClose}>취소</Button>
         <Button tone="primary" disabled={busy || !r.name.trim()} onClick={() => void save()}>{busy && <Spinner />}저장</Button>
       </>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="방 이름"><Input autoFocus={!room} value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} placeholder="예: 건설사업부, 소장방" /></Field>
-        <Field label="종류" hint={KIND_HINT[r.kind as Exclude<RoomKind, 'dm'>]}>
-          <Select value={r.kind} onChange={(e) => setR({ ...r, kind: e.target.value as RoomKind, siteId: e.target.value === 'site' ? r.siteId : null, meetingDow: e.target.value === 'site' ? r.meetingDow : null })}>
-            {(['group', 'site', 'safety', 'inquiry'] as const).map((k) => <option key={k} value={k}>{ROOM_KIND_LABEL[k]}</option>)}
-          </Select>
-        </Field>
-        {r.kind === 'site' && (
-          <>
-            <Field label="현장">
-              <Select value={r.siteId ?? ''} onChange={(e) => { const s = sites.find((x) => x.id === e.target.value); setR({ ...r, siteId: e.target.value || null, name: r.name || s?.name || '' }); }}>
-                <option value="">현장 고르기</option>
-                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="정기회의 요일" hint="회의 다음 날까지 회의록이 없으면 '미등록'으로 표시">
-              <Select value={r.meetingDow ?? ''} onChange={(e) => setR({ ...r, meetingDow: e.target.value === '' ? null : Number(e.target.value) })}>
-                <option value="">정하지 않음</option>
-                {DOW.map((d, i) => <option key={i} value={i}>매주 {d}요일</option>)}
-              </Select>
-            </Field>
-          </>
+        {builtin ? (
+          <Field label="방 종류"><p className="flex h-10 items-center text-[13.5px] text-ink-2">{r.kind === 'inquiry' ? '문의 카드가 붙는 기본 방' : '안전 당부가 오는 기본 방'} · 인원만 바꿀 수 있습니다</p></Field>
+        ) : (
+          <Field label="현장 연결 (선택)" hint="현장을 연결하면 [자료] 칸(회의록·공사일보·공정표)이 붙습니다">
+            <Select value={r.siteId ?? ''} onChange={(e) => { const s = sites.find((x) => x.id === e.target.value); setR({ ...r, siteId: e.target.value || null, name: r.name || s?.name || '', meetingDow: e.target.value ? r.meetingDow : null }); }}>
+              <option value="">연결 안 함 (부서방·소장방 등)</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+          </Field>
+        )}
+        {!builtin && r.siteId && (
+          <Field label="정기회의 요일" hint="회의 다음 날까지 회의록이 없으면 '미등록'으로 표시">
+            <Select value={r.meetingDow ?? ''} onChange={(e) => setR({ ...r, meetingDow: e.target.value === '' ? null : Number(e.target.value) })}>
+              <option value="">정하지 않음</option>
+              {DOW.map((d, i) => <option key={i} value={i}>매주 {d}요일</option>)}
+            </Select>
+          </Field>
         )}
       </div>
 
@@ -134,7 +126,7 @@ export function AdminRooms() {
           <Badge tone="note">체험판</Badge>
           <Button tone="primary" size="sm" className="ml-auto" onClick={() => setEdit('new')}><Plus size={15} />방 만들기</Button>
         </div>
-        <p className="mb-3 text-[13px] text-ink-3">방을 만들고 지우거나, 방마다 인원을 넣고 뺍니다. 1:1 대화는 두 사람만 볼 수 있어 여기에 나오지 않습니다.</p>
+        <p className="mb-3 text-[13px] text-ink-3">방 이름을 넣고 인원을 고르면 방이 생깁니다. 현장을 연결하면 현장방이 됩니다. 문의방·안전방은 기본 방이라 인원만 바꿉니다. 1:1 대화는 두 사람만 볼 수 있어 여기에 나오지 않습니다.</p>
         {!rooms ? <Spinner /> : (
           <ul className="divide-y divide-line">
             {rooms.map((r) => (
@@ -143,7 +135,7 @@ export function AdminRooms() {
                   <RoomIcon room={r} size={15} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-bold">{r.name}</span>
-                    <span className="block truncate text-[12px] text-ink-3">{ROOM_KIND_LABEL[r.kind]}{r.siteId ? ` · ${sites.get(r.siteId)?.name ?? ''}` : ''}{r.meetingDow != null ? ` · 매주 ${DOW[r.meetingDow]} 회의` : ''}</span>
+                    <span className="block truncate text-[12px] text-ink-3">{isBuiltinRoom(r) ? '기본 방' : r.siteId ? `현장 연결: ${sites.get(r.siteId)?.name ?? ''}` : '일반 방'}{r.meetingDow != null ? ` · 매주 ${DOW[r.meetingDow]} 회의` : ''}</span>
                   </span>
                   <span className="shrink-0 text-[13px] font-semibold text-ink-2">{r.memberIds.length}명</span>
                 </button>
@@ -165,13 +157,15 @@ export function AdminRooms() {
               까지
             </div>
           )}
+          <Toggle checked={settings.adminCanNotice} onChange={(v) => saveSettings({ ...settings, adminCanNotice: v })}
+            label={<span><b>관리자도 전체 공지 쓰기</b> <span className="text-ink-3">기본은 대표님만 씁니다. 켜면 관리자도 대표님 대신 올릴 수 있습니다</span></span>} />
           <div className="flex items-center gap-2 text-[13px]">
             <span className="font-bold">메시지 지우기</span>
             <span className="text-ink-3">보낸 뒤</span>
             <Select value={settings.deleteMinutes} onChange={(e) => saveSettings({ ...settings, deleteMinutes: Number(e.target.value) })} className="!h-9 !w-24">
               {[1, 5, 10, 30].map((n) => <option key={n} value={n}>{n}분</option>)}
             </Select>
-            <span className="text-ink-3">안에만 본인이 지울 수 있습니다. 그 뒤에는 고치기만 되고 고친 기록이 남습니다.</span>
+            <span className="text-ink-3">안에만 본인이 지울 수 있습니다. 관리자는 언제든 메시지를 가리거나 지울 수 있습니다.</span>
           </div>
         </div>
       </Card>

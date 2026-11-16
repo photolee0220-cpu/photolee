@@ -6,19 +6,20 @@ import type { Notice } from '../../lib/talkTypes';
 import { relativeTime } from '../../lib/week';
 import { useStore } from '../../state/store';
 import { Avatar, Badge, Button, Card, cx, Empty, Field, Input, Modal, Progress, Segmented, Spinner, Toggle } from '../../components/ui';
-import { refreshTalk } from './useTalk';
+import { refreshTalk, useTalk } from './useTalk';
 
 /** 전체 공지: 대표님·관리자가 쓰고, 확인이 필요한 공지는 직원이 [확인]을 누른다 */
 export function NoticeList({ notices }: { notices: Notice[] }) {
   const { me, snap } = useStore();
   const [open, setOpen] = useState<Notice | null>(null);
   const [edit, setEdit] = useState<Notice | 'new' | null>(null);
-  const canWrite = me.isCeo || me.isAdmin;
+  const talkSettings = useTalk().data?.settings;
+  const canWrite = me.isCeo || (me.isAdmin && !!talkSettings?.adminCanNotice);
   const people = (snap?.members ?? []).filter((m) => m.active);
   return (
     <div className="mx-auto max-w-[820px]">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <p className="text-[13px] text-ink-3">{canWrite ? '공지를 올리면 전 직원 휴대폰에 알림이 갑니다.' : '대표님·관리자가 올린 공지입니다.'}</p>
+        <p className="text-[13px] text-ink-3">{canWrite ? '공지를 올리면 전 직원이 보고, 휴대폰에 알림이 갑니다.' : '대표님이 전 직원에게 올린 공지입니다.'}</p>
         {canWrite && <Button tone="primary" onClick={() => setEdit('new')}><Plus size={16} />공지 쓰기</Button>}
       </div>
       {!notices.length && <Empty title="아직 공지가 없습니다" icon={<Megaphone size={22} />} />}
@@ -69,7 +70,8 @@ export function NoticeList({ notices }: { notices: Notice[] }) {
 
 function NoticeModal({ notice: n, onClose, onEdit }: { notice: Notice; onClose(): void; onEdit(): void }) {
   const { me, snap, toast } = useStore();
-  const canWrite = me.isCeo || me.isAdmin;
+  const talkSettings = useTalk().data?.settings;
+  const canWrite = me.isCeo || (me.isAdmin && !!talkSettings?.adminCanNotice);
   const depts = byId(snap?.departments ?? []);
   const people = (snap?.members ?? []).filter((m) => m.active);
   const done = (id: string) => !!(n.requireAck ? n.acks : n.reads)[id];

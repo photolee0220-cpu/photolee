@@ -1,4 +1,4 @@
-import type { Site } from './types';
+import type { SearchDoc, Site } from './types';
 
 /** 소통(공지·채팅방) 데이터. 체험판에서 먼저 보여 주고, 승인 뒤 서버에 붙인다 */
 
@@ -61,6 +61,10 @@ export interface ChatMessage {
   safety: boolean;
   /** 시스템 안내 (회의록 요청, 지시 등록 알림 등) */
   system: boolean;
+  /** 관리자가 가린 메시지 (다시 보이게 할 수 있다) */
+  hidden: { by: string; at: string } | null;
+  /** 이 메시지에 붙인 파일 중 자료실에 들어간 종류 */
+  docCategory: string | null;
 }
 
 /** 방 목록 한 줄: 방 + 마지막 메시지 + 안 읽은 수 + 사람별 마지막으로 읽은 때 */
@@ -88,13 +92,14 @@ export interface Notice {
   acks: Record<string, string>;
 }
 
-export type InquiryStage = 'new' | 'consult' | 'visit' | 'proposal' | 'won' | 'hold' | 'lost';
+export type InquiryStage = 'new' | 'consult' | 'visit' | 'proposal' | 'won' | 'closed' | 'hold' | 'lost';
 export const INQUIRY_STAGES: { id: InquiryStage; label: string; open: boolean }[] = [
   { id: 'new', label: '접수', open: true },
   { id: 'consult', label: '상담', open: true },
   { id: 'visit', label: '현장 답사', open: true },
   { id: 'proposal', label: '견적·제안', open: true },
   { id: 'won', label: '계약', open: false },
+  { id: 'closed', label: '상담 완료', open: false },
   { id: 'hold', label: '보류', open: false },
   { id: 'lost', label: '무산', open: false },
 ];
@@ -124,21 +129,31 @@ export interface Inquiry {
   siteId: string | null;
 }
 
-export interface Minutes {
+/** 현장 자료: 회의록·공사일보·주간/월간 공정표 등 (현장방 [자료] 칸과 자료실) */
+export interface SiteDoc {
   id: string;
   siteId: string;
-  /** 회의한 날 YYYY-MM-DD */
-  meetingDate: string;
+  /** 회의록, 공사일보, 주간공정표 … (관리자가 종류를 더할 수 있다) */
+  category: string;
+  /** 자료의 날짜 (회의한 날, 일보 날짜 등) YYYY-MM-DD */
+  docDate: string;
   title: string;
   note: string;
   fileName: string;
-  fileType: 'pdf' | 'image';
+  fileType: 'pdf' | 'image' | 'file';
   /** 체험판은 data URL 또는 견본 파일 주소 */
   url: string;
   size: number;
+  /** PDF에서 뽑은 글자 (AI 검색용). 사진·스캔본은 실제 버전에서 AI가 읽어 채운다 */
+  text: string;
   uploadedBy: string;
   createdAt: string;
+  /** 채팅에 붙여 올렸으면 그 메시지 */
+  messageId: string | null;
 }
+
+export const DEFAULT_DOC_CATEGORIES = ['회의록', '공사일보', '주간공정표', '월간공정표', '기타'];
+export const MINUTES = '회의록';
 
 /** 대표님께 보이는 '안전 전달 제안' (보고·일정에서 위험 작업을 찾아 문장을 만들어 둔다) */
 export interface SafetyTip {
@@ -157,17 +172,28 @@ export interface SafetyTip {
 export interface TalkSettings {
   /** 알림 쉬는 시간: 이 시간에는 채팅 알림을 보내지 않는다 (공지·@부르기는 예외) */
   quiet: { enabled: boolean; from: string; to: string };
-  /** 보낸 뒤 본인이 지울 수 있는 시간(분) */
+  /** 보낸 뒤 본인이 지울 수 있는 시간(분). 관리자는 언제든 가리거나 지운다 */
   deleteMinutes: number;
+  /** 전체 공지는 대표님이 쓴다. 켜면 관리자도 쓸 수 있다 */
+  adminCanNotice: boolean;
+  /** 자료 종류 */
+  docCategories: string[];
 }
 
-export const DEFAULT_TALK_SETTINGS: TalkSettings = { quiet: { enabled: true, from: '22:00', to: '07:00' }, deleteMinutes: 5 };
+export const DEFAULT_TALK_SETTINGS: TalkSettings = {
+  quiet: { enabled: true, from: '22:00', to: '07:00' }, deleteMinutes: 5, adminCanNotice: false, docCategories: [...DEFAULT_DOC_CATEGORIES],
+};
+
+/** 처음부터 있는 특별한 방 (관리자는 인원만 넣고 뺀다) */
+export const BUILTIN_ROOMS = { inquiry: 'room_inquiry', safety: 'room_safety' } as const;
+export const isBuiltinRoom = (r: ChatRoom) => r.kind === 'inquiry' || r.kind === 'safety';
 
 export interface TalkSnapshot {
   rooms: RoomSummary[];
   notices: Notice[];
   inquiries: Inquiry[];
-  minutes: Minutes[];
+  /** 내가 볼 수 있는 현장 자료 (대표·관리자·임원은 전부, 직원은 들어가 있는 현장방의 것) */
+  docs: SiteDoc[];
   settings: TalkSettings;
 }
 
@@ -177,6 +203,8 @@ export interface SendMessageInput {
   files?: File[];
   replyToId?: string | null;
   inquiryId?: string | null;
+  /** 현장방에서 붙인 파일을 자료실에도 넣을 때 그 종류 */
+  docCategory?: string | null;
 }
 
 export interface NoticeInput {
@@ -194,8 +222,10 @@ export interface TalkApi {
   send(input: SendMessageInput): Promise<ChatMessage>;
   /** 본인 메시지 고치기 (고친 기록은 남는다) */
   editMessage(id: string, text: string): Promise<ChatMessage>;
-  /** 본인 메시지, 보낸 뒤 정해진 시간 안에만 */
+  /** 본인은 보낸 뒤 정해진 시간 안에만, 관리자는 언제든 */
   deleteMessage(id: string): Promise<void>;
+  /** 관리자: 가리기 / 다시 보이기 */
+  hideMessage(id: string, hidden: boolean): Promise<void>;
   markRead(roomId: string): Promise<void>;
   setMuted(roomId: string, muted: boolean): Promise<void>;
   /** 방 공지 고정 (방 인원 누구나, 비우면 내림) */
@@ -218,11 +248,13 @@ export interface TalkApi {
     /** 계약 진행: '영업' 단계 현장으로 넘긴다 */
     toSite(id: string): Promise<Site>;
   };
-  minutes: {
-    upload(input: { siteId: string; meetingDate: string; title: string; note: string; file: File }): Promise<Minutes>;
+  docs: {
+    upload(input: { siteId: string; category: string; docDate: string; title: string; note: string; file: File }): Promise<SiteDoc>;
     remove(id: string): Promise<void>;
     /** 현장방에 회의록 요청 안내를 남기고 방 인원에게 알린다 */
-    request(siteId: string): Promise<void>;
+    requestMinutes(siteId: string): Promise<void>;
+    /** 대표님 AI 검색용: from 이후 자료 중 글자가 있는 것 */
+    corpus(from: string): Promise<SearchDoc[]>;
   };
   safety: {
     /** 그날 보고·앞으로 3일 일정에서 찾은 제안 (대표님만) */

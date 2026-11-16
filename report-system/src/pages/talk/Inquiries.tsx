@@ -11,7 +11,7 @@ import { refreshTalk } from './useTalk';
 const stageLabel = (s: InquiryStage) => INQUIRY_STAGES.find((x) => x.id === s)?.label ?? s;
 const isOpen = (q: Inquiry) => INQUIRY_STAGES.find((x) => x.id === q.stage)?.open ?? false;
 export const staleDays = (q: Inquiry) => Math.floor((Date.now() - Date.parse(q.lastActivityAt)) / 86400000);
-const stageTone = (s: InquiryStage) => (s === 'won' ? 'ok' : s === 'lost' ? 'neutral' : s === 'hold' ? 'warn' : s === 'proposal' ? 'brand' : 'note') as 'ok' | 'neutral' | 'warn' | 'brand' | 'note';
+const stageTone = (s: InquiryStage) => (s === 'won' || s === 'closed' ? 'ok' : s === 'lost' ? 'neutral' : s === 'hold' ? 'warn' : s === 'proposal' ? 'brand' : 'note') as 'ok' | 'neutral' | 'warn' | 'brand' | 'note';
 
 /** 신규 교회건축 문의방: 문의 카드(단계·담당자) + 카드별 대화 */
 export function InquiryBoard({ room, summary, inquiries, onRoom }: { room: ChatRoom; summary: RoomSummary; inquiries: Inquiry[]; onRoom(id: string): void }) {
@@ -29,7 +29,7 @@ export function InquiryBoard({ room, summary, inquiries, onRoom }: { room: ChatR
   const members = new Map((snap?.members ?? []).map((m) => [m.id, m]));
   return (
     <div className="h-full overflow-y-auto px-3 py-3 scrollbar-thin sm:px-5">
-      <div className="mb-3 grid grid-cols-4 gap-2 sm:grid-cols-7">
+      <div className="mb-3 grid grid-cols-4 gap-2 sm:grid-cols-8">
         {INQUIRY_STAGES.map((s) => (
           <button key={s.id} onClick={() => setFilter(filter === s.id ? 'open' : s.id)}
             className={cx('rounded-xl border px-2 py-2 text-center', filter === s.id ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:border-line-strong')}>

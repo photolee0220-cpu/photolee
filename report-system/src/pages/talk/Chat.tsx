@@ -1,6 +1,6 @@
 import {
   Bell, BellOff, Church, ClipboardCheck, Copy, CornerUpLeft, FileText, HardHat, MessageCircle, MoreHorizontal, Paperclip, Pencil, Pin, Plus,
-  Search, Send, Settings2, ShieldAlert, Trash2, Users, X,
+  Search, Send, Settings2, ShieldAlert, Trash2, Users, X, Eye, EyeOff, FolderOpen,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../lib/client';
@@ -12,9 +12,9 @@ import { useStore } from '../../state/store';
 import { ImageViewer } from '../../components/Photos';
 import { Avatar, Button, cx, Empty, IconButton, Input, Modal, Segmented, Spinner } from '../../components/ui';
 import { InquiryBoard } from './Inquiries';
-import { MinutesTab } from './Minutes';
+import { DocsTab } from './Docs';
 import { RoomEditor } from './RoomEditor';
-import { refreshTalk } from './useTalk';
+import { refreshTalk, useTalk } from './useTalk';
 
 /* ───────────── 공통 ───────────── */
 
@@ -149,7 +149,7 @@ export function RoomView({ data, roomId, onBack, onRoom }: { data: TalkSnapshot;
   const { me, snap } = useStore();
   const members = useMemo(() => byId(snap?.members ?? []), [snap]);
   const summary = data.rooms.find((r) => r.room.id === roomId);
-  const [tab, setTab] = useState<'chat' | 'minutes' | 'cards'>('chat');
+  const [tab, setTab] = useState<'chat' | 'docs' | 'cards'>('chat');
   const [showMembers, setShowMembers] = useState(false);
   const [edit, setEdit] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -184,14 +184,14 @@ export function RoomView({ data, roomId, onBack, onRoom }: { data: TalkSnapshot;
       {(room.kind === 'site' || room.kind === 'inquiry') && (
         <div className="border-b border-line bg-surface px-3 py-2">
           <Segmented value={tab} onChange={(v) => setTab(v)} options={room.kind === 'site'
-            ? [{ id: 'chat', label: '대화' }, { id: 'minutes', label: `회의록 ${data.minutes.filter((x) => x.siteId === room.siteId).length}` }]
+            ? [{ id: 'chat', label: '대화' }, { id: 'docs', label: `자료 ${data.docs.filter((x) => x.siteId === room.siteId).length}` }]
             : [{ id: 'cards', label: `문의 카드 ${data.inquiries.filter((x) => !['won', 'lost'].includes(x.stage)).length}` }, { id: 'chat', label: '전체 대화' }]} />
         </div>
       )}
       {tab === 'chat' && <PinnedBar room={room} />}
       <div className="min-h-0 flex-1">
         {tab === 'chat' && <Conversation key={room.id} summary={summary} query={q} onRoom={onRoom} />}
-        {tab === 'minutes' && room.siteId && <MinutesTab room={room} minutes={data.minutes.filter((x) => x.siteId === room.siteId)} />}
+        {tab === 'docs' && room.siteId && <DocsTab room={room} data={data} docs={data.docs.filter((x) => x.siteId === room.siteId)} />}
         {tab === 'cards' && <InquiryBoard room={room} summary={summary} inquiries={data.inquiries} onRoom={onRoom} />}
       </div>
       {showMembers && <MembersModal room={room} onClose={() => setShowMembers(false)} onDm={(id) => { setShowMembers(false); void api.talk.openDm(id).then(async (r) => { await refresh(); onRoom(r.id); }); }} onManage={me.isAdmin ? () => { setShowMembers(false); setEdit(true); } : undefined} />}
@@ -267,6 +267,8 @@ export function Conversation({ summary, query = '', inquiryId, onRoom }: { summa
   const [menu, setMenu] = useState<{ msg: ChatMessage; x: number; y: number; touch: boolean } | null>(null);
   const [directive, setDirective] = useState<ChatMessage | null>(null);
   const [viewer, setViewer] = useState<{ urls: string[]; i: number } | null>(null);
+  const { data: talk } = useTalk();
+  const deleteMs = (talk?.settings.deleteMinutes ?? 5) * 60000;
   const bottom = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const first = useRef(true);
@@ -324,7 +326,9 @@ export function Conversation({ summary, query = '', inquiryId, onRoom }: { summa
           !!menu.msg.text && { icon: <Copy size={16} />, label: '복사', run: () => { void navigator.clipboard?.writeText(menu.msg.text); toast('복사했습니다.'); } },
           me.isCeo && !menu.msg.system && !menu.msg.deleted && { icon: <ClipboardCheck size={16} />, label: menu.msg.directive ? '지시로 다시 등록' : '지시로 등록', run: () => setDirective(menu.msg) },
           menu.msg.authorId === me.id && !menu.msg.system && !menu.msg.deleted && { icon: <Pencil size={16} />, label: '고치기', run: () => { setReply(null); setEditing(menu.msg); } },
-          menu.msg.authorId === me.id && !menu.msg.deleted && { icon: <Trash2 size={16} />, label: '지우기', danger: true, run: () => void act(() => api.talk.deleteMessage(menu.msg.id)) },
+          menu.msg.authorId === me.id && !me.isAdmin && !menu.msg.deleted && Date.now() - Date.parse(menu.msg.createdAt) < deleteMs && { icon: <Trash2 size={16} />, label: '지우기', danger: true, run: () => void act(() => api.talk.deleteMessage(menu.msg.id)) },
+          me.isAdmin && !menu.msg.deleted && !menu.msg.system && { icon: menu.msg.hidden ? <Eye size={16} /> : <EyeOff size={16} />, label: menu.msg.hidden ? '다시 보이기 (관리자)' : '가리기 (관리자)', run: () => void act(() => api.talk.hideMessage(menu.msg.id, !menu.msg.hidden)) },
+          me.isAdmin && !menu.msg.deleted && { icon: <Trash2 size={16} />, label: '지우기 (관리자)', danger: true, run: () => { if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) void act(() => api.talk.deleteMessage(menu.msg.id)); } },
           menu.msg.authorId !== me.id && room.kind !== 'dm' && !menu.msg.system && { icon: <MessageCircle size={16} />, label: `${members.get(menu.msg.authorId)?.name ?? ''}님과 1:1`, run: () => void api.talk.openDm(menu.msg.authorId).then(async (r) => { await refresh(); onRoom(r.id); }) },
         ].filter(Boolean) as MenuItem[]} />
       )}
@@ -388,9 +392,11 @@ function MessageRow({ m, mine, grouped, author, members, quoted, unread, highlig
   };
   const images = m.attachments.filter((a) => a.kind === 'image');
   const files = m.attachments.filter((a) => a.kind === 'file');
+  // 가린 메시지: 관리자는 흐리게 내용을 보고, 다른 사람은 안내만 본다
+  const veiled = !!m.hidden && !m.text && !m.attachments.length;
   const bubble = cx('relative max-w-full rounded-2xl px-3.5 py-2 text-[14px] leading-[1.6] shadow-sm',
     m.safety ? 'border-2 border-danger/50 bg-danger/5 text-ink' : mine ? 'bg-brand text-on-brand' : 'border border-line bg-surface text-ink',
-    m.deleted && '!bg-sunken !text-ink-3 italic');
+    (m.deleted || veiled) && '!border-line !bg-sunken !text-ink-3 italic', m.hidden && !veiled && 'opacity-60 ring-2 ring-warn/50');
   return (
     <div className={cx('group flex gap-2', mine ? 'flex-row-reverse' : 'flex-row', grouped ? 'mt-1' : 'mt-3')}>
       {!mine && <div className="w-9 shrink-0">{!grouped && author && <Avatar id={author.id} name={author.name} size={36} />}</div>}
@@ -404,7 +410,8 @@ function MessageRow({ m, mine, grouped, author, members, quoted, unread, highlig
                 <b>{members.get(quoted.authorId)?.name}</b> <span className="opacity-80">{quoted.deleted ? '삭제된 메시지' : (quoted.text || '사진·파일').slice(0, 60)}</span>
               </div>
             )}
-            {m.deleted ? '삭제된 메시지입니다' : (
+            {m.hidden && !veiled && <p className="mb-1 flex items-center gap-1 text-[11.5px] font-bold not-italic"><EyeOff size={12} />가린 메시지 (관리자만 보임)</p>}
+            {m.deleted ? '삭제된 메시지입니다' : veiled ? '관리자가 가린 메시지입니다' : (
               <>
                 {images.length > 0 && (
                   <div className={cx('mb-1 grid gap-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
@@ -423,6 +430,7 @@ function MessageRow({ m, mine, grouped, author, members, quoted, unread, highlig
                 {m.text && <p className="whitespace-pre-wrap break-words"><MessageText text={m.text} members={members} highlight={highlight} onDark={mine && !m.safety} /></p>}
               </>
             )}
+            {m.docCategory && !m.deleted && !veiled && <p className={cx('mt-1 flex items-center gap-1 text-[11.5px] font-bold', mine && !m.safety ? 'text-on-brand/90' : 'text-brand-ink')}><FolderOpen size={12} />자료실: {m.docCategory}</p>}
             {m.directive && <p className={cx('mt-1 flex items-center gap-1 text-[11.5px] font-bold', mine && !m.safety ? 'text-on-brand/90' : 'text-note')}><ClipboardCheck size={12} />지시 등록됨</p>}
           </div>
           <div className={cx('flex shrink-0 flex-col pb-0.5 text-[10.5px] leading-tight text-ink-3', mine ? 'items-end' : 'items-start')}>
@@ -443,12 +451,12 @@ type MenuItem = { icon: ReactNode; label: string; run(): void; danger?: boolean 
 function MessageMenu({ at, items, onClose: close }: { at: { x: number; y: number; touch: boolean }; items: MenuItem[]; onClose(): void }) {
   // 길게 누른 손가락을 뗄 때 생기는 클릭으로 바로 닫히지 않게 잠깐 무시한다
   const opened = useRef(Date.now());
-  const onClose = useCallback(() => { if (Date.now() - opened.current > 450) close(); }, [close]);
+  const onClose = useCallback(() => { if (!at.touch || Date.now() - opened.current > 450) close(); }, [close, at.touch]);
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
+  }, [close]);
   const list = (
     <ul className="p-1.5">
       {items.map((it) => (
@@ -484,8 +492,17 @@ function Composer({ room, reply, editing, inquiryId, members, onCancel, onSent }
   const { me, toast } = useStore();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [docCat, setDocCat] = useState('');
   const [busy, setBusy] = useState(false);
   const [caret, setCaret] = useState(0);
+  const { data: talk } = useTalk();
+  const cats = talk?.settings.docCategories ?? [];
+  // 현장방에서 PDF·문서를 붙이면 자료실 저장을 기본으로 제안한다 (사진은 고를 때만)
+  useEffect(() => {
+    if (!room.siteId || !files.length) { setDocCat(''); return; }
+    if (!docCat && files.some((f) => !f.type.startsWith('image/'))) setDocCat(cats.includes('기타') ? '기타' : cats[0] ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files.length, room.siteId]);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (editing) { setText(editing.text); ta.current?.focus(); } }, [editing]);
@@ -510,8 +527,8 @@ function Composer({ room, reply, editing, inquiryId, members, onCancel, onSent }
     setBusy(true);
     try {
       if (editing) await api.talk.editMessage(editing.id, text);
-      else await api.talk.send({ roomId: room.id, text, files, replyToId: reply?.id ?? null, inquiryId });
-      setText(''); setFiles([]); onSent();
+      else await api.talk.send({ roomId: room.id, text, files, replyToId: reply?.id ?? null, inquiryId, docCategory: room.siteId && docCat ? docCat : null });
+      setText(''); setFiles([]); setDocCat(''); onSent();
     } catch (e) { toast(e instanceof Error ? e.message : '보내지 못했습니다.', 'error'); } finally { setBusy(false); }
   };
   const desktop = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
@@ -541,6 +558,15 @@ function Composer({ room, reply, editing, inquiryId, members, onCancel, onSent }
               <button onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label="빼기"><X size={13} /></button>
             </span>
           ))}
+          {room.siteId && (
+            <label className="ml-auto flex items-center gap-1.5 text-[12px] font-semibold text-ink-2">
+              <FolderOpen size={14} className="text-brand" />자료실에도 저장
+              <select value={docCat} onChange={(e) => setDocCat(e.target.value)} className="h-7 rounded-md border border-line bg-surface px-1.5 text-[12px]">
+                <option value="">저장 안 함</option>
+                {cats.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          )}
         </div>
       )}
       <div className="flex items-end gap-2">

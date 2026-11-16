@@ -52,3 +52,24 @@ export async function pdfThumb(url: string, width = 240): Promise<string> {
   await renderPdfPages(url, width, (_, __, img) => { out = img; }, 1);
   return out;
 }
+
+/** PDF 안의 글자를 뽑는다 (AI 검색용). 스캔본처럼 글자가 없으면 빈 문자열 */
+export async function pdfText(url: string, maxPages = 40): Promise<string> {
+  const m = await pdfjs();
+  const doc = await m.getDocument({ data: await bytesOf(url), cMapUrl: `${import.meta.env.BASE_URL}pdfjs/cmaps/`, cMapPacked: true }).promise;
+  const out: string[] = [];
+  for (let i = 1; i <= Math.min(doc.numPages, maxPages); i++) {
+    const page = await doc.getPage(i);
+    const tc = await page.getTextContent();
+    let line = '';
+    for (const it of tc.items) {
+      if (!('str' in it)) continue;
+      line += it.str;
+      if (it.hasEOL) { out.push(line.trim()); line = ''; } else line += ' ';
+    }
+    if (line.trim()) out.push(line.trim());
+    page.cleanup();
+  }
+  void doc.destroy();
+  return out.filter(Boolean).join('\n').replace(/[ \t]+/g, ' ').trim();
+}

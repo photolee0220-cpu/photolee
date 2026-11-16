@@ -613,6 +613,8 @@ export const demoApi: Api = {
         ...state.daily.filter((r) => r.date >= from && r.content.trim() && !r.internal).map((r) => ({
           id: r.id, kind: 'daily' as const, date: r.date, siteId: r.siteId, departmentId: r.departmentId, memberId: r.authorId, content: r.content,
         })),
+        // 현장 자료(회의록·공사일보·공정표)에서 뽑은 글자
+        ...(await demoApi.talk.docs.corpus(from)),
       ]);
     },
     async answer(prompt) {

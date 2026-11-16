@@ -24,6 +24,7 @@ export function docLabel(d: SearchDoc, l: Lookup): string {
   const dept = d.departmentId ? l.departments.get(d.departmentId)?.name : '';
   const who = m ? `${m.name} ${m.title}`.trim() : '';
   if (d.kind === 'daily') return `일일 ${md(d.date)} · ${[who, dept].filter(Boolean).join(' · ')}${site ? ` · ${site}` : ''}`;
+  if (d.kind === 'doc') return `${d.docCategory ?? '자료'} ${md(d.date)} · ${site || '현장'}${d.docTitle ? ` · ${d.docTitle}` : ''}`;
   if (d.kind === 'directive') return `대표 지시 · ${md(d.date)} 보고 · ${site || who} · 처리 ${d.status === 'done' ? '완료' : d.status === 'doing' ? '진행 중' : '대기'}`;
   return `주간 ${md(d.date)} 보고 · ${site ? `${site} · ${dept}` : `${who}${dept ? ` (${dept})` : ''}`}`;
 }
