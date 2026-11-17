@@ -1,5 +1,5 @@
-import { Building2, CalendarOff, Check, ChevronLeft, ChevronRight, CornerDownRight, HardHat, ImagePlus, Lock, MapPin, MessageSquareText, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Building2, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CornerDownRight, HardHat, ImagePlus, Lock, MapPin, MessageSquareText, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { PageHeader } from '../components/AppShell';
 import { EntryEditor, TextBlock } from '../components/editors';
 import { ImageViewer } from '../components/Photos';
@@ -547,8 +547,65 @@ function StatusBadge({ date, member, data }: { date: string; member: Member; dat
   return <span className="flex gap-1">{half}<Badge tone="warn">미작성</Badge></span>;
 }
 
+/** 긴 보고는 정해진 높이까지만 보여 주고 [전체 보기]로 연다 (대시보드 칸 크기를 맞추려고) */
+function Clamp({ max, children, onMore, fade = 'from-surface' }: { max: number; children: ReactNode; onMore?: () => void; fade?: string }) {
+  const inner = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const check = () => setOver(el.offsetHeight > max + 8);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [max]);
+  const more = () => (onMore ? onMore() : setOpen(true));
+  return (
+    <div>
+      <div className={cx('relative', !open && over && 'cursor-pointer')} style={!open ? { maxHeight: max, overflow: 'hidden' } : undefined}
+        onClick={!open && over ? more : undefined}>
+        <div ref={inner}>{children}</div>
+        {!open && over && <div className={cx('pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t to-transparent', fade)} />}
+      </div>
+      {over && (
+        <button type="button" onClick={() => (open ? setOpen(false) : more())}
+          className="mt-1.5 flex items-center gap-1 text-[12.5px] font-semibold text-brand-ink hover:underline">
+          {open ? <><ChevronUp size={14} />접기</> : <><ChevronDown size={14} />전체 보기</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 한 사람의 그날 일일보고 (공통 칸 + 현장 칸 + 사진) */
+function PersonDailyBody({ data, member, siteName, rank }: { data: DailySnapshot; member: Member; siteName(id: string): string; rank(id: string | null): number }) {
+  const rows = data.reports.filter((r) => r.authorId === member.id);
+  const general = rows.find((r) => !r.siteId);
+  const siteRows = rows.filter((r) => r.siteId).sort((x, y) => rank(x.siteId) - rank(y.siteId));
+  return (
+    <div className="space-y-3">
+      {general && <TextBlock text={general.content} className="!text-[13.5px]" />}
+      <PhotoRow data={data} authorId={member.id} siteId={null} />
+      {siteRows.map((r) => (
+        <div key={r.id} className="rounded-lg border border-line bg-sunken/50 px-3 py-2">
+          <p className="mb-1 flex items-center gap-1 text-[12.5px] font-bold text-brand-ink"><MapPin size={12} />{siteName(r.siteId!)}</p>
+          <TextBlock text={r.content} className="!text-[13.5px]" />
+          <PhotoRow data={data} authorId={member.id} siteId={r.siteId} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 대시보드 일일보고 칸에 보이는 높이 (넘으면 [전체 보기]) */
+const CLAMP_HQ = 220;
+const CLAMP_SITE = 150;
+
 function HqBoard({ date, data, people, reload }: { date: string; data: DailySnapshot; people: Member[]; reload(): Promise<void> }) {
   const { snap } = useStore();
+  const [openId, setOpenId] = useState<string | null>(null);
   if (!snap) return null;
   if (!people.length) return <Empty title="볼 수 있는 본사 인원이 없습니다" />;
   const sites = byId(snap.sites);
@@ -557,16 +614,17 @@ function HqBoard({ date, data, people, reload }: { date: string; data: DailySnap
   // 부서 순서대로 한 격자에. 작성한 사람이 앞에
   const order = new Map(activeDepartments(snap).map((d, i) => [d.id, i]));
   const list = [...people].sort((a, b) => Number(wrote(data, b.id)) - Number(wrote(data, a.id)) || (order.get(a.departmentId!) ?? 0) - (order.get(b.departmentId!) ?? 0));
+  const siteName = (id: string) => sites.get(id)?.name ?? '현장';
+  const full = list.find((m) => m.id === openId);
+  // 같은 줄의 칸은 높이를 맞추고(격자 기본), 긴 내용은 잘라서 보여 준다
   return (
-    <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {list.map((m) => {
         const rows = data.reports.filter((r) => r.authorId === m.id);
-        const general = rows.find((r) => !r.siteId);
-        const siteRows = rows.filter((r) => r.siteId).sort((x, y) => rank(x.siteId) - rank(y.siteId));
         const latest = rows.map((r) => r.updatedAt).sort().pop();
         const written = wrote(data, m.id);
         return (
-          <Card key={m.id} className="p-4">
+          <Card key={m.id} className="flex flex-col p-4">
             <div className="flex items-center gap-2.5">
               <Avatar id={m.id} name={m.name} size={30} muted={!written} />
               <div className="min-w-0 flex-1 leading-tight">
@@ -576,23 +634,25 @@ function HqBoard({ date, data, people, reload }: { date: string; data: DailySnap
               <StatusBadge date={date} member={m} data={data} />
             </div>
             {written ? (
-              <div className="mt-3 space-y-3">
-                {general && <TextBlock text={general.content} className="!text-[13.5px]" />}
-                <PhotoRow data={data} authorId={m.id} siteId={null} />
-                {siteRows.map((r) => (
-                  <div key={r.id} className="rounded-lg border border-line bg-sunken/50 px-3 py-2">
-                    <p className="mb-1 flex items-center gap-1 text-[12.5px] font-bold text-brand-ink"><MapPin size={12} />{sites.get(r.siteId!)?.name ?? '현장'}</p>
-                    <TextBlock text={r.content} className="!text-[13.5px]" />
-                    <PhotoRow data={data} authorId={m.id} siteId={r.siteId} />
-                  </div>
-                ))}
-                {latest && <p className="text-[11.5px] text-ink-3">{relativeTime(latest)} 저장</p>}
+              <div className="mt-3 flex-1">
+                <Clamp max={CLAMP_HQ} onMore={() => setOpenId(m.id)}>
+                  <PersonDailyBody data={data} member={m} siteName={siteName} rank={rank} />
+                </Clamp>
+                {latest && <p className="mt-2 text-[11.5px] text-ink-3">{relativeTime(latest)} 저장</p>}
               </div>
-            ) : <p className="mt-3 text-[13px] text-ink-3">아직 작성하지 않았습니다</p>}
+            ) : <p className="mt-3 flex-1 text-[13px] text-ink-3">아직 작성하지 않았습니다</p>}
             <DailyFeedback date={date} member={m} comments={data.comments.filter((c) => c.memberId === m.id)} onChanged={reload} compact written={written} />
           </Card>
         );
       })}
+      {full && (
+        <Modal open onClose={() => setOpenId(null)} width={680}
+          title={<span className="flex items-center gap-2"><Avatar id={full.id} name={full.name} size={28} />{full.name} {full.title}<span className="text-[13px] font-medium text-ink-3">· {dayLabel(date)} 일일보고</span></span>}
+          footer={<Button tone="primary" onClick={() => setOpenId(null)}>닫기</Button>}>
+          <PersonDailyBody data={data} member={full} siteName={siteName} rank={rank} />
+          <DailyFeedback date={date} member={full} comments={data.comments.filter((c) => c.memberId === full.id)} onChanged={reload} compact written={wrote(data, full.id)} />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -646,7 +706,7 @@ function SiteBoard({ date, data, people, reload }: { date: string; data: DailySn
                             <p className="min-w-0 flex-1 truncate text-[14px] font-bold">{m.name} <span className="font-medium text-ink-3">{m.title}</span></p>
                             <StatusBadge date={date} member={m} data={data} />
                           </div>
-                          {row ? <TextBlock text={row.content} className="mt-2 !text-[13.5px]" /> : null}
+                          {row ? <div className="mt-2"><Clamp max={CLAMP_SITE}><TextBlock text={row.content} className="!text-[13.5px]" /></Clamp></div> : null}
                           <PhotoRow data={data} authorId={id} siteId={site.id} />
                           <DailyFeedback date={date} member={m} comments={data.comments.filter((c) => c.memberId === id)} onChanged={reload} compact written={wrote(data, id)} />
                         </div>
@@ -667,7 +727,7 @@ function SiteBoard({ date, data, people, reload }: { date: string; data: DailySn
                             <b>{m?.name}</b><span className="text-ink-3">{m?.title} · {depts.get(r.departmentId)?.name}</span>
                             <span className="ml-auto text-[11.5px] text-ink-3">{relativeTime(r.updatedAt)}</span>
                           </p>
-                          <TextBlock text={r.content} className="mt-1.5 !text-[13.5px]" />
+                          <div className="mt-1.5"><Clamp max={CLAMP_SITE} fade="from-sunken"><TextBlock text={r.content} className="!text-[13.5px]" /></Clamp></div>
                           <PhotoRow data={data} authorId={r.authorId} siteId={site.id} />
                         </div>
                       );
