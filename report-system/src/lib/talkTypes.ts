@@ -76,6 +76,8 @@ export interface RoomSummary {
   unread: number;
   /** 사람 id → 마지막으로 읽은 때 (메시지 옆 '안 읽은 사람 수'에 쓴다) */
   reads: Record<string, string>;
+  /** 내가 목록 맨 위에 고정한 방 */
+  starred?: boolean;
 }
 
 export interface Notice {
@@ -88,6 +90,8 @@ export interface Notice {
   /** 직원이 [확인]을 눌러야 하는 공지 */
   requireAck: boolean;
   pinned: boolean;
+  /** 긴급 공지: 알림 쉬는 시간·방 알림 끔과 상관없이 울리고, 확인 전까지 화면을 가린다 */
+  urgent?: boolean;
   /** 사람 id → 읽은 때 */
   reads: Record<string, string>;
   /** 사람 id → [확인] 누른 때 */
@@ -215,6 +219,7 @@ export interface NoticeInput {
   body: string;
   requireAck: boolean;
   pinned: boolean;
+  urgent?: boolean;
 }
 
 export interface TalkApi {
@@ -230,6 +235,14 @@ export interface TalkApi {
   deleteMessage(id: string): Promise<void>;
   /** 관리자: 가리기 / 다시 보이기 */
   hideMessage(id: string, hidden: boolean): Promise<void>;
+  /** 내가 들어 있는 모든 방의 대화에서 찾기 (최신순) */
+  searchMessages(q: string): Promise<ChatMessage[]>;
+  /** 이 메시지를 아직 안 읽은 사람에게 다시 알림 (보낸 사람·대표·관리자). 알린 사람 수 */
+  remindUnread(messageId: string): Promise<number>;
+  /** 방에 안내 한 줄 남기기 (일정 등록 알림 등) */
+  note(roomId: string, text: string, replyToId?: string | null): Promise<void>;
+  /** 방을 내 목록 맨 위에 고정 */
+  setStarred(roomId: string, starred: boolean): Promise<void>;
   markRead(roomId: string): Promise<void>;
   setMuted(roomId: string, muted: boolean): Promise<void>;
   /** 방 공지 고정 (방 인원 누구나, 비우면 내림) */

@@ -177,7 +177,7 @@ export function NotificationGate() {
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 animate-fade-in">
       <div className="w-full max-w-[440px] rounded-2xl border border-line bg-surface p-6 shadow-pop">
         <p className="flex items-center gap-2 text-[18px] font-extrabold"><BellRing size={22} className="text-brand" />알림을 켜 주세요</p>
-        <p className="mt-2 text-[14px] leading-[1.7] text-ink-2">업무보고 시스템은 마감과 피드백을 휴대폰 알림으로 알려 드립니다. 모든 직원이 켜야 하는 설정입니다.</p>
+        <p className="mt-2 text-[14px] leading-[1.7] text-ink-2">업무보고 시스템은 마감과 피드백을 휴대폰 알림으로 알려 드립니다. 모든 직원이 켜야 하는 설정입니다. <a href={`${import.meta.env.BASE_URL}install/`} target="_blank" rel="noopener" className="font-semibold text-brand-ink underline">그림으로 보는 설치 방법</a></p>
         <div className="mt-3"><AlertList /></div>
         <div className="mt-4 space-y-3 text-[14px] leading-[1.7]">
           {state === 'off' && (

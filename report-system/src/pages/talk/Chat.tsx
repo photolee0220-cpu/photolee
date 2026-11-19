@@ -1,6 +1,6 @@
 import {
   Bell, BellOff, Church, ClipboardCheck, Copy, CornerUpLeft, FileText, HardHat, MessageCircle, MoreHorizontal, Paperclip, Pencil, Pin, Plus,
-  Search, Send, Settings2, ShieldAlert, Trash2, Users, X, Eye, EyeOff, FolderOpen,
+  Search, Send, Settings2, ShieldAlert, Trash2, Users, X, Eye, EyeOff, FolderOpen, Star, CalendarPlus, BellRing,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../lib/client';
@@ -14,7 +14,8 @@ import { Avatar, Button, cx, Empty, IconButton, Input, Modal, Segmented, Spinner
 import { InquiryBoard } from './Inquiries';
 import { DocsTab } from './Docs';
 import { RoomEditor } from './RoomEditor';
-import { refreshTalk, useTalk } from './useTalk';
+import { refreshTalk, talkExtras, useTalk } from './useTalk';
+import { AlbumTab, EventFromChat, GlobalSearchResults } from './Extras';
 
 /* ───────────── 공통 ───────────── */
 
@@ -54,7 +55,7 @@ function preview(m: ChatMessage | null, members: Map<string, Member>) {
 
 type RoomFilter = 'all' | 'site' | 'group' | 'dm';
 
-export function RoomList({ data, activeId, onOpen }: { data: TalkSnapshot; activeId: string | null; onOpen(id: string): void }) {
+export function RoomList({ data, activeId, onOpen }: { data: TalkSnapshot; activeId: string | null; onOpen(id: string, query?: string): void }) {
   const { me, snap } = useStore();
   const members = useMemo(() => byId(snap?.members ?? []), [snap]);
   const [q, setQ] = useState('');
@@ -65,14 +66,14 @@ export function RoomList({ data, activeId, onOpen }: { data: TalkSnapshot; activ
     if (filter === 'dm' && r.room.kind !== 'dm') return false;
     if (filter === 'group' && (r.room.kind === 'site' || r.room.kind === 'dm')) return false;
     return !q.trim() || roomTitle(r.room, members, me.id).includes(q.trim());
-  });
+  }).sort((a, b) => Number(!!b.starred) - Number(!!a.starred));
   const unreadOf = (k: RoomFilter) => data.rooms.filter((r) => (k === 'site' ? r.room.kind === 'site' : k === 'dm' ? r.room.kind === 'dm' : r.room.kind !== 'site' && r.room.kind !== 'dm')).reduce((n, r) => n + r.unread, 0);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 p-3">
         <div className="relative min-w-0 flex-1">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="방 이름 검색" className="!h-9 pl-9" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={talkExtras() ? '방 이름·대화 내용 검색' : '방 이름 검색'} className="!h-9 pl-9" />
         </div>
         <Button size="sm" onClick={() => setDm(true)} title="1:1 대화 시작"><Plus size={15} />1:1</Button>
       </div>
@@ -85,7 +86,8 @@ export function RoomList({ data, activeId, onOpen }: { data: TalkSnapshot; activ
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 scrollbar-thin">
         {list.map((r) => <RoomRow key={r.room.id} r={r} active={r.room.id === activeId} members={members} meId={me.id} onOpen={() => onOpen(r.room.id)} />)}
-        {!list.length && <li className="px-4 py-10 text-center text-[13px] text-ink-3">{data.rooms.length ? '맞는 방이 없습니다' : '아직 들어가 있는 방이 없습니다. 관리자가 방에 넣어 주면 여기에 보입니다.'}</li>}
+        {!list.length && <li className="px-4 py-10 text-center text-[13px] text-ink-3">{data.rooms.length ? '이름이 맞는 방이 없습니다' : '아직 들어가 있는 방이 없습니다. 관리자가 방에 넣어 주면 여기에 보입니다.'}</li>}
+        {talkExtras() && <GlobalSearchResults q={q} data={data} onOpen={onOpen} />}
       </ul>
       {dm && <NewDmModal onClose={() => setDm(false)} onOpened={(id) => { setDm(false); onOpen(id); }} />}
     </div>
@@ -104,6 +106,7 @@ function RoomRow({ r, active, members, meId, onOpen }: { r: RoomSummary; active:
             <span className="truncate text-[14px] font-bold">{roomTitle(r.room, members, meId)}</span>
             {r.room.kind !== 'dm' && <span className="shrink-0 text-[12px] text-ink-3">{r.room.memberIds.length}</span>}
             {muted && <BellOff size={12} className="shrink-0 text-ink-3" />}
+            {r.starred && <Star size={12} className="shrink-0 fill-warn text-warn" />}
             <span className="ml-auto shrink-0 text-[11.5px] text-ink-3">{r.last ? shortWhen(r.last.createdAt) : ''}</span>
           </span>
           <span className="mt-0.5 flex items-center gap-2">
@@ -145,17 +148,18 @@ function NewDmModal({ onClose, onOpened }: { onClose(): void; onOpened(id: strin
 
 /* ───────────── 방 화면 ───────────── */
 
-export function RoomView({ data, roomId, onBack, onRoom }: { data: TalkSnapshot; roomId: string; onBack?: () => void; onRoom(id: string): void }) {
+export function RoomView({ data, roomId, onBack, onRoom, initialQuery }: { data: TalkSnapshot; roomId: string; onBack?: () => void; onRoom(id: string): void; initialQuery?: string }) {
   const { me, snap } = useStore();
   const members = useMemo(() => byId(snap?.members ?? []), [snap]);
   const summary = data.rooms.find((r) => r.room.id === roomId);
-  const [tab, setTab] = useState<'chat' | 'docs' | 'cards'>('chat');
+  const [tab, setTab] = useState<'chat' | 'docs' | 'cards' | 'album'>('chat');
   const [showMembers, setShowMembers] = useState(false);
   const [edit, setEdit] = useState(false);
   const [searching, setSearching] = useState(false);
   const [q, setQ] = useState('');
   const { toast } = useStore();
-  useEffect(() => { setTab(summary?.room.kind === 'inquiry' ? 'cards' : 'chat'); setSearching(false); setQ(''); }, [roomId, summary?.room.kind]);
+  // 전체 검색에서 들어오면 그 말로 방 안을 찾은 채로 연다
+  useEffect(() => { setTab(summary?.room.kind === 'inquiry' && !initialQuery ? 'cards' : 'chat'); setSearching(!!initialQuery); setQ(initialQuery ?? ''); }, [roomId, summary?.room.kind, initialQuery]);
   if (!summary) return <Empty title="방을 찾을 수 없습니다" />;
   const room = summary.room;
   const muted = room.mutedBy.includes(me.id);
@@ -170,6 +174,11 @@ export function RoomView({ data, roomId, onBack, onRoom }: { data: TalkSnapshot;
           <p className="truncate text-[15px] font-bold leading-tight">{roomTitle(room, members, me.id)}</p>
           <p className="truncate text-[12px] text-ink-3">{room.kind === 'dm' ? '두 사람만 볼 수 있는 대화' : `${room.memberIds.length}명 · 인원 보기`}</p>
         </button>
+        {talkExtras() && (
+          <IconButton label={summary.starred ? '고정 풀기' : '목록 맨 위에 고정'} onClick={() => void api.talk.setStarred(room.id, !summary.starred).then(refresh).catch((e) => toast(e.message, 'error'))}>
+            <Star size={17} className={summary.starred ? 'fill-warn text-warn' : ''} />
+          </IconButton>
+        )}
         <IconButton label="대화 검색" onClick={() => { setSearching((v) => !v); setQ(''); }}><Search size={17} /></IconButton>
         <IconButton label={muted ? '알림 켜기' : '알림 끄기'} onClick={() => void api.talk.setMuted(room.id, !muted).then(refresh).catch((e) => toast(e.message, 'error'))}>
           {muted ? <BellOff size={17} /> : <Bell size={17} />}
@@ -181,17 +190,21 @@ export function RoomView({ data, roomId, onBack, onRoom }: { data: TalkSnapshot;
           <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="이 방 대화에서 찾기" className="!h-9" />
         </div>
       )}
-      {(room.kind === 'site' || room.kind === 'inquiry') && (
+      {(room.kind === 'site' || room.kind === 'inquiry' || talkExtras()) && (
         <div className="border-b border-line bg-surface px-3 py-2">
-          <Segmented value={tab} onChange={(v) => setTab(v)} options={room.kind === 'site'
-            ? [{ id: 'chat', label: '대화' }, { id: 'docs', label: `자료 ${data.docs.filter((x) => x.siteId === room.siteId).length}` }]
-            : [{ id: 'cards', label: `문의 카드 ${data.inquiries.filter((x) => !['won', 'lost'].includes(x.stage)).length}` }, { id: 'chat', label: '전체 대화' }]} />
+          <Segmented value={tab} onChange={(v) => setTab(v)} options={[
+            ...(room.kind === 'inquiry' ? [{ id: 'cards' as const, label: `문의 카드 ${data.inquiries.filter((x) => !['won', 'closed', 'lost'].includes(x.stage)).length}` }] : []),
+            { id: 'chat' as const, label: room.kind === 'inquiry' ? '전체 대화' : '대화' },
+            ...(room.kind === 'site' ? [{ id: 'docs' as const, label: `자료 ${data.docs.filter((x) => x.siteId === room.siteId).length}` }] : []),
+            ...(talkExtras() ? [{ id: 'album' as const, label: '사진' }] : []),
+          ]} />
         </div>
       )}
       {tab === 'chat' && <PinnedBar room={room} />}
       <div className="min-h-0 flex-1">
         {tab === 'chat' && <Conversation key={room.id} summary={summary} query={q} onRoom={onRoom} />}
         {tab === 'docs' && room.siteId && <DocsTab room={room} data={data} docs={data.docs.filter((x) => x.siteId === room.siteId)} />}
+        {tab === 'album' && <AlbumTab room={room} />}
         {tab === 'cards' && <InquiryBoard room={room} summary={summary} inquiries={data.inquiries} onRoom={onRoom} />}
       </div>
       {showMembers && <MembersModal room={room} onClose={() => setShowMembers(false)} onDm={(id) => { setShowMembers(false); void api.talk.openDm(id).then(async (r) => { await refresh(); onRoom(r.id); }); }} onManage={me.isAdmin ? () => { setShowMembers(false); setEdit(true); } : undefined} />}
@@ -266,6 +279,7 @@ export function Conversation({ summary, query = '', inquiryId, onRoom }: { summa
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [menu, setMenu] = useState<{ msg: ChatMessage; x: number; y: number; touch: boolean } | null>(null);
   const [directive, setDirective] = useState<ChatMessage | null>(null);
+  const [eventOf, setEventOf] = useState<ChatMessage | null>(null);
   const [viewer, setViewer] = useState<{ urls: string[]; i: number } | null>(null);
   const { data: talk } = useTalk();
   const deleteMs = (talk?.settings.deleteMinutes ?? 5) * 60000;
@@ -329,9 +343,15 @@ export function Conversation({ summary, query = '', inquiryId, onRoom }: { summa
           menu.msg.authorId === me.id && !me.isAdmin && !menu.msg.deleted && Date.now() - Date.parse(menu.msg.createdAt) < deleteMs && { icon: <Trash2 size={16} />, label: '지우기', danger: true, run: () => void act(() => api.talk.deleteMessage(menu.msg.id)) },
           me.isAdmin && !menu.msg.deleted && !menu.msg.system && { icon: menu.msg.hidden ? <Eye size={16} /> : <EyeOff size={16} />, label: menu.msg.hidden ? '다시 보이기 (관리자)' : '가리기 (관리자)', run: () => void act(() => api.talk.hideMessage(menu.msg.id, !menu.msg.hidden)) },
           me.isAdmin && !menu.msg.deleted && { icon: <Trash2 size={16} />, label: '지우기 (관리자)', danger: true, run: () => { if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) void act(() => api.talk.deleteMessage(menu.msg.id)); } },
+          talkExtras() && !menu.msg.system && !menu.msg.deleted && !!menu.msg.text && { icon: <CalendarPlus size={16} />, label: '일정으로 등록', run: () => setEventOf(menu.msg) },
+          talkExtras() && !menu.msg.system && !menu.msg.deleted && (menu.msg.authorId === me.id || me.isCeo || me.isAdmin) && unreadFor(menu.msg) > 0 && room.kind !== 'dm' && {
+            icon: <BellRing size={16} />, label: `안 읽은 ${unreadFor(menu.msg)}명에게 다시 알림`,
+            run: () => void api.talk.remindUnread(menu.msg.id).then((n) => toast(`${n}명에게 다시 알림을 보냈습니다.`)).catch((e) => toast(e.message, 'error')),
+          },
           menu.msg.authorId !== me.id && room.kind !== 'dm' && !menu.msg.system && { icon: <MessageCircle size={16} />, label: `${members.get(menu.msg.authorId)?.name ?? ''}님과 1:1`, run: () => void api.talk.openDm(menu.msg.authorId).then(async (r) => { await refresh(); onRoom(r.id); }) },
         ].filter(Boolean) as MenuItem[]} />
       )}
+      {eventOf && <EventFromChat msg={eventOf} room={room} onClose={() => { setEventOf(null); void load(); }} />}
       {directive && <DirectiveModal msg={directive} room={room} onClose={() => setDirective(null)} onDone={() => { setDirective(null); void load(); }} />}
       {viewer && <ImageViewer urls={viewer.urls} index={viewer.i} onIndex={(i) => setViewer({ ...viewer, i })} onClose={() => setViewer(null)} />}
     </div>
@@ -572,7 +592,7 @@ function Composer({ room, reply, editing, inquiryId, members, onCancel, onSent }
       <div className="flex items-end gap-2">
         {!editing && <IconButton label="사진·파일" onClick={() => fileRef.current?.click()}><Paperclip size={18} /></IconButton>}
         <input ref={fileRef} type="file" multiple hidden accept="image/*,.pdf,.xlsx,.xls,.docx,.doc,.hwp,.hwpx,.zip"
-          onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 10)); e.target.value = ''; }} />
+          onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 30)); e.target.value = ''; }} />
         <textarea ref={ta} rows={1} value={text} placeholder={room.kind === 'dm' ? '메시지 입력' : '메시지 입력 · @이름으로 부르기'}
           onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart)}

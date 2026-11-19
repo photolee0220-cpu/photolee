@@ -6,7 +6,7 @@ import type { Notice } from '../../lib/talkTypes';
 import { relativeTime } from '../../lib/week';
 import { useStore } from '../../state/store';
 import { Avatar, Badge, Button, Card, cx, Empty, Field, Input, Modal, Progress, Segmented, Spinner, Toggle } from '../../components/ui';
-import { refreshTalk, useTalk } from './useTalk';
+import { refreshTalk, talkExtras, useTalk } from './useTalk';
 
 /** 전체 공지: 대표님·관리자가 쓰고, 확인이 필요한 공지는 직원이 [확인]을 누른다 */
 export function NoticeList({ notices }: { notices: Notice[] }) {
@@ -31,7 +31,7 @@ export function NoticeList({ notices }: { notices: Notice[] }) {
           const unreadMine = !n.reads[me.id];
           const needAck = n.requireAck && !n.acks[me.id];
           return (
-            <Card key={n.id} className={cx('cursor-pointer p-4 transition-shadow hover:shadow-pop sm:p-5', needAck && 'ring-2 ring-warn/40')}>
+            <Card key={n.id} className={cx('cursor-pointer p-4 transition-shadow hover:shadow-pop sm:p-5', n.urgent ? 'border-danger/50 ring-2 ring-danger/40' : needAck && 'ring-2 ring-warn/40')}>
               <div role="button" tabIndex={0} onClick={() => { setOpen(n); if (unreadMine) void api.talk.notices.read(n.id).then(() => refreshTalk()); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') setOpen(n); }}>
               <div className="flex items-start gap-3">
@@ -40,6 +40,7 @@ export function NoticeList({ notices }: { notices: Notice[] }) {
                   <p className="flex flex-wrap items-center gap-1.5 text-[15.5px] font-bold">
                     {unreadMine && <span className="h-2 w-2 rounded-full bg-danger" aria-label="안 읽음" />}
                     {n.title}
+                    {n.urgent && <Badge tone="danger">긴급</Badge>}
                     {n.requireAck && <Badge tone="warn">확인 필요</Badge>}
                   </p>
                   <p className="mt-0.5 text-[12.5px] text-ink-3">{author?.name} {author?.title} · {relativeTime(n.createdAt)}</p>
@@ -124,11 +125,12 @@ function NoticeEditor({ notice, onClose }: { notice: Notice | null; onClose(): v
   const [body, setBody] = useState(notice?.body ?? '');
   const [requireAck, setRequireAck] = useState(notice?.requireAck ?? false);
   const [pinned, setPinned] = useState(notice?.pinned ?? false);
+  const [urgent, setUrgent] = useState(notice?.urgent ?? false);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
     try {
-      await api.talk.notices.save({ id: notice?.id, title, body, requireAck, pinned });
+      await api.talk.notices.save({ id: notice?.id, title, body, requireAck: requireAck || urgent, pinned: pinned || urgent, urgent });
       await refreshTalk();
       toast(notice ? '공지를 고쳤습니다.' : '공지를 올렸습니다. 전 직원에게 알림이 갑니다.');
       onClose();
@@ -144,6 +146,12 @@ function NoticeEditor({ notice, onClose }: { notice: Notice | null; onClose(): v
         </Field>
         <Toggle checked={requireAck} onChange={setRequireAck} label={<span><b>확인 받기</b> <span className="text-ink-3">직원이 [확인했습니다]를 눌러야 하고, 누가 확인했는지 남습니다</span></span>} />
         <Toggle checked={pinned} onChange={setPinned} label={<span><b>맨 위 고정</b> <span className="text-ink-3">중요 공지를 목록 맨 위에 둡니다</span></span>} />
+        {talkExtras() && (
+          <div className={cx('rounded-xl border p-3', urgent ? 'border-danger/50 bg-danger/5' : 'border-line')}>
+            <Toggle checked={urgent} onChange={setUrgent} label={<span><b className="text-danger">긴급 공지</b> <span className="text-ink-3">안전사고 등 급한 일에만</span></span>} />
+            <p className="mt-1.5 pl-12 text-[12px] leading-relaxed text-ink-3">알림 쉬는 시간·방 알림 끔과 상관없이 전원에게 울립니다. 확인을 누르기 전까지 앱 화면을 가리고, 10분 안에 확인하지 않은 사람에게 한 번 더 알립니다. (확인 받기·맨 위 고정도 함께 켜집니다)</p>
+          </div>
+        )}
       </div>
     </Modal>
   );

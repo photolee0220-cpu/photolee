@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>업무보고 앱 설치 안내</title>
+<link rel="icon" href="../icon-64.png">
+<style>
+  :root {
+    --bg: #f3f5f8; --surface: #fff; --ink: #17202c; --ink-2: #485364; --ink-3: #7b8594; --line: #dfe4ec;
+    --brand: #2f4a6b; --brand-soft: #e7edf5; --ok: #1f7a4d; --warn-bg: #fff5df; --warn-ink: #7a5300;
+    --font: "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1319; --surface: #171c24; --ink: #e8ecf2; --ink-2: #b6bfcc; --ink-3: #8c96a5; --line: #29303b; --brand: #93b4da; --brand-soft: #1c2736; --ok: #6cc69a; --warn-bg: #2a2414; --warn-ink: #e8c873; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 var(--font); word-break: keep-all; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px calc(40px + env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  header img { width: 48px; height: 48px; border-radius: 12px; }
+  h1 { font-size: 22px; line-height: 1.35; margin: 0; letter-spacing: -.02em; }
+  .sub { color: var(--ink-3); font-size: 14px; margin: 2px 0 0; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--line); padding: 4px; border-radius: 12px; margin: 18px 0 14px; }
+  .tabs button { font: inherit; font-weight: 700; font-size: 15px; border: 0; border-radius: 9px; padding: 10px; background: transparent; color: var(--ink-2); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .12); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 12px; }
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 16px; }
+  ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+  ol.steps > li::before { content: counter(s); width: 34px; height: 34px; border-radius: 50%; background: var(--brand); color: var(--surface); font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .step b { display: block; font-size: 16.5px; }
+  .step span { color: var(--ink-2); font-size: 14.5px; }
+  .mock { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); font-size: 13.5px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .key { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 4px 10px; background: var(--surface); border: 1.5px solid var(--brand); font-weight: 700; color: var(--brand); }
+  .key svg { width: 18px; height: 18px; }
+  .note { background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-top: 12px; }
+  .open { display: block; text-align: center; text-decoration: none; background: var(--brand); color: var(--surface); font-weight: 800; font-size: 17px; border-radius: 14px; padding: 15px; margin-top: 6px; }
+  .ok { color: var(--ok); font-weight: 700; }
+  .qr { display: flex; gap: 16px; align-items: center; }
+  .qr img { width: 132px; height: 132px; border-radius: 8px; background: #fff; padding: 6px; border: 1px solid var(--line); }
+  .qr p { margin: 0; font-size: 14px; color: var(--ink-2); }
+  [hidden] { display: none !important; }
+  @media print {
+    body { background: #fff; color: #000; font-size: 13px; }
+    .tabs, .open, .noprint { display: none !important; }
+    [hidden] { display: block !important; }
+    .card { break-inside: avoid; border-color: #bbb; }
+    .qr img { width: 180px; height: 180px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="../icon-192.png" alt="">
+    <div>
+      <h1>업무보고 앱 설치하고<br>알림 켜기</h1>
+      <p class="sub">사닥다리 업무보고 시스템 · 처음 한 번만 하면 됩니다</p>
+    </div>
+  </header>
+
+  <div class="card qr">
+    <img src="qr.svg" alt="이 안내 페이지로 오는 QR 코드">
+    <p><b>다른 직원에게 보여 주세요.</b><br>휴대폰 카메라로 QR을 찍으면 이 안내가 열립니다.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-ios" aria-selected="true" onclick="show('ios')">아이폰</button>
+    <button role="tab" id="t-and" aria-selected="false" onclick="show('and')">갤럭시·안드로이드</button>
+  </div>
+
+  <section id="ios" class="card">
+    <ol class="steps">
+      <li class="step"><div><b>사파리(Safari)로 접속</b><span>아래 [업무보고 열기]를 누르거나 QR을 찍으면 사파리가 열립니다. 카카오톡 안의 브라우저에서는 안 되니, 사파리로 열어 주세요.</span></div></li>
+      <li class="step"><div><b>아래쪽 공유 버튼 누르기</b><span>화면 아래 가운데 네모에 화살표가 있는 버튼입니다.</span>
+        <div class="mock"><span class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>공유</span></div></div></li>
+      <li class="step"><div><b>'홈 화면에 추가' 누르기</b><span>목록을 아래로 내리면 있습니다. 이름은 그대로 두고 [추가]를 누릅니다.</span>
+        <div class="mock"><span class="key"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>홈 화면에 추가</span></div></div></li>
+      <li class="step"><div><b>홈 화면의 '업무보고' 아이콘으로 열기</b><span>앞으로는 이 아이콘으로 들어갑니다. 사파리로 들어가면 알림이 오지 않습니다.</span></div></li>
+      <li class="step"><div><b>로그인 → [알림 켜기] → '허용'</b><span>로그인하면 알림 안내가 뜹니다. <span class="ok">허용</span>을 꼭 눌러 주세요.</span></div></li>
+    </ol>
+    <p class="note">아이폰은 iOS 16.4 이상에서 알림을 받을 수 있습니다. (설정 → 일반 → 정보 → iOS 버전)</p>
+  </section>
+
+  <section id="and" class="card" hidden>
+    <ol class="steps">
+      <li class="step"><div><b>크롬(Chrome)으로 접속</b><span>아래 [업무보고 열기]를 누르거나 QR을 찍으면 열립니다. 삼성 인터넷이 열리면 크롬으로 열어 주세요.</span></div></li>
+      <li class="step"><div><b>로그인 → [알림 켜기] → '허용'</b><span>로그인하면 알림 안내가 뜹니다. <span class="ok">허용</span>을 누르세요.</span></div></li>
+      <li class="step"><div><b>오른쪽 위 ⋮ → '홈 화면에 추가' (또는 '앱 설치')</b><span>홈 화면에 아이콘이 생겨 앱처럼 쓸 수 있습니다.</span>
+        <div class="mock"><span class="key">⋮</span> → <span class="key">홈 화면에 추가</span></div></div></li>
+      <li class="step"><div><b>(선택) 알림 소리 바꾸기</b><span>휴대폰 설정 → 애플리케이션 → 업무보고(또는 Chrome) → 알림 → 소리에서 원하는 소리로 바꿀 수 있습니다.</span></div></li>
+    </ol>
+    <p class="note">'배터리 최적화'가 켜져 있으면 알림이 늦을 수 있습니다. 설정 → 애플리케이션 → Chrome → 배터리 → '제한 없음'으로 두면 좋습니다.</p>
+  </section>
+
+  <div class="card noprint">
+    <b>알림이 잘 오는지 확인</b>
+    <p style="margin:4px 0 0;color:var(--ink-2);font-size:14.5px">로그인 후 오른쪽 위 종 모양 버튼 → [시험 알림 보내기]를 누르면 바로 알림이 옵니다. 안 오면 관리자에게 알려 주세요.</p>
+  </div>
+
+  <a class="open" href="../">업무보고 열기</a>
+</div>
+<script>
+  function show(k) {
+    document.getElementById('ios').hidden = k !== 'ios';
+    document.getElementById('and').hidden = k !== 'and';
+    document.getElementById('t-ios').setAttribute('aria-selected', String(k === 'ios'));
+    document.getElementById('t-and').setAttribute('aria-selected', String(k === 'and'));
+  }
+  if (/android/i.test(navigator.userAgent)) show('and');
+</script>
+</body>
+</html>

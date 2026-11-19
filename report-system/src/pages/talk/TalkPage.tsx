@@ -27,7 +27,9 @@ export function TalkPage() {
   const { data } = useTalk();
   const desktop = useDesktop();
   const [tab, setTab] = useState<'chat' | 'notice' | 'docs'>(() => peekOpen()?.tab ?? 'chat');
-  const [roomId, setRoomId] = useState<string | null>(() => peekOpen()?.room ?? null);
+  const [roomId, setRoomIdState] = useState<string | null>(() => peekOpen()?.room ?? null);
+  const [jumpQuery, setJumpQuery] = useState<string | undefined>();
+  const setRoomId = (id: string | null, query?: string) => { setRoomIdState(id); setJumpQuery(query); };
   // 알림으로 들어온 요청은 여기서 꺼내 쓴다. 앱이 열린 채로 알림을 눌러도 그 방으로 간다
   useEffect(() => { takeOpen(); return onOpen((r) => { takeOpen(); if (r.tab) setTab(r.tab); if (r.room) setRoomId(r.room); }); }, []);
   useEffect(() => {
@@ -60,21 +62,21 @@ export function TalkPage() {
       {tab === 'docs' && <DocsLibrary data={data} />}
       {tab === 'chat' && (desktop ? (
         <div className="grid h-[calc(100dvh-190px)] min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
-          <div className="min-h-0 border-r border-line"><RoomList data={data} activeId={roomId} onOpen={setRoomId} /></div>
+          <div className="min-h-0 border-r border-line"><RoomList data={data} activeId={roomId} onOpen={(id, q) => setRoomId(id, q)} /></div>
           <div className="min-h-0">
             {roomId && data.rooms.some((r) => r.room.id === roomId)
-              ? <RoomView data={data} roomId={roomId} onRoom={setRoomId} />
+              ? <RoomView data={data} roomId={roomId} onRoom={(id) => setRoomId(id)} initialQuery={jumpQuery} />
               : <div className="flex h-full items-center justify-center"><Empty title="왼쪽에서 방을 고르세요" icon={<MessagesSquare size={22} />} /></div>}
           </div>
         </div>
       ) : (
         <>
           <div className="-mx-4 h-[calc(100dvh-250px)] min-h-[420px] overflow-hidden border-y border-line bg-surface sm:mx-0 sm:rounded-2xl sm:border">
-            <RoomList data={data} activeId={roomId} onOpen={setRoomId} />
+            <RoomList data={data} activeId={roomId} onOpen={(id, q) => setRoomId(id, q)} />
           </div>
           {roomId && data.rooms.some((r) => r.room.id === roomId) && (
             <div className="fixed inset-0 z-50 bg-bg" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-              <RoomView data={data} roomId={roomId} onBack={() => setRoomId(null)} onRoom={setRoomId} />
+              <RoomView data={data} roomId={roomId} onBack={() => setRoomId(null)} onRoom={(id) => setRoomId(id)} initialQuery={jumpQuery} />
             </div>
           )}
         </>

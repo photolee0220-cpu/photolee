@@ -201,6 +201,12 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
       return toMessage(msg, await sign(attachments.map((a) => a.path)));
     },
 
+    // 아래 넷은 체험판 확인 뒤 서버에 붙인다
+    async searchMessages() { throw new ApiError('준비 중인 기능입니다.'); },
+    async remindUnread() { throw new ApiError('준비 중인 기능입니다.'); },
+    async note() { throw new ApiError('준비 중인 기능입니다.'); },
+    async setStarred() { throw new ApiError('준비 중인 기능입니다.'); },
+
     async editMessage(id, text) { return toMessage(check(await sb.rpc('edit_message', { p_id: id, p_text: text }))); },
     async deleteMessage(id) { check(await sb.rpc('delete_message', { p_id: id })); },
     async hideMessage(id, hidden) { check(await sb.rpc('hide_message', { p_id: id, p_hidden: hidden })); },

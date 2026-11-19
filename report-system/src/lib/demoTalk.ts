@@ -29,7 +29,7 @@ export interface DemoTalkCtx {
 }
 
 interface TalkState {
-  v: 3;
+  v: 4;
   rooms: ChatRoom[];
   messages: ChatMessage[];
   /** roomId → memberId → 마지막으로 읽은 때 */
@@ -37,6 +37,8 @@ interface TalkState {
   notices: Notice[];
   inquiries: Inquiry[];
   docs: SiteDoc[];
+  /** 사람 id → 고정한 방 id */
+  stars?: Record<string, string[]>;
   /** `${date}|${siteId}` → 처리 상태 */
   tips: Record<string, 'sent' | 'dismissed'>;
   settings: TalkSettings;
@@ -54,7 +56,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   function load(): TalkState {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 3) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
+      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 4) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
     } catch { /* 처음부터 */ }
     return fresh();
   }
@@ -95,6 +97,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       }, 10 + i)),
       room({ id: 'room_inquiry', kind: 'inquiry', name: '신규 교회건축 문의', memberIds: [...top, ...inDept(deptOf(/CM|견적/))] }, 20),
     ];
+    const photo = (n: number) => ({ id: `ph${n}`, name: `현장사진_${n}.jpg`, kind: 'image' as const, url: `${import.meta.env.BASE_URL}demo/photo-${n}.jpg`, size: 35000, width: 800, height: 600 });
     const say = (roomId: string, authorId: string | undefined, text: string, min: number, extra: Partial<ChatMessage> = {}): ChatMessage | null => (authorId ? {
       id: newId('msg'), roomId, authorId, text, attachments: [], replyToId: null, mentions: [], createdAt: ago(min), editedAt: null, deleted: false,
       inquiryId: null, directive: null, safety: false, system: false, hidden: null, docCategory: null, ...extra,
@@ -124,6 +127,9 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       say('room_safety', safety[0], '정기 안전점검 결과 비계 난간 보완이 필요합니다. 오늘 중 조치 바랍니다.', 60 * 5),
       say('room_safety', chief, '난간 보완 완료했습니다. 사진 첨부합니다.', 60 * 3),
       r1 ? say(r1.id, chief, '3층 벽체 거푸집 설치 중입니다. 오후 비 예보로 외부 작업 15시에 종료합니다.', 90) : null,
+      r1 ? say(r1.id, chief, '오늘 작업 사진입니다.', 85, { attachments: [1, 2, 4].map((n) => photo(n)) }) : null,
+      r1 ? say(r1.id, chief, '어제 현장 사진 올립니다.', 60 * 24 + 30, { attachments: [6, 5].map((n) => photo(n)) }) : null,
+      say('room_safety', chief, '난간 보완 사진', 60 * 3 - 2, { attachments: [photo(3)] }),
       r1 ? say(r1.id, build[0], '레미콘 업체 2곳 수급 확인했습니다. 화요일 타설 가능합니다.', 70) : null,
       r2 ? say(r2.id, chief2, '감리단 지적사항 2건 조치 계획서 제출했습니다.', 60 * 8) : null,
       say('room_inquiry', admin ?? ceo, '거너더교회 전화 문의 접수했습니다. 담당자 배정 부탁드립니다.', 25, { inquiryId: inquiries[2].id }),
@@ -171,7 +177,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       const x = doc('공사일보', day, '공사일보', '', 'daily-log-sample.pdf', chief, i);
       if (x) docs.push(x);
     }
-    return { v: 3, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
+    return { v: 4, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
   }
 
   /* ───────── 권한 ───────── */
@@ -194,6 +200,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       last: list.length ? structuredClone(list[list.length - 1]) : null,
       unread: list.filter((x) => x.createdAt > mine && x.authorId !== m.id).length,
       reads: { ...(st.reads[r.id] ?? {}) },
+      starred: (st.stars?.[m.id] ?? []).includes(r.id),
     };
   }
 
@@ -293,6 +300,41 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       save();
     },
 
+    async searchMessages(q) {
+      const m = ctx.me();
+      const t = q.trim();
+      if (!t) return [];
+      const mine = new Set(myRooms(m).map((r) => r.id));
+      return delay(structuredClone(st.messages.filter((x) => mine.has(x.roomId) && !x.deleted && !x.hidden && x.text.includes(t)))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 60));
+    },
+
+    async remindUnread(messageId) {
+      const m = ctx.me();
+      const msg = st.messages.find((x) => x.id === messageId);
+      if (!msg) throw new ApiError('메시지를 찾을 수 없습니다.');
+      const r = roomFor(msg.roomId, m);
+      if (msg.authorId !== m.id && !isTop(m)) throw new ApiError('보낸 사람과 대표님·관리자만 다시 알릴 수 있습니다.');
+      return delay(r.memberIds.filter((id) => id !== msg.authorId && (st.reads[r.id]?.[id] ?? '') < msg.createdAt).length);
+    },
+
+    async note(roomId, text, replyToId = null) {
+      const m = ctx.me();
+      roomFor(roomId, m);
+      post(roomId, m.id, text.trim(), { system: true, replyToId });
+      save();
+    },
+
+    async setStarred(roomId, starred) {
+      const m = ctx.me();
+      roomFor(roomId, m);
+      st.stars ??= {};
+      const cur = new Set(st.stars[m.id] ?? []);
+      if (starred) cur.add(roomId); else cur.delete(roomId);
+      st.stars[m.id] = [...cur];
+      save();
+    },
+
     async hideMessage(id, hidden) {
       const m = ctx.me();
       if (!m.isAdmin) throw new ApiError('관리자만 가릴 수 있습니다.');
@@ -364,7 +406,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         const now = new Date().toISOString();
         let x = n.id ? st.notices.find((y) => y.id === n.id) : undefined;
         if (!x) { x = { id: newId('nt'), authorId: m.id, createdAt: now, reads: { [m.id]: now }, acks: {}, title: '', body: '', requireAck: false, pinned: false, updatedAt: now }; st.notices.push(x); }
-        Object.assign(x, { title: n.title.trim(), body: n.body.trim(), requireAck: n.requireAck, pinned: n.pinned, updatedAt: now });
+        Object.assign(x, { title: n.title.trim(), body: n.body.trim(), requireAck: n.requireAck || !!n.urgent, pinned: n.pinned || !!n.urgent, urgent: !!n.urgent, updatedAt: now });
         save();
         return structuredClone(x);
       },

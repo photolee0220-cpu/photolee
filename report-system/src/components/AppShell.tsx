@@ -13,6 +13,7 @@ import type { Department } from '../lib/types';
 import { NotificationButton, NotificationGate } from './Notifications';
 import { NoticeAckGate } from './ReportNotice';
 import { talkAvailable, talkBadge, useTalk } from '../pages/talk/useTalk';
+import { UrgentGate } from '../pages/talk/Extras';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
 type NavItem = { id: View; label: string; icon: ReactNode; badge?: number };
@@ -282,6 +283,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SearchPalette />
       <NotificationGate />
       <NoticeAckGate />
+      <UrgentGate />
       <Toasts />
     </div>
   );

@@ -6,7 +6,7 @@ import { DEFAULT_TALK_SETTINGS, isBuiltinRoom, type ChatRoom, type TalkSettings 
 import { useStore } from '../../state/store';
 import { Avatar, Button, Card, cx, Field, Input, Modal, Select, Spinner, Toggle } from '../../components/ui';
 import { RoomIcon } from './Chat';
-import { refreshTalk } from './useTalk';
+import { refreshTalk, talkExtras } from './useTalk';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -118,8 +118,24 @@ export function AdminRooms() {
   useEffect(load, [toast]);
   const sites = byId(snap?.sites ?? []);
   const saveSettings = (s: TalkSettings) => { setSettings(s); void api.talk.admin.saveSettings(s).then(() => toast('저장했습니다.')).catch((e) => toast(e.message, 'error')); };
+  const installUrl = new URL(`${import.meta.env.BASE_URL}install/`, window.location.origin).href;
   return (
     <div className="space-y-4">
+      {talkExtras() && (
+        <Card className="flex flex-wrap items-center gap-4 p-5">
+          <img src={`${import.meta.env.BASE_URL}install/qr.svg`} alt="설치 안내 QR" className="h-28 w-28 rounded-lg border border-line bg-white p-1.5" />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[16px] font-bold">직원 설치 안내</h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-3">직원이 휴대폰 카메라로 이 QR을 찍으면 아이폰·안드로이드별 '홈 화면에 추가 → 알림 켜기' 방법이 그림으로 나옵니다. 인쇄해서 사무실·현장 사무소에 붙여 두거나 공지에 주소를 넣으세요.</p>
+            <p className="mt-1 truncate text-[12.5px] font-semibold text-ink-2">{installUrl}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <a href={installUrl} target="_blank" rel="noopener" className="inline-flex h-9 items-center rounded-lg border border-line-strong px-3 text-[13px] font-semibold hover:bg-sunken">안내 페이지 열기</a>
+              <Button size="sm" onClick={() => { const w = window.open(installUrl, '_blank'); w?.addEventListener('load', () => w.print()); }}>인쇄하기</Button>
+              <Button size="sm" tone="ghost" onClick={() => void navigator.clipboard?.writeText(installUrl).then(() => toast('주소를 복사했습니다.'))}>주소 복사</Button>
+            </div>
+          </div>
+        </Card>
+      )}
       <Card className="p-5">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="text-[16px] font-bold">채팅방</h3>
