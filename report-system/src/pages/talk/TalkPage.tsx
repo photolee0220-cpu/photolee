@@ -7,6 +7,7 @@ import { RoomList, RoomView } from './Chat';
 import { NoticeList } from './Notices';
 import { DocsLibrary } from './Docs';
 import { noticeOpen, useTalk } from './useTalk';
+import { onOpen, peekOpen, takeOpen } from '../../lib/deepLink';
 
 function useDesktop() {
   const q = '(min-width: 1024px)';
@@ -25,14 +26,16 @@ export function TalkPage() {
   const { me } = useStore();
   const { data } = useTalk();
   const desktop = useDesktop();
-  const [tab, setTab] = useState<'chat' | 'notice' | 'docs'>('chat');
-  const [roomId, setRoomId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'chat' | 'notice' | 'docs'>(() => peekOpen()?.tab ?? 'chat');
+  const [roomId, setRoomId] = useState<string | null>(() => peekOpen()?.room ?? null);
+  // 알림으로 들어온 요청은 여기서 꺼내 쓴다. 앱이 열린 채로 알림을 눌러도 그 방으로 간다
+  useEffect(() => { takeOpen(); return onOpen((r) => { takeOpen(); if (r.tab) setTab(r.tab); if (r.room) setRoomId(r.room); }); }, []);
   useEffect(() => {
     if (desktop && !roomId && data?.rooms.length) setRoomId(data.rooms[0].room.id);
   }, [desktop, roomId, data]);
   // 공지를 아직 확인 안 했으면 공지 탭부터
   useEffect(() => {
-    if (data && data.notices.some((n) => n.requireAck && !n.acks[me.id])) setTab('notice');
+    if (data && !roomId && data.notices.some((n) => n.requireAck && !n.acks[me.id])) setTab('notice');
     // 처음 한 번만
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!data]);

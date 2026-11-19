@@ -77,7 +77,8 @@ async function send(db: SupabaseClient, memberIds: string[], payload: Payload, k
   let sent = 0;
   let failed = 0;
   const gone: string[] = [];
-  const body = JSON.stringify({ ...payload, url: payload.url ?? siteUrl });
+  // '?open=…' 처럼 물음표로 시작하면 사이트 주소 뒤에 붙여 그 화면으로 바로 가게 한다
+  const body = JSON.stringify({ ...payload, url: payload.url?.startsWith('?') ? `${siteUrl.replace(/\/?$/, '/')}${payload.url}` : payload.url ?? siteUrl });
   await Promise.all(((subs ?? []) as Sub[]).map(async (s) => {
     try {
       const req = webpush.generateRequestDetails({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, {
@@ -162,7 +163,7 @@ Deno.serve(async (req) => {
       const att = (m.attachments ?? []) as { kind: string }[];
       const body = plain(m.text) || (att.length ? (att[0].kind === 'image' ? '사진을 보냈습니다' : '파일을 보냈습니다') : '');
       const title = m.safety ? `[안전 당부] ${room?.name ?? ''}` : room?.kind === 'dm' ? who : `[${room?.name ?? '채팅'}] ${who}`;
-      const r = await send(db, targets, { title, body, tag: `chat-${m.room_id}` }, 'chat');
+      const r = await send(db, targets, { title, body, tag: `chat-${m.room_id}`, url: `?open=talk&room=${m.room_id}` }, 'chat');
       return json({ targets: targets.length, ...r });
     }
 
@@ -177,7 +178,7 @@ Deno.serve(async (req) => {
       const done = new Set((reads ?? []).filter((r) => (n.require_ack ? r.ack_at : r.read_at)).map((r) => r.member_id));
       const targets = (people ?? []).map((p) => p.id).filter((id) => id !== n.author_id && (action === 'notice' || !done.has(id)));
       const title = `${action === 'notice-remind' ? '[공지 확인 요청] ' : '[공지] '}${plain(n.title)}`;
-      const r = await send(db, targets, { title, body: n.require_ack ? `확인이 필요한 공지입니다. ${plain(n.body)}` : plain(n.body), tag: `notice-${n.id}` }, action);
+      const r = await send(db, targets, { title, body: n.require_ack ? `확인이 필요한 공지입니다. ${plain(n.body)}` : plain(n.body), tag: `notice-${n.id}`, url: '?open=notice' }, action);
       return json({ targets: targets.length, ...r });
     }
 
@@ -194,7 +195,7 @@ Deno.serve(async (req) => {
       for (const q of due) {
         const days = Math.floor((Date.now() - Date.parse(q.last_activity_at)) / 86400000);
         const targets = q.owner_id ? [q.owner_id] : (mem ?? []).map((x) => x.member_id);
-        const r = await send(db, targets, { title: '[문의] 진행이 멈춘 문의', body: `${q.church} · ${days}일째 진행이 없습니다. 상담 내용을 남기거나 단계를 바꿔 주세요.`, tag: `inquiry-${q.id}` }, 'inquiry-stale');
+        const r = await send(db, targets, { title: '[문의] 진행이 멈춘 문의', body: `${q.church} · ${days}일째 진행이 없습니다. 상담 내용을 남기거나 단계를 바꿔 주세요.`, tag: `inquiry-${q.id}`, url: room ? `?open=talk&room=${room.id}` : undefined }, 'inquiry-stale');
         sent += r.sent;
         await db.from('inquiries').update({ stale_notified_at: new Date().toISOString() }).eq('id', q.id);
       }

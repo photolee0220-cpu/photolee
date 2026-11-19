@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from '../lib/client';
 import type { Comment, Directive, DirectiveStatus, Entry, Member, SaveDirectiveInput, SaveEntryInput, Snapshot, WeekId } from '../lib/types';
 import { currentWeekId } from '../lib/week';
+import { onOpen, peekOpen } from '../lib/deepLink';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
 export type View = 'dashboard' | 'talk' | 'daily' | 'team' | 'calendar' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
@@ -56,7 +57,9 @@ export function StoreProvider({ me, onSignOut, onSwitch, children }: {
   const [weekId, setWeekIdState] = useState<WeekId>(currentWeekId());
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>(defaultView(me));
+  // 알림을 눌러 들어왔으면 그 화면부터
+  const [view, setView] = useState<View>(() => (peekOpen() ? 'talk' : defaultView(me)));
+  useEffect(() => onOpen(() => { setView('talk'); setDrawer(null); }), []);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [diffMode, setDiffModeState] = useState<DiffMode>(() => {

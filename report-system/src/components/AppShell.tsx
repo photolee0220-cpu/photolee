@@ -201,6 +201,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hasShared = !!snap?.grants.some((g) => g.viewerDepartmentId === me.departmentId);
   const talk = useTalk();
   const badge = talkAvailable() ? talkBadge(talk.data, me) : 0;
+  // 홈 화면 앱 아이콘의 숫자 (지원하는 휴대폰·PC에서만)
+  useEffect(() => {
+    const n = navigator as Navigator & { setAppBadge?(n: number): Promise<void>; clearAppBadge?(): Promise<void> };
+    if (badge > 0) void n.setAppBadge?.(badge).catch(() => undefined);
+    else void n.clearAppBadge?.().catch(() => undefined);
+  }, [badge]);
   const items = navItems(me, hasShared, snap?.departments ?? []).map((it) => (it.id === 'talk' ? { ...it, badge } : it));
   const dept = snap?.departments.find((d) => d.id === me.departmentId);
 
