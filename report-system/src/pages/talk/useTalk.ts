@@ -47,5 +47,5 @@ export const talkAvailable = () => true;
 /** 소통 추가 기능(긴급 공지·사진 앨범·전체 검색·일정 등록·방 고정): 체험판·실제 서버 모두 */
 export const talkExtras = () => true;
 
-/** 전체 자료실(모든 사진·파일): 체험판에서 먼저 보여 준다 */
-export const archiveOn = () => api.mode === 'demo';
+/** 전체 자료실(모든 사진·파일): 체험판·실제 서버 모두 */
+export const archiveOn = () => true;

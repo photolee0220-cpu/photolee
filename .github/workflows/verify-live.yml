@@ -220,6 +220,15 @@ jobs:
           echo "$yt" | jq -e '.videos | length > 0' >/dev/null && rec "유튜브 최근 영상 가져오기" 1 "$(echo "$yt" | jq '.videos | length')개" || rec "유튜브 최근 영상 가져오기" 0 "$(echo "$yt" | head -c 150)"
           c=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/notify" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"action":"timed","secret":"wrong"}')
           [ "$c" = 403 ] && rec "알림 서버: 메모·긴급 다시 알림 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 메모·긴급 다시 알림 비밀값 확인" 0 "HTTP $c"
+          al=$(curl -sS -X POST "$URL/rest/v1/rpc/archive_list" "${H[@]}" -H "Content-Type: application/json" -d '{}')
+          echo "$al" | jq -e 'type == "array"' >/dev/null && rec "전체 자료실 목록(관리자)" 1 "$(echo "$al" | jq 'length')건 · 1:1 없음: $(echo "$al" | jq '[.[] | select(.roomName == null and .source == "chat")] | length == 0')" || rec "전체 자료실 목록(관리자)" 0 "$(echo "$al" | head -c 150)"
+          fu=$(echo "$al" | jq -r '[.[] | select(.bucket == "talk-files")][0] | if . then "\(.bucket)/\(.path)" else "" end')
+          if [ -n "$fu" ]; then
+            sg=$(curl -sS -X POST "$URL/storage/v1/object/sign/$fu" "${H[@]}" -H "Content-Type: application/json" -d '{"expiresIn":60}')
+            echo "$sg" | jq -e '.signedURL // .signedUrl' >/dev/null && rec "전체 자료실 파일 열기" 1 "서명 주소 ok" || rec "전체 자료실 파일 열기" 0 "$(echo "$sg" | head -c 150)"
+          else rec "전체 자료실 파일 열기" 1 "아직 파일 없음(건너뜀)"; fi
+          an=$(curl -sS -X POST "$URL/rest/v1/rpc/archive_list" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{}')
+          echo "$an" | jq -e 'type == "array"' >/dev/null && rec "전체 자료실: 로그인 안 한 사람 차단" 0 "$(echo "$an" | head -c 100)" || rec "전체 자료실: 로그인 안 한 사람 차단" 1 "거절됨"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()

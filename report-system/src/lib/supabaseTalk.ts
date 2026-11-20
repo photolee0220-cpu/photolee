@@ -5,7 +5,7 @@ import { pdfText } from './pdfPages';
 import { ruleText, safetyHits, stripMarks } from './safetyRules';
 import {
   DEFAULT_TALK_SETTINGS, type ChatAttachment, type ChatMessage, type ChatRoom, type Inquiry, type Notice, type RoomSummary, type SafetyTip,
-  type SiteDoc, type TalkApi, type TalkSettings,
+  type ArchiveItem, type SiteDoc, type TalkApi, type TalkSettings,
 } from './talkTypes';
 import type { Member, SearchDoc, Site } from './types';
 import { currentWeekId, shiftDay } from './week';
@@ -352,9 +352,25 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
       async dismiss(tip) { check(await sb.from('safety_tips').update({ status: 'dismissed', updated_at: new Date().toISOString() }).eq('id', tip.id)); },
     },
 
-    // 체험판 확인 뒤 서버에 붙인다
+    // 전체 자료실: 서버가 권한(대표·관리자·권한 받은 사람)을 확인하고 목록을 준다. 파일 주소는 저장소별로 서명
     archive: {
-      async list() { throw new ApiError('준비 중인 기능입니다.'); },
+      async list() {
+        const rows = (check(await sb.rpc('archive_list')) ?? []) as Row[];
+        const byBucket = new Map<string, string[]>();
+        rows.forEach((r) => byBucket.set(r.bucket, [...(byBucket.get(r.bucket) ?? []), r.path]));
+        const urls = new Map<string, string>();
+        for (const [bucket, paths] of byBucket) {
+          const list = [...new Set(paths)];
+          for (let i = 0; i < list.length; i += 500) {
+            const res = await sb.storage.from(bucket).createSignedUrls(list.slice(i, i + 500), URL_TTL);
+            (res.data ?? []).forEach((x) => { if (x.path && x.signedUrl) urls.set(`${bucket}/${x.path}`, x.signedUrl); });
+          }
+        }
+        return rows.map((r): ArchiveItem => ({
+          id: String(r.id), kind: r.kind, name: r.name, url: urls.get(`${r.bucket}/${r.path}`) ?? '', size: Number(r.size ?? 0), at: r.at, authorId: r.authorId ?? '',
+          source: r.source, siteId: r.siteId ?? null, roomId: r.roomId ?? null, roomName: r.roomName ?? null, messageId: r.messageId ?? null, category: r.category ?? null,
+        })).filter((x) => x.url);
+      },
     },
 
     admin: {
