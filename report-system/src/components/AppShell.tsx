@@ -1,5 +1,5 @@
 import {
-  BookOpen, MessagesSquare, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
+  BookOpen, MessagesSquare, Tv, Link2, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -14,6 +14,8 @@ import { NotificationButton, NotificationGate } from './Notifications';
 import { NoticeAckGate } from './ReportNotice';
 import { talkAvailable, talkBadge, useTalk } from '../pages/talk/useTalk';
 import { UrgentGate } from '../pages/talk/Extras';
+import { previewOn } from '../lib/preview';
+import { useAppSettings } from '../lib/settings';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
 type NavItem = { id: View; label: string; icon: ReactNode; badge?: number };
@@ -22,6 +24,7 @@ export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boole
   const items = baseNavItems(me, hasShared, departments);
   // 소통은 모두에게, 앞쪽에 (휴대폰 아래 메뉴에서 바로 보이게)
   if (talkAvailable()) items.splice(Math.min(1, items.length), 0, { id: 'talk', label: '소통', icon: <MessagesSquare size={18} /> });
+  if (previewOn()) items.push({ id: 'youtube', label: '사닥다리 유튜브', icon: <Tv size={18} /> });
   return items;
 }
 
@@ -201,6 +204,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { isDark, toggle } = useTheme();
   const hasShared = !!snap?.grants.some((g) => g.viewerDepartmentId === me.departmentId);
   const talk = useTalk();
+  const appSettings = useAppSettings();
+  const quickLinks = previewOn() ? (appSettings?.links ?? []).filter((l) => l.label && l.url) : [];
   const badge = talkAvailable() ? talkBadge(talk.data, me) : 0;
   // 홈 화면 앱 아이콘의 숫자 (지원하는 휴대폰·PC에서만)
   useEffect(() => {
@@ -245,6 +250,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             )}
             {me.isCeo && <LayersLink className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink" />}
+            {quickLinks.map((l) => (
+              <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
+                className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
+                <Link2 size={18} /><span className="truncate">{l.label}</span>
+              </a>
+            ))}
             <a href={`${import.meta.env.BASE_URL}guide/`} target="_blank" rel="noopener"
               className="flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] font-medium text-ink-2 transition-colors hover:bg-sunken hover:text-ink">
               <BookOpen size={18} />사용 설명서
@@ -279,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <BottomNav items={items} view={view} setView={setView} />
+      <BottomNav items={items} view={view} setView={setView} links={quickLinks} />
       <SearchPalette />
       <NotificationGate />
       <NoticeAckGate />
@@ -306,9 +317,10 @@ function LayersLink({ className, iconOnly }: { className?: string; iconOnly?: bo
 }
 
 /** 휴대폰 아래 메뉴: 5개가 넘으면 4개만 두고 나머지는 '더보기'로 */
-function BottomNav({ items, view, setView }: { items: NavItem[]; view: View; setView(v: View): void }) {
+function BottomNav({ items, view, setView, links = [] }: { items: NavItem[]; view: View; setView(v: View): void; links?: { label: string; url: string }[] }) {
   const [more, setMore] = useState(false);
-  const overflow = items.length > 5;
+  // 메뉴 링크가 있으면 '더보기' 안에 둔다
+  const overflow = items.length > 5 || links.length > 0;
   const shown = overflow ? items.slice(0, 4) : items;
   const rest = overflow ? items.slice(4) : [];
   const restActive = rest.some((i) => i.id === view);
@@ -324,6 +336,12 @@ function BottomNav({ items, view, setView }: { items: NavItem[]; view: View; set
                 className={cx('flex h-11 w-full items-center gap-3 rounded-xl px-3 text-[14px] font-semibold', view === it.id ? 'bg-brand-soft text-brand-ink' : 'text-ink-2 hover:bg-sunken')}>
                 {it.icon}{it.label}
               </button>
+            ))}
+            {links.map((l) => (
+              <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" onClick={() => setMore(false)}
+                className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-[14px] font-semibold text-ink-2 hover:bg-sunken">
+                <Link2 size={18} />{l.label}
+              </a>
             ))}
           </div>
         </div>

@@ -17,6 +17,8 @@ import { relativeTime, weekLabel } from '../lib/week';
 import { useStore } from '../state/store';
 import { useExport } from './useExport';
 import { PhotoCount, PhotoStrip } from '../components/Photos';
+import { MemoPanel } from '../components/MemoPanel';
+import { previewOn } from '../lib/preview';
 
 type Filter = 'all' | 'directive' | 'todo';
 type Tab = 'sites' | 'report';
@@ -27,6 +29,8 @@ export function MyWeek() {
   const [filter, setFilter] = useState<Filter>('all');
   const [tab, setTab] = useState<Tab>('sites');
   const [openSites, setOpenSites] = useState<Set<string>>(() => new Set());
+  // 메모를 보고에 넣으면 보고 칸을 새 내용으로 다시 연다
+  const [bump, setBump] = useState(0);
   const dept = snap?.departments.find((d) => d.id === me.departmentId);
   const sites = useMemo(() => (snap ? visibleSites(snap) : []), [snap]);
   if (!snap || !dept) return <div className="flex justify-center py-20"><Spinner /></div>;
@@ -55,7 +59,7 @@ export function MyWeek() {
           <EntryEditor key={`${weekId}-me`} value={mine?.content ?? ''} editable={false} prevContent={personEntry(snap.prevEntries, me.id)?.content} onSave={async () => undefined} />
         ) : (
           <SectionEditor
-            key={`${weekId}-me`}
+            key={`${weekId}-me-${bump}`}
             value={mine?.content ?? ''}
             prevContent={personEntry(snap.prevEntries, me.id)?.content}
             placeholder={'1. 진행한 일\n2. 다음 주 예정\n3. 협조가 필요한 일'}
@@ -153,6 +157,16 @@ export function MyWeek() {
           </div>
 
         </>
+      )}
+
+      {previewOn() && (
+        <MemoPanel className="mt-6" insertLabel={siteWriter ? '부서 업무보고에 넣기' : '이번 주 보고에 넣기'}
+          onInsert={locked ? undefined : async (text) => {
+            const cur = (mine?.content ?? '').trimEnd();
+            await saveEntry({ weekId, kind: 'dept', siteId: null, departmentId: dept.id, authorId: me.id, content: cur ? `${cur}\n${text}` : text });
+            setBump((n) => n + 1);
+            if (siteWriter) setTab('report');
+          }} />
       )}
 
       <p className="mt-8 text-center text-[12px] text-ink-3">{weekLabel(weekId)} · 입력한 내용은 자동 저장되며 마감 후에도 고칠 수 있습니다</p>

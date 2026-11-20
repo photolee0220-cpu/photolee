@@ -1,6 +1,6 @@
 import type {
   AiSummary, AppSettings, Attachment, Comment, Department, Directive, Entry, Grant, Member, NewAttachmentInput, NewMemberInput, NewPhotoInput, Photo, SaveDirectiveInput, SaveEntryInput, Site, Snapshot, StageDef, StorageUsage, WeekId, BackupInfo, DirectiveStatus, EntryVersion, SiteSummary, SiteField, PendingFeedback, MediaItem,
-  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus, SearchDoc, AskAnswer,
+  CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus, SearchDoc, AskAnswer, MemoData, YouTubeVideo,
 } from './types';
 import type { TalkApi } from './talkTypes';
 
@@ -91,6 +91,15 @@ export interface Api {
     /** from(포함) 이후의 주간·일일보고와 지시 (부서원 보고는 제외) */
     corpus(from: string): Promise<SearchDoc[]>;
     answer(prompt: string): Promise<AskAnswer>;
+  };
+  /** 나만 보는 메모 (본인만 읽고 쓴다) */
+  memo: {
+    load(): Promise<MemoData>;
+    save(m: MemoData): Promise<MemoData>;
+  };
+  /** 사닥다리 유튜브 최근 영상 */
+  youtube: {
+    videos(channelUrl: string): Promise<YouTubeVideo[]>;
   };
   /** 공유 캘린더 */
   calendar: {

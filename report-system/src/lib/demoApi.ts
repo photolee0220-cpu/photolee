@@ -8,7 +8,7 @@ import { wroteEntry } from './derive';
 import { createDemoTalk, resetDemoTalk } from './demoTalk';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable, triggerDownload } from './fileTypes';
-import { DEFAULT_STAGES, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type CalendarEvent, type DayStatus, type DailyComment, type DailyPhoto, type DailyReport, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
+import { DEFAULT_STAGES, type MemoData, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type CalendarEvent, type DayStatus, type DailyComment, type DailyPhoto, type DailyReport, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
 
 /** 브라우저 안에서만 동작하는 체험용 서버. 실제 서버(Supabase)와 같은 권한 규칙을 따른다 */
 
@@ -473,7 +473,39 @@ export const demoApi: Api = {
 
   async getSettings() {
     me();
-    return delay(structuredClone(state.settings));
+    return delay(structuredClone({ youtubeUrl: 'https://www.youtube.com/@SADAKDARITV', links: [], ...state.settings }));
+  },
+
+  memo: {
+    async load() {
+      const m = me();
+      let d: MemoData = { text: '', todos: [], updatedAt: null };
+      try { d = JSON.parse(safeGet(`${KEY}-memo-${m.id}`) ?? '') as MemoData; } catch { /* 처음 */ }
+      if (!safeGet(`${KEY}-memo-${m.id}`) && m.id === 'm_a') {
+        // 체험판 견본: 홍길동 이사의 메모
+        d = { text: '다음 주 회의 전에 설계변경 물량 다시 확인\n라마바 추가공사 견적서 금요일까지', todos: [
+          { id: 't1', text: '가나다교회 레미콘 2차 업체 계약서 받기', done: false, remindAt: `${shiftDay(demoToday, 3)}T09:00` },
+          { id: 't2', text: '협력업체 기성 서류 3건 결재 올리기', done: true, remindAt: null },
+          { id: 't3', text: '다음 주 공정회의 자료 준비', done: false, remindAt: null },
+        ], updatedAt: null };
+      }
+      return delay(d);
+    },
+    async save(d) {
+      const m = me();
+      const next = { ...d, updatedAt: new Date().toISOString() };
+      if (!safeSet(`${KEY}-memo-${m.id}`, JSON.stringify(next))) throw new ApiError('저장하지 못했습니다.');
+      return delay(next);
+    },
+  },
+
+  youtube: {
+    async videos() {
+      me();
+      // 체험판은 유튜브에 연결하지 않고 견본 목록을 보여 준다
+      const titles = ['교회 건축 현장 이야기 — 설계부터 준공까지', '예배당 리모델링 전후 비교', '현장 소장 인터뷰: 안전이 먼저입니다', '교회 건축 상담 Q&A', '준공 감사예배 스케치', '사닥다리가 일하는 방식'];
+      return delay(titles.map((t, i) => ({ id: `demo${i + 1}`, title: `[견본] ${t}`, published: new Date(Date.now() - (i * 9 + 2) * 86400000).toISOString(), thumbnail: `${import.meta.env.BASE_URL}demo/photo-${(i % 6) + 1}.jpg` })));
+    },
   },
 
   daily: {
@@ -801,7 +833,7 @@ export const demoApi: Api = {
     },
     async saveSettings(next) {
       requireAdmin();
-      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice, noticeVersion: next.noticeVersion ?? state.settings.noticeVersion ?? 1, ackEnabled: next.ackEnabled ?? state.settings.ackEnabled ?? false };
+      state.settings = { summaryModel: summaryModel(next.summaryModel).id, layersUrl: (next.layersUrl ?? '').trim(), ai: next.ai, reportNotice: next.reportNotice, noticeVersion: next.noticeVersion ?? state.settings.noticeVersion ?? 1, ackEnabled: next.ackEnabled ?? state.settings.ackEnabled ?? false, youtubeUrl: next.youtubeUrl ?? state.settings.youtubeUrl, links: next.links ?? state.settings.links ?? [] };
       persist();
       return structuredClone(state.settings);
     },

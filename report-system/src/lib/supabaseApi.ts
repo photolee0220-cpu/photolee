@@ -397,6 +397,15 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
 
     talk,
 
+    // 아래 둘은 체험판 확인 뒤 서버에 붙인다
+    memo: {
+      async load() { return { text: '', todos: [], updatedAt: null }; },
+      async save() { throw new ApiError('준비 중인 기능입니다.'); },
+    },
+    youtube: {
+      async videos() { throw new ApiError('준비 중인 기능입니다.'); },
+    },
+
     subscribe(fn) {
       let t: ReturnType<typeof setTimeout> | undefined;
       const debounced = () => { clearTimeout(t); t = setTimeout(fn, 400); };

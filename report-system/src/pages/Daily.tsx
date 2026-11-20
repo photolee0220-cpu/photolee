@@ -16,6 +16,8 @@ import { DAY_STATUS, type Affiliation, type DailyComment, type DailyPhoto, type 
 import { dayLabel, dowOf, relativeTime, shiftDay, todayIso } from '../lib/week';
 import { useStore } from '../state/store';
 import { useFollowToday } from '../lib/useToday';
+import { MemoPanel } from '../components/MemoPanel';
+import { previewOn } from '../lib/preview';
 
 /* ───────────── 데이터 ───────────── */
 
@@ -108,6 +110,8 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
   const kind = affiliationOf(me);
   const myRows = data.reports.filter((r) => r.authorId === me.id);
   const [added, setAdded] = useState<string[]>([]);
+  // 메모를 보고에 넣으면 보고 칸을 새 내용으로 다시 연다
+  const [bump, setBump] = useState(0);
   useEffect(() => setAdded([]), [date]);
   if (!snap) return null;
   const sites = byId(snap.sites);
@@ -118,6 +122,14 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
     setData({ ...data, reports: r ? [...rest, r] : rest });
   };
   const content = (siteId: string | null) => myRows.find((r) => r.siteId === siteId)?.content ?? '';
+  /** 메모 → 일일보고: 현장 직원은 근무 현장 칸, 본사는 일일보고 칸 맨 아래에 붙인다 */
+  const insertMemo = async (text: string) => {
+    const target = kind === 'site' ? me.homeSiteId ?? null : null;
+    const cur = content(target).trimEnd();
+    await save(target)(cur ? `${cur}\n${text}` : text);
+    setBump((n) => n + 1);
+  };
+  const memo = previewOn() ? <MemoPanel className="mt-4" onInsert={editable ? insertMemo : undefined} insertLabel="일일보고에 넣기" /> : null;
   const comments = data.comments.filter((c) => c.memberId === me.id);
   const written = wrote(data, me.id);
   const internalTo = isInternalMember(me, snap.departments) ? snap.members.find((m) => m.id === snap.departments.find((d) => d.id === me.departmentId)?.headId) : undefined;
@@ -135,13 +147,14 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
   if (kind === 'site') {
     const site = me.homeSiteId ? sites.get(me.homeSiteId) : undefined;
     return (
+      <>
       <Card className="p-5">
         {header}
         {!site ? (
           <p className="rounded-xl bg-note px-4 py-3 text-[13.5px] text-note-ink">근무 현장이 정해지지 않았습니다. 관리자에게 소속 현장 지정을 요청해 주세요.</p>
         ) : (
           <SiteBlockTitle site={site}>
-            <EntryEditor key={`${date}-${site.id}`} value={content(site.id)} editable={editable} onSave={save(site.id)}
+            <EntryEditor key={`${date}-${site.id}-${bump}`} value={content(site.id)} editable={editable} onSave={save(site.id)}
               placeholder={'오늘 작업 내용, 투입 인원·장비, 특이사항, 내일 계획 등을 적어 주세요'} />
             <DailyPhotos date={date} siteId={site.id} authorId={me.id} photos={data.photos} editable={editable} onChanged={reload} />
           </SiteBlockTitle>
@@ -149,6 +162,8 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
         {editable && <ReportNotice className="mt-3" />}
         <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} written={written} />
       </Card>
+      {memo}
+      </>
     );
   }
 
@@ -161,10 +176,11 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
   };
 
   return (
+    <>
     <Card className="p-5">
       {header}
       <p className="mb-1.5 text-[13px] font-bold text-ink-2">일일보고</p>
-      <EntryEditor key={`${date}-general`} value={content(null)} editable={editable} onSave={save(null)}
+      <EntryEditor key={`${date}-general-${bump}`} value={content(null)} editable={editable} onSave={save(null)}
         placeholder="오늘 진행한 업무, 특이사항, 내일 계획 등을 적어 주세요" />
       <DailyPhotos date={date} siteId={null} authorId={me.id} photos={data.photos} editable={editable} onChanged={reload} />
 
@@ -197,6 +213,8 @@ function MyDaily({ date, data, setData, reload }: { date: string; data: DailySna
       {editable && <ReportNotice className="mt-4" />}
       <DailyFeedback date={date} member={me} comments={comments} onChanged={reload} written={written} />
     </Card>
+    {memo}
+    </>
   );
 }
 

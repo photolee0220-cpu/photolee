@@ -13,10 +13,11 @@ import { buildMediaZip, downloadMediaZip, estimateBytes, zipFileName } from '../
 import { SUMMARY_MODELS } from '../../lib/models';
 import { DEFAULT_AI, DEFAULT_REPORT_NOTICE, settingsChanged, useAppSettings } from '../../lib/settings';
 import { writesDaily, writesWeekly } from '../../lib/access';
-import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage, type Affiliation } from '../../lib/types';
+import { isBuildStage, SITE_TAGS, type BackupInfo, type MediaItem, type SiteField, type WeekId, type StageDef, type Department, type Member, type Site, type Stage, type StorageUsage, type Affiliation, type AppSettings, type QuickLink } from '../../lib/types';
 import { currentWeekId, formatDate, parseIsoDate, shiftWeek, toIsoDate, weekLabel, weekLabelLong } from '../../lib/week';
 import { defaultView, useStore } from '../../state/store';
 import { useExport } from '../useExport';
+import { previewOn } from '../../lib/preview';
 import { AdminRooms } from '../talk/RoomEditor';
 import { talkAvailable } from '../talk/useTalk';
 
@@ -1134,19 +1135,26 @@ function AiSettings() {
   const [version, setVersion] = useState(1);
   const [ackEnabled, setAckEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
+  // 이 화면에 칸이 없는 설정(유튜브 주소·메뉴 링크 등)도 저장할 때 그대로 지킨다
+  const [full, setFull] = useState<AppSettings | null>(null);
+  const [youtube, setYoutube] = useState('');
+  const [links, setLinks] = useState<QuickLink[]>([]);
   useEffect(() => {
     api.getSettings().then((s) => {
+      setFull(s); setYoutube(s.youtubeUrl ?? ''); setLinks(s.links ?? []);
       setModel(s.summaryModel); setLayers(s.layersUrl ?? ''); setAi({ ...DEFAULT_AI, ...(s.ai ?? {}) }); setNotice(s.reportNotice ?? DEFAULT_REPORT_NOTICE); setVersion(s.noticeVersion ?? 1); setAckEnabled(!!s.ackEnabled);
     }).catch(() => setModel(SUMMARY_MODELS[0].id));
   }, []);
 
-  const save = async (next: { summaryModel?: string; layersUrl?: string; ai?: typeof ai; reportNotice?: string; noticeVersion?: number; ackEnabled?: boolean }, msg: string) => {
+  const save = async (next: { summaryModel?: string; layersUrl?: string; ai?: typeof ai; reportNotice?: string; noticeVersion?: number; ackEnabled?: boolean; youtubeUrl?: string; links?: QuickLink[] }, msg: string) => {
     setSaving(true);
     try {
       const s = await api.admin.saveSettings({
+        ...(full ?? {}), youtubeUrl: next.youtubeUrl ?? youtube, links: next.links ?? links,
         summaryModel: next.summaryModel ?? model ?? SUMMARY_MODELS[0].id, layersUrl: next.layersUrl ?? layers,
         ai: next.ai ?? ai, reportNotice: next.reportNotice ?? notice, noticeVersion: next.noticeVersion ?? version, ackEnabled: next.ackEnabled ?? ackEnabled,
       });
+      setFull(s); setYoutube(s.youtubeUrl ?? ''); setLinks(s.links ?? []);
       setAckEnabled(!!s.ackEnabled);
       setVersion(s.noticeVersion ?? next.noticeVersion ?? version);
       setModel(s.summaryModel);
@@ -1217,6 +1225,34 @@ function AiSettings() {
         <Input id="layers-url" value={layers} onChange={(e) => setLayers(e.target.value)} placeholder="https://..." className="!w-80 max-w-full" />
         <Button type="submit" disabled={saving || (!!layers.trim() && !/^https:\/\//.test(layers.trim()))}>저장</Button>
       </form>
+
+      {previewOn() && (
+        <>
+          <h2 className="mt-10 text-[18px] font-extrabold">사닥다리 유튜브</h2>
+          <p className="mb-3 text-[13px] text-ink-3">메뉴의 '사닥다리 유튜브'에서 이 채널의 최근 영상을 보여 줍니다.</p>
+          <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void save({ youtubeUrl: youtube.trim() }, '유튜브 채널 주소를 저장했습니다'); }}>
+            <Input id="youtube-url" value={youtube} onChange={(e) => setYoutube(e.target.value)} placeholder="https://www.youtube.com/@채널이름" className="!w-80 max-w-full" />
+            <Button type="submit" disabled={saving || (!!youtube.trim() && !/^https:\/\/(www\.)?youtube\.com\//.test(youtube.trim()))}>저장</Button>
+          </form>
+
+          <h2 className="mt-10 text-[18px] font-extrabold">메뉴 링크</h2>
+          <p className="mb-3 text-[13px] text-ink-3">전 직원 메뉴 아래쪽에 보이는 바로가기입니다. 회사 홈페이지, 다우오피스처럼 자주 가는 주소를 넣으세요. 누르면 새 창으로 열립니다.</p>
+          <div className="space-y-2">
+            {links.map((l, i) => (
+              <div key={i} className="flex flex-wrap gap-2">
+                <Input value={l.label} onChange={(e) => setLinks(links.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} placeholder="이름 (예: 다우오피스)" className="!w-44" />
+                <Input value={l.url} onChange={(e) => setLinks(links.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} placeholder="https://..." className="!w-80 max-w-full" />
+                <IconButton label="빼기" onClick={() => setLinks(links.filter((_, j) => j !== i))}><Trash2 size={16} /></IconButton>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" tone="ghost" onClick={() => setLinks([...links, { label: '', url: '' }])}><Plus size={15} />링크 추가</Button>
+              <Button type="button" disabled={saving || links.some((l) => !l.label.trim() || !/^https:\/\//.test(l.url.trim()))}
+                onClick={() => void save({ links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })) }, '메뉴 링크를 저장했습니다')}>저장</Button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

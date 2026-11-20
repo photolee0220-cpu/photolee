@@ -5,7 +5,7 @@ import { currentWeekId } from '../lib/week';
 import { onOpen, peekOpen } from '../lib/deepLink';
 
 export type DiffMode = 'off' | 'highlight' | 'only';
-export type View = 'dashboard' | 'talk' | 'daily' | 'team' | 'calendar' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
+export type View = 'dashboard' | 'talk' | 'youtube' | 'daily' | 'team' | 'calendar' | 'people' | 'mine' | 'report' | 'directives' | 'shared' | 'history' | 'admin';
 export type Drawer = { type: 'site'; id: string } | { type: 'person'; id: string } | { type: 'writers' } | { type: 'feedback' } | { type: 'directives' } | null;
 type Toast = { id: number; text: string; tone: 'ok' | 'error' };
 

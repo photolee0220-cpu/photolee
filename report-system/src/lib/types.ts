@@ -393,7 +393,25 @@ export interface AppSettings {
   noticeVersion?: number;
   /** 첫 로그인 작성 안내 확인을 받을지 (기본 꺼짐: 규칙이 정해지면 관리자가 켠다) */
   ackEnabled?: boolean;
+  /** 사닥다리 유튜브 채널 주소 (메뉴의 '사닥다리 유튜브') */
+  youtubeUrl?: string;
+  /** 메뉴에 넣는 자주 쓰는 링크 (관리자가 넣고 뺀다) */
+  links?: QuickLink[];
 }
+
+export interface QuickLink { label: string; url: string }
+
+/** 나만 보는 메모: 할 일 목록 + 자유 메모 */
+export interface MemoTodo {
+  id: string;
+  text: string;
+  done: boolean;
+  /** 이때 휴대폰 알림 (직접 정한 날짜·시간) */
+  remindAt: string | null;
+}
+export interface MemoData { text: string; todos: MemoTodo[]; updatedAt: string | null }
+
+export interface YouTubeVideo { id: string; title: string; published: string; thumbnail: string }
 
 export interface Seed {
   reportDate: WeekId;
