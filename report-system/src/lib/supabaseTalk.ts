@@ -201,9 +201,8 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
       return toMessage(msg, await sign(attachments.map((a) => a.path)));
     },
 
-    // 아래 넷은 체험판 확인 뒤 서버에 붙인다
+    // 아래 셋은 체험판 확인 뒤 서버에 붙인다
     async searchMessages() { throw new ApiError('준비 중인 기능입니다.'); },
-    async remindUnread() { throw new ApiError('준비 중인 기능입니다.'); },
     async note() { throw new ApiError('준비 중인 기능입니다.'); },
     async setStarred() { throw new ApiError('준비 중인 기능입니다.'); },
 

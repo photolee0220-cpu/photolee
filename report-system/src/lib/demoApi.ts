@@ -59,7 +59,7 @@ function normalize(st: DemoState): DemoState {
   st.history ??= [];
   st.siteFields ??= structuredClone(DEFAULT_SITE_FIELDS);
   st.sites.forEach((s) => { s.extra ??= {}; });
-  st.members.forEach((m) => { m.isExecutive ??= false; m.affiliation ??= 'hq'; m.homeSiteId ??= null; m.dailyEnabled ??= true; m.noticeAckVersion ??= 1; });
+  st.members.forEach((m) => { m.isExecutive ??= false; m.affiliation ??= 'hq'; m.homeSiteId ??= null; m.dailyEnabled ??= true; m.weeklyEnabled ??= true; m.noticeAckVersion ??= 1; });
   st.dayStatus ??= structuredClone((seed as Seed).dayStatus ?? []);
   // 예전 체험판 데이터에는 일일보고·일정이 없으므로 견본을 채운다
   st.daily ??= structuredClone((seed as Seed).daily ?? []);
@@ -783,7 +783,7 @@ export const demoApi: Api = {
       const m: Member = {
         id: newId('m'), username: input.username, name: input.name, title: input.title, departmentId: input.departmentId,
         isCeo: input.isCeo, isAdmin: input.isAdmin, isExecutive: input.isExecutive, active: true, mustChangePassword: true,
-        affiliation: input.affiliation, homeSiteId: input.affiliation === 'site' ? input.homeSiteId : null, dailyEnabled: input.dailyEnabled,
+        affiliation: input.affiliation, homeSiteId: input.affiliation === 'site' ? input.homeSiteId : null, dailyEnabled: input.dailyEnabled, weeklyEnabled: input.weeklyEnabled,
       };
       state.members.push(m);
       state.passwords[m.username] = input.password;

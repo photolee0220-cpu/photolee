@@ -237,8 +237,6 @@ export interface TalkApi {
   hideMessage(id: string, hidden: boolean): Promise<void>;
   /** 내가 들어 있는 모든 방의 대화에서 찾기 (최신순) */
   searchMessages(q: string): Promise<ChatMessage[]>;
-  /** 이 메시지를 아직 안 읽은 사람에게 다시 알림 (보낸 사람·대표·관리자). 알린 사람 수 */
-  remindUnread(messageId: string): Promise<number>;
   /** 방에 안내 한 줄 남기기 (일정 등록 알림 등) */
   note(roomId: string, text: string, replyToId?: string | null): Promise<void>;
   /** 방을 내 목록 맨 위에 고정 */

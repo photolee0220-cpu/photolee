@@ -47,8 +47,12 @@ export function useStore(): Store {
 
 export function defaultView(m: Member): View {
   if (m.isCeo || m.isExecutive) return 'dashboard';
-  if (m.departmentId) return m.dailyEnabled === false ? 'mine' : 'daily';
-  return 'dashboard';
+  if (m.departmentId) {
+    if (m.dailyEnabled !== false) return 'daily';
+    // 보고를 안 쓰는 직원(채팅·공지만)은 소통부터
+    return m.weeklyEnabled === false ? 'talk' : 'mine';
+  }
+  return m.isAdmin ? 'dashboard' : 'talk';
 }
 
 export function StoreProvider({ me, onSignOut, onSwitch, children }: {

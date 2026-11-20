@@ -18,7 +18,7 @@ const toDept = (r: Row): Department => ({ id: r.id, name: r.name, sort: r.sort, 
 const toMember = (r: Row): Member => ({
   id: r.id, username: r.username, name: r.name, title: r.title, departmentId: r.department_id,
   isCeo: r.is_ceo, isAdmin: r.is_admin, isExecutive: !!r.is_executive, active: r.active, mustChangePassword: r.must_change_password,
-  affiliation: r.affiliation ?? 'hq', homeSiteId: r.home_site_id ?? null, dailyEnabled: r.daily_enabled !== false,
+  affiliation: r.affiliation ?? 'hq', homeSiteId: r.home_site_id ?? null, dailyEnabled: r.daily_enabled !== false, weeklyEnabled: r.weekly_enabled !== false,
   noticeAckVersion: r.notice_ack_version ?? 0, noticeAckAt: r.notice_ack_at ?? null,
 });
 const toDaily = (r: Row): DailyReport => ({
@@ -660,7 +660,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         if (before.active !== m.active) await adminCall({ action: 'set_active', memberId: m.id, active: m.active });
         const r = check(await sb.from('members').update({
           name: m.name, title: m.title, department_id: m.departmentId, is_admin: m.isAdmin, is_ceo: m.isCeo, is_executive: m.isExecutive,
-          affiliation: m.affiliation ?? 'hq', home_site_id: m.affiliation === 'site' ? m.homeSiteId ?? null : null, daily_enabled: m.dailyEnabled !== false,
+          affiliation: m.affiliation ?? 'hq', home_site_id: m.affiliation === 'site' ? m.homeSiteId ?? null : null, daily_enabled: m.dailyEnabled !== false, weekly_enabled: m.weeklyEnabled !== false,
         }).eq('id', m.id).select().single());
         return toMember(r);
       },

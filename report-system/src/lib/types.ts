@@ -86,6 +86,8 @@ export interface Member {
   homeSiteId?: string | null;
   /** 일일보고 작성 대상 (관리자가 끌 수 있다) */
   dailyEnabled?: boolean;
+  /** 주간보고 작성 대상 (관리자가 끌 수 있다. 끄면 미작성 집계·마감 알림에서 빠진다) */
+  weeklyEnabled?: boolean;
   /** 업무보고 작성 안내를 확인한 번호와 시각 */
   noticeAckVersion?: number;
   noticeAckAt?: string | null;
@@ -462,6 +464,7 @@ export interface NewMemberInput {
   affiliation: Affiliation;
   homeSiteId: string | null;
   dailyEnabled: boolean;
+  weeklyEnabled: boolean;
 }
 
 /** 대표님 검색·AI 질문에 쓰는 보고 한 칸 */

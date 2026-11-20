@@ -1,6 +1,6 @@
 import {
   Bell, BellOff, Church, ClipboardCheck, Copy, CornerUpLeft, FileText, HardHat, MessageCircle, MoreHorizontal, Paperclip, Pencil, Pin, Plus,
-  Search, Send, Settings2, ShieldAlert, Trash2, Users, X, Eye, EyeOff, FolderOpen, Star, CalendarPlus, BellRing,
+  Search, Send, Settings2, ShieldAlert, Trash2, Users, X, Eye, EyeOff, FolderOpen, Star, CalendarPlus,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../lib/client';
@@ -344,10 +344,6 @@ export function Conversation({ summary, query = '', inquiryId, onRoom }: { summa
           me.isAdmin && !menu.msg.deleted && !menu.msg.system && { icon: menu.msg.hidden ? <Eye size={16} /> : <EyeOff size={16} />, label: menu.msg.hidden ? '다시 보이기 (관리자)' : '가리기 (관리자)', run: () => void act(() => api.talk.hideMessage(menu.msg.id, !menu.msg.hidden)) },
           me.isAdmin && !menu.msg.deleted && { icon: <Trash2 size={16} />, label: '지우기 (관리자)', danger: true, run: () => { if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) void act(() => api.talk.deleteMessage(menu.msg.id)); } },
           talkExtras() && !menu.msg.system && !menu.msg.deleted && !!menu.msg.text && { icon: <CalendarPlus size={16} />, label: '일정으로 등록', run: () => setEventOf(menu.msg) },
-          talkExtras() && !menu.msg.system && !menu.msg.deleted && (menu.msg.authorId === me.id || me.isCeo || me.isAdmin) && unreadFor(menu.msg) > 0 && room.kind !== 'dm' && {
-            icon: <BellRing size={16} />, label: `안 읽은 ${unreadFor(menu.msg)}명에게 다시 알림`,
-            run: () => void api.talk.remindUnread(menu.msg.id).then((n) => toast(`${n}명에게 다시 알림을 보냈습니다.`)).catch((e) => toast(e.message, 'error')),
-          },
           menu.msg.authorId !== me.id && room.kind !== 'dm' && !menu.msg.system && { icon: <MessageCircle size={16} />, label: `${members.get(menu.msg.authorId)?.name ?? ''}님과 1:1`, run: () => void api.talk.openDm(menu.msg.authorId).then(async (r) => { await refresh(); onRoom(r.id); }) },
         ].filter(Boolean) as MenuItem[]} />
       )}

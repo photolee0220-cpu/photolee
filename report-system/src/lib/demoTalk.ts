@@ -309,15 +309,6 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 60));
     },
 
-    async remindUnread(messageId) {
-      const m = ctx.me();
-      const msg = st.messages.find((x) => x.id === messageId);
-      if (!msg) throw new ApiError('메시지를 찾을 수 없습니다.');
-      const r = roomFor(msg.roomId, m);
-      if (msg.authorId !== m.id && !isTop(m)) throw new ApiError('보낸 사람과 대표님·관리자만 다시 알릴 수 있습니다.');
-      return delay(r.memberIds.filter((id) => id !== msg.authorId && (st.reads[r.id]?.[id] ?? '') < msg.createdAt).length);
-    },
-
     async note(roomId, text, replyToId = null) {
       const m = ctx.me();
       roomFor(roomId, m);

@@ -523,7 +523,7 @@ function MembersAdmin() {
                   <td className="px-3 py-2.5 font-mono text-[12.5px] text-ink-2">{m.username}</td>
                   <td className="px-3 py-2.5">{depts.get(m.departmentId ?? '')?.name ?? <span className="text-ink-3">—</span>}
                     {m.affiliation === 'site' && <span className="mt-0.5 block text-[12px] font-semibold text-brand-ink">현장 · {snap.sites.find((s) => s.id === m.homeSiteId)?.name ?? '현장 미지정'}</span>}</td>
-                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}{m.dailyEnabled === false && <Badge>일일보고 안 씀</Badge>}{snap.departments.some((d) => d.internalReport && d.headId === m.id) && <Badge tone="note">부서장</Badge>}</span>
+                  <td className="px-3 py-2.5"><span className="flex gap-1">{m.isCeo && <Badge tone="brand">대표</Badge>}{m.isExecutive && <Badge tone="brand">열람·코멘트</Badge>}{m.isAdmin && <Badge tone="warn">관리자</Badge>}{!m.isCeo && !m.isAdmin && !m.isExecutive && <span className="text-ink-3">직원</span>}{m.weeklyEnabled === false && <Badge>주간보고 안 씀</Badge>}{m.dailyEnabled === false && <Badge>일일보고 안 씀</Badge>}{snap.departments.some((d) => d.internalReport && d.headId === m.id) && <Badge tone="note">부서장</Badge>}</span>
                     {ackEnabled && (writesDaily(m) || writesWeekly(m, snap.departments)) && (
                       <span className="mt-0.5 block text-[11.5px] text-ink-3">{m.noticeAckAt && (m.noticeAckVersion ?? 0) >= noticeVersion ? `안내 확인 ${formatDate(m.noticeAckAt)}` : <span className="font-semibold text-warn">안내 확인 전</span>}</span>
                     )}</td>
@@ -553,7 +553,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
   const [m, set] = useState({
     name: member?.name ?? '', title: member?.title ?? '', username: member?.username ?? '', password: genPassword(),
     departmentId: member?.departmentId ?? '', isAdmin: member?.isAdmin ?? false, isCeo: member?.isCeo ?? false, isExecutive: member?.isExecutive ?? false, active: member?.active ?? true,
-    affiliation: (member?.affiliation ?? 'hq') as Affiliation, homeSiteId: member?.homeSiteId ?? '', dailyEnabled: member?.dailyEnabled ?? true,
+    affiliation: (member?.affiliation ?? 'hq') as Affiliation, homeSiteId: member?.homeSiteId ?? '', dailyEnabled: member?.dailyEnabled ?? true, weeklyEnabled: member?.weeklyEnabled ?? true,
   });
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null);
   const [newDept, setNewDept] = useState<{ name: string; writesSites: boolean } | null>(null);
@@ -577,11 +577,11 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
       const renamed = m.username !== member.username;
       const ok = await run(async () => {
         if (renamed) await api.admin.changeUsername(member.id, m.username);
-        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null, dailyEnabled: m.dailyEnabled });
+        await api.admin.updateMember({ ...member, username: m.username, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, active: m.active, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null, dailyEnabled: m.dailyEnabled, weeklyEnabled: m.weeklyEnabled });
       }, renamed ? `저장했습니다. 이제 아이디 ${m.username}(으)로 로그인합니다` : '저장했습니다');
       if (ok) onClose();
     } else {
-      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null, dailyEnabled: m.dailyEnabled }), `${m.name}님 계정을 만들었습니다`);
+      const ok = await run(() => api.admin.createMember({ username: m.username, password: m.password, name: m.name, title: m.title, departmentId: m.departmentId || null, isAdmin: m.isAdmin, isCeo: m.isCeo, isExecutive: m.isExecutive, affiliation: m.affiliation, homeSiteId: m.affiliation === 'site' ? m.homeSiteId || null : null, dailyEnabled: m.dailyEnabled, weeklyEnabled: m.weeklyEnabled }), `${m.name}님 계정을 만들었습니다`);
       if (ok) setCreated({ username: m.username, password: m.password });
     }
   };
@@ -651,6 +651,7 @@ function MemberForm({ member, onClose }: { member: Member | null; onClose(): voi
           </Field>
         </div>
         <div className="space-y-3 sm:col-span-2">
+          <Toggle checked={m.weeklyEnabled} onChange={(v) => up('weeklyEnabled', v)} label={<>주간보고 작성 대상 <span className="text-ink-3">끄면 주간보고 칸·미작성 집계·마감 알림에서 빠집니다 (채팅·공지만 쓰는 직원)</span></>} />
           <Toggle checked={m.dailyEnabled} onChange={(v) => up('dailyEnabled', v)} label={<>일일보고 작성 대상 <span className="text-ink-3">끄면 일일보고 칸·미작성 집계·마감 알림에서 빠집니다</span></>} />
           <Toggle checked={m.isAdmin} onChange={(v) => up('isAdmin', v)} disabled={isSelf} label={<>관리자 <span className="text-ink-3">현장·인원·부서 관리, 전체 엑셀</span></>} />
           <Toggle checked={m.isCeo} onChange={(v) => up('isCeo', v)} label={<>대표 <span className="text-ink-3">전체 열람, 지시사항·피드백 입력, 회계 현황</span></>} />
