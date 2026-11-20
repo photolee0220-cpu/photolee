@@ -3,8 +3,8 @@ import { blobToDataUrl, shrinkImage } from './image';
 import { pdfText } from './pdfPages';
 import { ruleText, safetyHits, stripMarks as strip } from './safetyRules';
 import {
-  DEFAULT_TALK_SETTINGS, INQUIRY_STAGES, MINUTES, isBuiltinRoom, type ChatAttachment, type ChatMessage, type ChatRoom, type Inquiry, type Notice,
-  type RoomSummary, type SafetyTip, type SiteDoc, type TalkApi, type TalkSettings,
+  DEFAULT_TALK_SETTINGS, INQUIRY_STAGES, canSeeArchive, MINUTES, isBuiltinRoom, type ChatAttachment, type ChatMessage, type ChatRoom, type Inquiry, type Notice,
+  type ArchiveItem, type RoomSummary, type SafetyTip, type SiteDoc, type TalkApi, type TalkSettings,
 } from './talkTypes';
 import type { CalendarEvent, DailyReport, Department, Member, SearchDoc, Site, StageDef } from './types';
 import sampleText from './demoDocText.json';
@@ -24,12 +24,14 @@ export interface DemoTalkCtx {
   /** 대표님 지시 칸 끝에 한 줄 덧붙인다 (이번 주) */
   appendDirective(target: { memberId: string } | { siteId: string }, line: string): void;
   createSite(s: Site): void;
+  /** 전체 자료실용: 일일보고·주간보고 사진과 첨부 (부서 안 보고는 뺀다) */
+  reportMedia(): ArchiveItem[];
   emit(): void;
   subscribe(fn: () => void): () => void;
 }
 
 interface TalkState {
-  v: 4;
+  v: 5;
   rooms: ChatRoom[];
   messages: ChatMessage[];
   /** roomId → memberId → 마지막으로 읽은 때 */
@@ -56,7 +58,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
   function load(): TalkState {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 4) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
+      if (raw) { const s = JSON.parse(raw) as TalkState; if (s.v === 5) { s.settings = { ...structuredClone(DEFAULT_TALK_SETTINGS), ...s.settings }; return s; } }
     } catch { /* 처음부터 */ }
     return fresh();
   }
@@ -98,6 +100,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       room({ id: 'room_inquiry', kind: 'inquiry', name: '신규 교회건축 문의', memberIds: [...top, ...inDept(deptOf(/CM|견적/))] }, 20),
     ];
     const photo = (n: number) => ({ id: `ph${n}`, name: `현장사진_${n}.jpg`, kind: 'image' as const, url: `${import.meta.env.BASE_URL}demo/photo-${n}.jpg`, size: 35000, width: 800, height: 600 });
+    const pdf = (name: string, file: string, size: number) => ({ id: newId('att'), name, kind: 'file' as const, url: `${import.meta.env.BASE_URL}demo/${file}`, size });
     const say = (roomId: string, authorId: string | undefined, text: string, min: number, extra: Partial<ChatMessage> = {}): ChatMessage | null => (authorId ? {
       id: newId('msg'), roomId, authorId, text, attachments: [], replyToId: null, mentions: [], createdAt: ago(min), editedAt: null, deleted: false,
       inquiryId: null, directive: null, safety: false, system: false, hidden: null, docCategory: null, ...extra,
@@ -117,7 +120,8 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       return { id: newId('inq'), church, region, contactName, phone: '010-0000-0000', scale, budget, timing, source, stage, ownerId: ownerId ?? null, note: '', createdBy: admin ?? ceo ?? '', createdAt: ago(60 * 24 * (idleDays + 6)), updatedAt: t, lastActivityAt: t, siteId: null };
     }
     const messages = [
-      say('room_build', build[0], '이번 주 공정회의 자료 공유드립니다. 수정사항 있으면 오늘 중으로 알려 주세요.', 300),
+      say('room_build', build[0], '이번 주 공정회의 자료 공유드립니다. 수정사항 있으면 오늘 중으로 알려 주세요.', 300, { attachments: [pdf('주간_공정회의자료.pdf', 'weekly-schedule-sample.pdf', 182000)] }),
+      say('room_build', build[1], '협력업체 기성 검토표입니다.', 60 * 24 * 6, { attachments: [pdf('협력업체_기성검토.pdf', 'daily-log-sample.pdf', 96000)] }),
       say('room_build', build[1], '견적 2건은 내일 오전까지 정리하겠습니다.', 260),
       say('room_build', ceo, '레미콘 수급 문제는 오늘 중으로 대안 정리해서 보고해 주세요.', 45),
       say('room_design', design[0], '사아자교회 예배당 색상 B안 3D 이미지 올립니다.', 200),
@@ -131,10 +135,12 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       r1 ? say(r1.id, chief, '어제 현장 사진 올립니다.', 60 * 24 + 30, { attachments: [6, 5].map((n) => photo(n)) }) : null,
       say('room_safety', chief, '난간 보완 사진', 60 * 3 - 2, { attachments: [photo(3)] }),
       r1 ? say(r1.id, build[0], '레미콘 업체 2곳 수급 확인했습니다. 화요일 타설 가능합니다.', 70) : null,
-      r2 ? say(r2.id, chief2, '감리단 지적사항 2건 조치 계획서 제출했습니다.', 60 * 8) : null,
+      r2 ? say(r2.id, chief2, '감리단 지적사항 2건 조치 계획서 제출했습니다.', 60 * 8, { attachments: [pdf('감리지적_조치계획서.pdf', 'minutes-sample.pdf', 240000)] }) : null,
+      r2 ? say(r2.id, chief2, '기초 배근 검측 사진입니다.', 60 * 24 * 2 + 40, { attachments: [3, 5, 6].map((n) => photo(n)) }) : null,
+      r2 ? say(r2.id, chief2, '터파기 마무리했습니다.', 60 * 24 * 5 + 10, { attachments: [1, 2].map((n) => photo(n)) }) : null,
       say('room_inquiry', admin ?? ceo, '거너더교회 전화 문의 접수했습니다. 담당자 배정 부탁드립니다.', 25, { inquiryId: inquiries[2].id }),
       say('room_inquiry', build[0], '자차카교회 담임목사님과 2차 상담 일정 잡았습니다 (다음 주 목요일).', 60 * 48, { inquiryId: inquiries[0].id }),
-      say('room_inquiry', build[0], '머버서교회 제안서 초안 공유드립니다. 검토 부탁드립니다.', 60 * 72, { inquiryId: inquiries[3].id }),
+      say('room_inquiry', build[0], '머버서교회 제안서 초안 공유드립니다. 검토 부탁드립니다.', 60 * 72, { inquiryId: inquiries[3].id, attachments: [pdf('머버서교회_제안서_초안.pdf', 'minutes-sample.pdf', 1240000)] }),
     ].filter(Boolean) as ChatMessage[];
     // 읽음: 대표님은 몇 개를 아직 안 읽은 상태, 나머지는 대부분 읽음
     const reads: TalkState['reads'] = {};
@@ -177,7 +183,7 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       const x = doc('공사일보', day, '공사일보', '', 'daily-log-sample.pdf', chief, i);
       if (x) docs.push(x);
     }
-    return { v: 4, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
+    return { v: 5, rooms, messages, reads, notices, inquiries, docs, tips: {}, settings: structuredClone(DEFAULT_TALK_SETTINGS) };
   }
 
   /* ───────── 권한 ───────── */
@@ -573,6 +579,33 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
       async dismiss(tip) {
         st.tips[tip.id] = 'dismissed';
         save();
+      },
+    },
+
+    archive: {
+      async list() {
+        const m = ctx.me();
+        if (!canSeeArchive(m, st.settings)) throw new ApiError('전체 자료실을 볼 권한이 없습니다.');
+        const rooms = new Map(st.rooms.map((r) => [r.id, r]));
+        const out: ArchiveItem[] = [];
+        for (const x of st.messages) {
+          const r = rooms.get(x.roomId);
+          // 1:1 대화는 두 사람만의 것이라 넣지 않는다
+          if (!r || r.kind === 'dm' || x.deleted || x.hidden) continue;
+          for (const a of x.attachments) {
+            out.push({ id: `${x.id}:${a.id}`, kind: a.kind === 'image' ? 'photo' : 'file', name: a.name, url: a.url, size: a.size, at: x.createdAt, authorId: x.authorId,
+              source: 'chat', siteId: r.siteId, roomId: r.id, roomName: r.name, messageId: x.id, category: x.docCategory });
+          }
+        }
+        for (const d of st.docs) {
+          if (d.messageId) continue; // 채팅으로 올린 것은 위에서 이미 넣었다
+          const ext = /\.[a-z0-9]+$/i.exec(d.fileName)?.[0] ?? '';
+          const name = `${d.title === d.category ? `${d.category}_${d.docDate}` : d.title}${ext}`;
+          out.push({ id: d.id, kind: d.fileType === 'image' ? 'photo' : 'file', name, url: d.url, size: d.size, at: `${d.docDate}T09:00:00`, authorId: d.uploadedBy,
+            source: 'doc', siteId: d.siteId, roomId: null, roomName: null, messageId: null, category: d.category });
+        }
+        out.push(...ctx.reportMedia());
+        return delay(out.sort((a, b) => b.at.localeCompare(a.at)));
       },
     },
 

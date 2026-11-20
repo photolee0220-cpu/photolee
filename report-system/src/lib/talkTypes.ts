@@ -136,6 +136,33 @@ export interface Inquiry {
 }
 
 /** 현장 자료: 회의록·공사일보·주간/월간 공정표 등 (현장방 [자료] 칸과 자료실) */
+/** 전체 자료실 한 칸 */
+export type ArchiveSource = 'chat' | 'doc' | 'daily' | 'weekly';
+export const ARCHIVE_SOURCES: { id: ArchiveSource; label: string }[] = [
+  { id: 'chat', label: '채팅' }, { id: 'doc', label: '현장 서류' }, { id: 'daily', label: '일일보고' }, { id: 'weekly', label: '주간보고' },
+];
+export interface ArchiveItem {
+  id: string;
+  kind: 'photo' | 'file';
+  name: string;
+  url: string;
+  size: number;
+  /** 올린 때 (ISO) */
+  at: string;
+  authorId: string;
+  source: ArchiveSource;
+  siteId: string | null;
+  /** 채팅이면 그 방 (방 이름은 들어가 있지 않은 방이어도 보여 준다) */
+  roomId: string | null;
+  roomName: string | null;
+  messageId: string | null;
+  /** 현장 서류 종류 (회의록·공사일보 …) */
+  category: string | null;
+}
+
+export const canSeeArchive = (m: { id: string; isCeo: boolean; isAdmin: boolean }, s: TalkSettings | undefined) =>
+  m.isCeo || m.isAdmin || !!s?.archiveViewers?.includes(m.id);
+
 export interface SiteDoc {
   id: string;
   siteId: string;
@@ -184,10 +211,12 @@ export interface TalkSettings {
   adminCanNotice: boolean;
   /** 자료 종류 */
   docCategories: string[];
+  /** 전체 자료실(모든 방·보고의 사진과 파일)을 볼 수 있는 사람. 대표님·관리자는 늘 볼 수 있다 */
+  archiveViewers: string[];
 }
 
 export const DEFAULT_TALK_SETTINGS: TalkSettings = {
-  quiet: { enabled: true, from: '22:00', to: '07:00' }, deleteMinutes: 5, adminCanNotice: false, docCategories: [...DEFAULT_DOC_CATEGORIES],
+  quiet: { enabled: true, from: '22:00', to: '07:00' }, deleteMinutes: 5, adminCanNotice: false, docCategories: [...DEFAULT_DOC_CATEGORIES], archiveViewers: [],
 };
 
 /** 처음부터 있는 특별한 방 (관리자는 인원만 넣고 뺀다) */
@@ -280,6 +309,10 @@ export interface TalkApi {
     suggestions(date: string, refresh?: boolean): Promise<SafetyTip[]>;
     send(tip: SafetyTip, text: string, roomIds: string[]): Promise<void>;
     dismiss(tip: SafetyTip): Promise<void>;
+  };
+  /** 전체 자료실: 1:1을 뺀 모든 방의 사진·파일 + 보고 사진·첨부 (대표님·관리자·권한 받은 사람) */
+  archive: {
+    list(): Promise<ArchiveItem[]>;
   };
   admin: {
     /** 1:1을 뺀 모든 방 (관리자) */

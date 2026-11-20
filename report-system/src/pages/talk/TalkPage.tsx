@@ -5,7 +5,7 @@ import { Empty, Segmented, Spinner } from '../../components/ui';
 import { useStore } from '../../state/store';
 import { RoomList, RoomView } from './Chat';
 import { NoticeList } from './Notices';
-import { DocsLibrary } from './Docs';
+import { DocsArea } from './Archive';
 import { noticeOpen, useTalk } from './useTalk';
 import { onOpen, peekOpen, takeOpen } from '../../lib/deepLink';
 
@@ -59,7 +59,7 @@ export function TalkPage() {
         <span className="text-[13px] text-ink-3">공지·채팅방·문의·회의록을 한곳에서</span>
       </PageHeader>
       {tab === 'notice' && <NoticeList notices={data.notices} />}
-      {tab === 'docs' && <DocsLibrary data={data} />}
+      {tab === 'docs' && <DocsArea data={data} onOpenRoom={(id) => { setTab('chat'); setRoomId(id); }} />}
       {tab === 'chat' && (desktop ? (
         <div className="grid h-[calc(100dvh-190px)] min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           <div className="min-h-0 border-r border-line"><RoomList data={data} activeId={roomId} onOpen={(id, q) => setRoomId(id, q)} /></div>

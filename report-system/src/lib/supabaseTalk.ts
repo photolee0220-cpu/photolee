@@ -352,6 +352,11 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
       async dismiss(tip) { check(await sb.from('safety_tips').update({ status: 'dismissed', updated_at: new Date().toISOString() }).eq('id', tip.id)); },
     },
 
+    // 체험판 확인 뒤 서버에 붙인다
+    archive: {
+      async list() { throw new ApiError('준비 중인 기능입니다.'); },
+    },
+
     admin: {
       async rooms() {
         const [rooms, mem] = await Promise.all([

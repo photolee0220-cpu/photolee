@@ -1,4 +1,4 @@
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { FolderLock, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/client';
 import { activeDepartments, byId } from '../../lib/derive';
@@ -6,7 +6,7 @@ import { DEFAULT_TALK_SETTINGS, isBuiltinRoom, type ChatRoom, type TalkSettings 
 import { useStore } from '../../state/store';
 import { Avatar, Button, Card, cx, Field, Input, Modal, Select, Spinner, Toggle } from '../../components/ui';
 import { RoomIcon } from './Chat';
-import { refreshTalk, talkExtras } from './useTalk';
+import { archiveOn, refreshTalk, talkExtras } from './useTalk';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -159,6 +159,7 @@ export function AdminRooms() {
           </ul>
         )}
       </Card>
+      {archiveOn() && <ArchiveAccess settings={settings} onSave={saveSettings} />}
       <Card className="p-5">
         <h3 className="mb-3 text-[16px] font-bold">알림·메시지 설정</h3>
         <div className="space-y-3">
@@ -186,5 +187,47 @@ export function AdminRooms() {
       </Card>
       {edit && <RoomEditor room={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
     </div>
+  );
+}
+
+/** 전체 자료실 볼 수 있는 사람 (대표님·관리자는 늘 볼 수 있다) */
+function ArchiveAccess({ settings, onSave }: { settings: TalkSettings; onSave(s: TalkSettings): void }) {
+  const { snap } = useStore();
+  const members = (snap?.members ?? []).filter((m) => m.active);
+  const depts = activeDepartments(snap!);
+  const viewers = settings.archiveViewers ?? [];
+  const top = members.filter((m) => m.isCeo || m.isAdmin);
+  const granted = viewers.map((id) => members.find((m) => m.id === id)).filter(Boolean) as typeof members;
+  const candidates = members.filter((m) => !m.isCeo && !m.isAdmin && !viewers.includes(m.id));
+  const set = (ids: string[]) => onSave({ ...settings, archiveViewers: ids });
+  const deptName = (id: string | null) => depts.find((d) => d.id === id)?.name ?? '';
+  return (
+    <Card className="p-5">
+      <h3 className="mb-1 flex items-center gap-2 text-[16px] font-bold"><FolderLock size={18} className="text-brand-ink" />전체 자료실 볼 수 있는 사람</h3>
+      <p className="mb-3 text-[13px] text-ink-3">소통 &gt; 자료실의 [전체 사진]·[전체 파일]은 모든 채팅방(1:1 대화 제외)과 일일·주간보고에 올라온 사진과 파일을 한곳에서 봅니다. 대표님과 관리자는 늘 볼 수 있고, 여기에 넣은 사람도 볼 수 있습니다. [현장 서류]는 지금처럼 현장방 인원이 봅니다.</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {top.map((m) => (
+          <span key={m.id} className="flex items-center gap-1.5 rounded-full border border-line bg-sunken py-0.5 pl-0.5 pr-2.5 text-[13px] font-semibold text-ink-2">
+            <Avatar id={m.id} name={m.name} size={22} />{m.name}<span className="font-normal text-ink-3">{m.isCeo ? '대표' : '관리자'} · 늘 볼 수 있음</span>
+          </span>
+        ))}
+        {granted.map((m) => (
+          <span key={m.id} className="flex items-center gap-1.5 rounded-full border border-brand bg-brand py-0.5 pl-0.5 pr-1 text-[13px] font-semibold text-on-brand">
+            <Avatar id={m.id} name={m.name} size={22} />{m.name}<span className="font-normal text-on-brand/80">{m.title}</span>
+            <button aria-label={`${m.name} 권한 빼기`} onClick={() => set(viewers.filter((x) => x !== m.id))} className="ml-0.5 rounded-full p-0.5 hover:bg-white/20"><X size={14} /></button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <Select value="" onChange={(e) => e.target.value && set([...viewers, e.target.value])} className="!h-9 !w-auto min-w-[220px] text-[13px]" aria-label="볼 수 있는 사람 추가">
+          <option value="">+ 사람 추가…</option>
+          {[{ id: null as string | null, name: '부서 없음' }, ...depts].map((d) => {
+            const list = candidates.filter((m) => m.departmentId === d.id);
+            return list.length ? <optgroup key={d.id ?? 'none'} label={d.name}>{list.map((m) => <option key={m.id} value={m.id}>{m.name} {m.title}</option>)}</optgroup> : null;
+          })}
+        </Select>
+        {granted.length > 0 && <span className="text-[12.5px] text-ink-3">{granted.length}명에게 권한을 주었습니다{granted.some((m) => m.departmentId) ? ` (${[...new Set(granted.map((m) => deptName(m.departmentId)).filter(Boolean))].join(', ')})` : ''}</span>}
+      </div>
+    </Card>
   );
 }

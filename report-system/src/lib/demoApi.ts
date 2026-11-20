@@ -6,6 +6,7 @@ import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { shiftDay } from './week';
 import { wroteEntry } from './derive';
 import { createDemoTalk, resetDemoTalk } from './demoTalk';
+import type { ArchiveItem } from './talkTypes';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable, triggerDownload } from './fileTypes';
 import { DEFAULT_STAGES, type MemoData, type AiSummary, type AppSettings, type Attachment, type Comment, type Directive, type Entry, type Member, type Photo, type Seed, type SiteField, type CalendarEvent, type DayStatus, type DailyComment, type DailyPhoto, type DailyReport, type SiteSummary, type Snapshot, type StageDef, type WeekId } from './types';
@@ -715,6 +716,22 @@ export const demoApi: Api = {
       persist();
     },
     createSite(site) { state.sites.push(site); persist(); },
+    reportMedia() {
+      const mon = (w: string) => `${w}T09:00:00`;
+      const items: ArchiveItem[] = [
+        ...state.dailyPhotos.filter((p) => !p.internal).map((p): ArchiveItem => ({ id: p.id, kind: 'photo', name: `일일보고_${p.date}.jpg`, url: p.url, size: 0, at: p.createdAt, authorId: p.authorId, source: 'daily', siteId: p.siteId, roomId: null, roomName: null, messageId: null, category: null })),
+        ...state.photos.map((p): ArchiveItem => ({ id: p.id, kind: 'photo', name: p.caption || '주간보고 사진.jpg', url: p.url, size: 0, at: p.createdAt || mon(p.weekId), authorId: p.uploadedBy, source: 'weekly', siteId: p.siteId, roomId: null, roomName: null, messageId: null, category: null })),
+        ...state.attachments.map((a): ArchiveItem => ({ id: a.id, kind: 'file', name: a.fileName, url: a.dataUrl ?? '', size: a.sizeBytes, at: a.createdAt || mon(a.weekId), authorId: a.authorId ?? a.uploadedBy, source: 'weekly', siteId: a.siteId, roomId: null, roomName: null, messageId: null, category: null })),
+      ];
+      // 체험판 견본: 현장 일일보고에 사진이 붙어 있던 것처럼 보여 준다
+      if (!items.length) {
+        state.daily.filter((r) => r.siteId && !r.internal && r.content.trim()).slice(-14).forEach((r, i) => {
+          items.push({ id: `sample-daily-${r.id}`, kind: 'photo', name: `일일보고_${r.date}.jpg`, url: `${import.meta.env.BASE_URL}demo/photo-${(i % 6) + 1}.jpg`, size: 41000,
+            at: `${r.date}T17:${String(10 + i).padStart(2, '0')}:00`, authorId: r.authorId, source: 'daily', siteId: r.siteId, roomId: null, roomName: null, messageId: null, category: null });
+        });
+      }
+      return items;
+    },
     emit: () => listeners.forEach((l) => l()),
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
   }),
