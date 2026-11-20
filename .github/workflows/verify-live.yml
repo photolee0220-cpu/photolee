@@ -146,6 +146,8 @@ jobs:
           done
           r=$(curl -sS "$URL/rest/v1/members?select=affiliation,home_site_id,daily_enabled&limit=1" "${H[@]}")
           echo "$r" | jq -e '.[0] | has("affiliation") and has("daily_enabled")' >/dev/null && rec "인원 소속·일일보고 대상 칸" 1 "$(echo "$r" | jq -c '.[0] | {affiliation, daily_enabled}')" || rec "인원 소속·일일보고 대상 칸" 0 "$(echo "$r" | head -c 150)"
+          r=$(curl -sS "$URL/rest/v1/members?select=weekly_enabled&limit=1" "${H[@]}")
+          echo "$r" | jq -e '.[0] | has("weekly_enabled")' >/dev/null && rec "주간보고 작성 대상 칸" 1 "ok" || rec "주간보고 작성 대상 칸" 0 "$(echo "$r" | head -c 150)"
           r=$(curl -sS "$URL/rest/v1/departments?select=internal_report,head_id&limit=1" "${H[@]}")
           echo "$r" | jq -e '.[0] | has("internal_report")' >/dev/null && rec "부서 안 보고·부서장 칸" 1 "ok" || rec "부서 안 보고·부서장 칸" 0 "$(echo "$r" | head -c 150)"
           ev=$(curl -sS -X POST "$URL/rest/v1/calendar_events" "${H[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" \
