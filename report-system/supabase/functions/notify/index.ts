@@ -99,6 +99,39 @@ async function send(db: SupabaseClient, memberIds: string[], payload: Payload, k
   return { sent, failed };
 }
 
+/** 회사 유튜브 채널의 최근 영상 (채널 RSS). 한 시간 동안은 저장해 둔 목록을 쓴다 */
+type Video = { id: string; title: string; published: string; thumbnail: string };
+const unesc = (t: string) => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+async function youtube(db: SupabaseClient, channelUrl: string): Promise<{ videos: Video[] } | { error: string }> {
+  const u = channelUrl.trim();
+  if (!/^https:\/\/(www\.|m\.)?youtube\.com\/[@A-Za-z0-9_.\/-]+$/.test(u)) return { error: '유튜브 채널 주소가 맞지 않습니다.' };
+  const { data: cache } = await db.from('app_settings').select('value').eq('key', 'youtube_cache').maybeSingle();
+  const c = cache?.value as { url?: string; at?: number; channelId?: string; videos?: Video[] } | undefined;
+  if (c?.url === u && c.videos && Date.now() - (c.at ?? 0) < 3600000) return { videos: c.videos };
+  try {
+    let channelId = c?.url === u ? c.channelId : undefined;
+    const direct = u.match(/\/channel\/(UC[\w-]{22})/);
+    if (direct) channelId = direct[1];
+    if (!channelId) {
+      const page = await (await fetch(u, { headers: { 'Accept-Language': 'ko', 'User-Agent': 'Mozilla/5.0' } })).text();
+      channelId = page.match(/"(?:externalId|channelId)":"(UC[\w-]{22})"/)?.[1] ?? page.match(/channel\/(UC[\w-]{22})/)?.[1];
+    }
+    if (!channelId) throw new Error('no channel id');
+    const xml = await (await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`)).text();
+    const videos: Video[] = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(([, e]) => ({
+      id: e.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1] ?? '',
+      title: unesc(e.match(/<title>([^<]*)<\/title>/)?.[1] ?? ''),
+      published: e.match(/<published>([^<]+)<\/published>/)?.[1] ?? '',
+      thumbnail: e.match(/<media:thumbnail url="([^"]+)"/)?.[1] ?? '',
+    })).filter((v) => v.id);
+    await db.from('app_settings').upsert({ key: 'youtube_cache', value: { url: u, at: Date.now(), channelId, videos } });
+    return { videos };
+  } catch {
+    if (c?.videos?.length) return { videos: c.videos };
+    return { error: '유튜브에서 영상 목록을 가져오지 못했습니다.' };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const url = Deno.env.get('SUPABASE_URL')!;
@@ -107,7 +140,7 @@ Deno.serve(async (req) => {
   const action = String(input.action ?? '');
 
   // 서버 예약 작업에서 오는 요청
-  if (['deadline', 'feedback', 'daily-deadline', 'daily-feedback', 'chat', 'notice', 'notice-remind', 'inquiry-stale'].includes(action)) {
+  if (['deadline', 'feedback', 'daily-deadline', 'daily-feedback', 'chat', 'notice', 'notice-remind', 'inquiry-stale', 'timed'].includes(action)) {
     const expected = await secret(db, 'cron_secret');
     if (!expected || input.secret !== expected) return json({ error: 'forbidden' }, 403);
 
@@ -169,15 +202,20 @@ Deno.serve(async (req) => {
 
     // 전체 공지: 모든 직원 / 다시 알림: 아직 안 읽거나 확인 안 한 사람
     if (action === 'notice' || action === 'notice-remind') {
-      const { data: n } = await db.from('notices').select('id, title, body, author_id, require_ack').eq('id', input.noticeId).maybeSingle();
+      const { data: n } = await db.from('notices').select('id, title, body, author_id, require_ack, urgent').eq('id', input.noticeId).maybeSingle();
       if (!n) return json({ error: 'not found' }, 404);
+      // 일반 공지는 쉬는 시간에는 알림을 보내지 않는다(화면 배지로는 보인다). 긴급 공지는 언제든 보낸다
+      if (!n.urgent) {
+        const { data: cfg } = await db.from('app_settings').select('value').eq('key', 'talk').maybeSingle();
+        if (inQuiet(cfg?.value?.quiet)) return json({ skipped: 'quiet' });
+      }
       const [{ data: people }, { data: reads }] = await Promise.all([
         db.from('members').select('id').eq('active', true),
         db.from('notice_reads').select('member_id, read_at, ack_at').eq('notice_id', n.id),
       ]);
       const done = new Set((reads ?? []).filter((r) => (n.require_ack ? r.ack_at : r.read_at)).map((r) => r.member_id));
       const targets = (people ?? []).map((p) => p.id).filter((id) => id !== n.author_id && (action === 'notice' || !done.has(id)));
-      const title = `${action === 'notice-remind' ? '[공지 확인 요청] ' : '[공지] '}${plain(n.title)}`;
+      const title = `${n.urgent ? '[긴급] ' : action === 'notice-remind' ? '[공지 확인 요청] ' : '[공지] '}${plain(n.title)}`;
       const r = await send(db, targets, { title, body: n.require_ack ? `확인이 필요한 공지입니다. ${plain(n.body)}` : plain(n.body), tag: `notice-${n.id}`, url: '?open=notice' }, action);
       return json({ targets: targets.length, ...r });
     }
@@ -200,6 +238,38 @@ Deno.serve(async (req) => {
         await db.from('inquiries').update({ stale_notified_at: new Date().toISOString() }).eq('id', q.id);
       }
       return json({ stale: due.length, sent });
+    }
+
+    // 5분마다(보낼 것이 있을 때만): 10분 지나도 확인 안 한 긴급 공지 한 번 더, 때가 된 메모 알림
+    if (action === 'timed') {
+      const now = Date.now();
+      const out = { urgent: 0, memo: 0 };
+      const { data: urg } = await db.from('notices').select('id, title, author_id').eq('urgent', true).is('urgent_reminded_at', null)
+        .lte('created_at', new Date(now - 10 * 60000).toISOString()).gt('created_at', new Date(now - 86400000).toISOString());
+      if (urg?.length) {
+        const { data: people } = await db.from('members').select('id').eq('active', true);
+        for (const n of urg) {
+          // 먼저 표시해 두어 두 번 보내지 않는다
+          const { data: claimed } = await db.from('notices').update({ urgent_reminded_at: new Date().toISOString() }).eq('id', n.id).is('urgent_reminded_at', null).select('id');
+          if (!claimed?.length) continue;
+          const { data: reads } = await db.from('notice_reads').select('member_id, ack_at').eq('notice_id', n.id);
+          const done = new Set((reads ?? []).filter((r) => r.ack_at).map((r) => r.member_id));
+          const targets = (people ?? []).map((p) => p.id).filter((id) => id !== n.author_id && !done.has(id));
+          const r = await send(db, targets, { title: `[긴급 · 다시 알림] ${plain(n.title)}`, body: '아직 확인하지 않은 긴급 공지가 있습니다. 열어서 확인을 눌러 주세요.', tag: `notice-${n.id}`, url: '?open=notice' }, 'urgent-remind');
+          out.urgent += r.sent;
+        }
+      }
+      const { data: due } = await db.from('memo_reminders').select('member_id, todo_id, remind_at, text').is('sent_at', null).lte('remind_at', new Date(now).toISOString()).limit(500);
+      for (const m of due ?? []) {
+        const { data: claimed } = await db.from('memo_reminders').update({ sent_at: new Date().toISOString() })
+          .eq('member_id', m.member_id).eq('todo_id', m.todo_id).eq('remind_at', m.remind_at).is('sent_at', null).select('todo_id');
+        if (!claimed?.length) continue;
+        // 한참 지난 알림(서버가 멈췄던 경우 등)은 보내지 않고 처리만 한다
+        if (now - Date.parse(m.remind_at) > 6 * 3600000) continue;
+        const r = await send(db, [m.member_id], { title: '[내 메모] 할 일 알림', body: plain(m.text) || '할 일을 확인하세요.', tag: `memo-${m.todo_id}` }, 'memo');
+        out.memo += r.sent;
+      }
+      return json(out);
     }
 
     if (action === 'daily-feedback') {
@@ -245,6 +315,7 @@ Deno.serve(async (req) => {
   if (!me?.active) return json({ error: '사용할 수 없는 계정입니다.' }, 403);
 
   if (action === 'public-key') return json({ publicKey: (await vapid(db)).publicKey });
+  if (action === 'youtube') return json(await youtube(db, String(input.url ?? '')));
   if (action === 'test') return json(await send(db, [me.id], { title: '업무보고 알림 시험', body: '이 기기에서 알림을 받을 수 있습니다 ✓', tag: 'test' }, 'test'));
   return json({ error: '알 수 없는 요청입니다.' }, 400);
 });

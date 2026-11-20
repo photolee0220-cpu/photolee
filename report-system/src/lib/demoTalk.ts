@@ -401,6 +401,14 @@ export function createDemoTalk(ctx: DemoTalkCtx): TalkApi {
         save();
         return structuredClone(x);
       },
+      async announceVideo(title, videoId) {
+        const m = ctx.me();
+        if (!(m.isAdmin || m.isCeo)) throw new ApiError('관리자만 알릴 수 있습니다.');
+        const now = new Date().toISOString();
+        st.notices.push({ id: newId('nt'), authorId: m.id, createdAt: now, updatedAt: now, reads: { [m.id]: now }, acks: {}, requireAck: false, pinned: false,
+          title: `[사닥다리 유튜브] ${title.trim().slice(0, 120)}`, body: `새 영상이 올라왔습니다.\nhttps://www.youtube.com/watch?v=${videoId}\n\n사닥다리 유튜브 메뉴에서도 볼 수 있습니다.` });
+        save();
+      },
       async remove(id) {
         const m = ctx.me();
         if (!(m.isCeo || (m.isAdmin && st.settings.adminCanNotice))) throw new ApiError('공지는 대표님만 지울 수 있습니다.');

@@ -44,5 +44,5 @@ export function talkBadge(data: TalkSnapshot | null, me: Member): number {
 /** 소통 메뉴 (체험판·실제 서버 모두) */
 export const talkAvailable = () => true;
 
-/** 새로 더하는 소통 기능(긴급 공지·사진 앨범·전체 검색·일정 등록·방 고정): 체험판에서 먼저 보여 준다 */
-export const talkExtras = () => api.mode === 'demo';
+/** 소통 추가 기능(긴급 공지·사진 앨범·전체 검색·일정 등록·방 고정): 체험판·실제 서버 모두 */
+export const talkExtras = () => true;

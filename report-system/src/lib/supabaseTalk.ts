@@ -121,11 +121,12 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
           last: x.last ? toMessage(x.last, urls) : null,
           unread: Number(x.unread ?? 0),
           reads: x.reads ?? {},
+          starred: !!x.starred,
         })),
         notices: (check(notices) as Row[]).map((n): Notice => {
           const rs = readRows.filter((r) => r.notice_id === n.id);
           return {
-            id: n.id, title: n.title, body: n.body, authorId: n.author_id, createdAt: n.created_at, updatedAt: n.updated_at, requireAck: n.require_ack, pinned: n.pinned,
+            id: n.id, title: n.title, body: n.body, authorId: n.author_id, createdAt: n.created_at, updatedAt: n.updated_at, requireAck: n.require_ack, pinned: n.pinned, urgent: !!n.urgent,
             reads: Object.fromEntries(rs.filter((r) => r.read_at).map((r) => [r.member_id, r.read_at])),
             acks: Object.fromEntries(rs.filter((r) => r.ack_at).map((r) => [r.member_id, r.ack_at])),
           };
@@ -201,10 +202,18 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
       return toMessage(msg, await sign(attachments.map((a) => a.path)));
     },
 
-    // 아래 셋은 체험판 확인 뒤 서버에 붙인다
-    async searchMessages() { throw new ApiError('준비 중인 기능입니다.'); },
-    async note() { throw new ApiError('준비 중인 기능입니다.'); },
-    async setStarred() { throw new ApiError('준비 중인 기능입니다.'); },
+    /** 내가 들어간 방 전체에서 글 찾기 (읽기 권한이 방 인원으로 막혀 있어 내 방만 나온다) */
+    async searchMessages(q) {
+      await me();
+      const t = q.trim().replace(/[%_\\]/g, (c) => `\\${c}`);
+      if (!t) return [];
+      const rows = check(await sb.from('chat_messages').select('*').ilike('text', `%${t}%`).eq('deleted', false).is('hidden_at', null)
+        .order('created_at', { ascending: false }).limit(60)) as Row[];
+      const urls = await sign(rows.flatMap((r) => ((r.attachments ?? []) as Row[]).map((a) => a.path)));
+      return rows.map((r) => toMessage(r, urls));
+    },
+    async note(roomId, text, replyToId = null) { check(await sb.rpc('post_note', { p_room: roomId, p_text: text, p_reply: isUuid(replyToId) ? replyToId : null })); },
+    async setStarred(roomId, starred) { check(await sb.rpc('set_room_starred', { p_room: roomId, p_starred: starred })); },
 
     async editMessage(id, text) { return toMessage(check(await sb.rpc('edit_message', { p_id: id, p_text: text }))); },
     async deleteMessage(id) { check(await sb.rpc('delete_message', { p_id: id })); },
@@ -222,13 +231,14 @@ export function createSupabaseTalk(sb: SupabaseClient, currentMember: () => Prom
 
     notices: {
       async save(n) {
-        const r = check(await sb.rpc('save_notice', { p_id: isUuid(n.id) ? n.id : null, p_title: n.title, p_body: n.body, p_require_ack: n.requireAck, p_pinned: n.pinned })) as Row;
-        return { id: r.id, title: r.title, body: r.body, authorId: r.author_id, createdAt: r.created_at, updatedAt: r.updated_at, requireAck: r.require_ack, pinned: r.pinned, reads: {}, acks: {} };
+        const r = check(await sb.rpc('save_notice', { p_id: isUuid(n.id) ? n.id : null, p_title: n.title, p_body: n.body, p_require_ack: n.requireAck, p_pinned: n.pinned, p_urgent: !!n.urgent })) as Row;
+        return { id: r.id, title: r.title, body: r.body, authorId: r.author_id, createdAt: r.created_at, updatedAt: r.updated_at, requireAck: r.require_ack, pinned: r.pinned, urgent: !!r.urgent, reads: {}, acks: {} };
       },
       async remove(id) { check(await sb.rpc('delete_notice', { p_id: id })); },
       async read(id) { check(await sb.rpc('notice_read', { p_id: id })); },
       async ack(id) { check(await sb.rpc('notice_ack', { p_id: id })); },
       async remind(id) { return Number(check(await sb.rpc('notice_remind', { p_id: id }))); },
+      async announceVideo(title, videoId) { check(await sb.rpc('announce_video', { p_title: title, p_video_id: videoId })); },
     },
 
     inquiries: {

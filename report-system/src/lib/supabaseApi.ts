@@ -4,7 +4,7 @@ import { DEFAULT_SUMMARY_MODEL } from './models';
 import { createSupabaseTalk } from './supabaseTalk';
 import { parseSummary } from './summary';
 import { checkAttachable, extOf, triggerDownload } from './fileTypes';
-import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, Member, Photo, Site, SiteSummary, Snapshot, StageDef } from './types';
+import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, MemoData, Member, Photo, QuickLink, Site, SiteSummary, Snapshot, StageDef, YouTubeVideo } from './types';
 
 const BUCKET = 'site-photos';
 const FILES = 'report-files';
@@ -383,7 +383,7 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
     },
 
     async getSettings() {
-      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice', 'notice_version', 'notice_ack_enabled'])) as Row[];
+      const rows = check(await sb.from('app_settings').select('key, value').in('key', ['summary_model', 'layers_url', 'ai_enabled', 'report_notice', 'notice_version', 'notice_ack_enabled', 'youtube_url', 'quick_links'])) as Row[];
       const get = (k: string) => rows.find((r) => r.key === k)?.value;
       return {
         summaryModel: (get('summary_model') as string) || DEFAULT_SUMMARY_MODEL,
@@ -392,18 +392,30 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         reportNotice: get('report_notice') as string | undefined,
         noticeVersion: Number(get('notice_version') ?? 1) || 1,
         ackEnabled: get('notice_ack_enabled') === true,
+        youtubeUrl: (get('youtube_url') as string | undefined) || undefined,
+        links: Array.isArray(get('quick_links')) ? (get('quick_links') as QuickLink[]) : [],
       };
     },
 
     talk,
 
-    // 아래 둘은 체험판 확인 뒤 서버에 붙인다
+    // 내 메모: 본인 것만 읽힌다 (대표·관리자도 못 본다)
     memo: {
-      async load() { return { text: '', todos: [], updatedAt: null }; },
-      async save() { throw new ApiError('준비 중인 기능입니다.'); },
+      async load() {
+        const r = check(await sb.from('member_memos').select('text, todos, updated_at').maybeSingle()) as Row | null;
+        return { text: r?.text ?? '', todos: (r?.todos ?? []) as MemoData['todos'], updatedAt: r?.updated_at ?? null };
+      },
+      async save(d) {
+        const r = check(await sb.rpc('save_memo', { p_text: d.text, p_todos: d.todos })) as Row;
+        return { text: r.text, todos: r.todos ?? [], updatedAt: r.updated_at };
+      },
     },
     youtube: {
-      async videos() { throw new ApiError('준비 중인 기능입니다.'); },
+      async videos(channelUrl) {
+        const { data, error } = await sb.functions.invoke('notify', { body: { action: 'youtube', url: channelUrl } });
+        if (error || !data || data.error) throw new ApiError(data?.error ?? '영상 목록을 불러오지 못했습니다.');
+        return (data.videos ?? []) as YouTubeVideo[];
+      },
     },
 
     subscribe(fn) {
@@ -682,6 +694,8 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           ...(next.reportNotice !== undefined ? [{ key: 'report_notice', value: next.reportNotice.trim(), updated_at: at }] : []),
           ...(next.noticeVersion ? [{ key: 'notice_version', value: next.noticeVersion, updated_at: at }] : []),
           ...(next.ackEnabled !== undefined ? [{ key: 'notice_ack_enabled', value: next.ackEnabled, updated_at: at }] : []),
+          ...(next.youtubeUrl !== undefined ? [{ key: 'youtube_url', value: next.youtubeUrl.trim(), updated_at: at }] : []),
+          ...(next.links !== undefined ? [{ key: 'quick_links', value: next.links.filter((l) => l.label.trim() && /^https?:\/\//.test(l.url.trim())).map((l) => ({ label: l.label.trim(), url: l.url.trim() })), updated_at: at }] : []),
         ]));
         return { ...next, layersUrl: (next.layersUrl ?? '').trim() };
       },

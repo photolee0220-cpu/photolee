@@ -200,6 +200,26 @@ jobs:
           [ "$c" = 403 ] && rec "알림 서버: 채팅 알림 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 채팅 알림 비밀값 확인" 0 "HTTP $c"
           f=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d '{"mode":"safety","prompt":"점검"}')
           echo "$f" | grep -q "대표님만" && rec "서버 기능: 안전 당부 초안(AI)" 1 "응답 정상(관리자는 대표 전용이라 거절)" || rec "서버 기능: 안전 당부 초안(AI)" 0 "$(echo "$f" | head -c 200)"
+          # 소통 추가 기능 · 내 메모 · 유튜브
+          r=$(curl -sS "$URL/rest/v1/notices?select=urgent,urgent_reminded_at&limit=1" "${H[@]}")
+          echo "$r" | jq -e 'type == "array"' >/dev/null && rec "긴급 공지 칸" 1 "ok" || rec "긴급 공지 칸" 0 "$(echo "$r" | head -c 150)"
+          nt=$(curl -sS -X POST "$URL/rest/v1/rpc/save_notice" "${H[@]}" -H "Content-Type: application/json" -d '{"p_id":null,"p_title":"점검","p_body":"","p_require_ack":false,"p_pinned":false,"p_urgent":true}')
+          echo "$nt" | grep -q "대표님만" && rec "긴급 공지: 대표님만 쓰기" 1 "관리자 거절 확인" || rec "긴급 공지: 대표님만 쓰기" 0 "$(echo "$nt" | head -c 150)"
+          tr=$(curl -sS -X POST "$URL/rest/v1/rpc/talk_rooms" "${H[@]}" -H "Content-Type: application/json" -d '{}')
+          echo "$tr" | jq -e 'length == 0 or (.[0] | has("starred"))' >/dev/null && rec "방 고정 칸" 1 "ok" || rec "방 고정 칸" 0 "$(echo "$tr" | head -c 150)"
+          av=$(curl -sS -X POST "$URL/rest/v1/rpc/announce_video" "${H[@]}" -H "Content-Type: application/json" -d '{"p_title":"점검","p_video_id":"x"}')
+          echo "$av" | grep -q "영상 주소가 맞지 않습니다" && rec "유튜브 알리기: 관리자 가능" 1 "권한 통과(잘못된 영상 주소라 공지는 안 만듦)" || rec "유튜브 알리기: 관리자 가능" 0 "$(echo "$av" | head -c 150)"
+          sm=$(curl -sS -X POST "$URL/rest/v1/rpc/save_memo" "${H[@]}" -H "Content-Type: application/json" -d '{"p_text":"","p_todos":[]}')
+          mm=$(curl -sS "$URL/rest/v1/member_memos?select=member_id" "${H[@]}")
+          echo "$mm" | jq -e 'length == 1' >/dev/null && rec "내 메모 저장·읽기(본인 것만)" 1 "1건" || rec "내 메모 저장·읽기(본인 것만)" 0 "save=$(echo "$sm" | head -c 100) read=$(echo "$mm" | head -c 100)"
+          a=$(curl -sS "$URL/rest/v1/member_memos?select=member_id" -H "apikey: $ANON" | jq 'if type == "array" then length else 0 end')
+          [ "$a" = 0 ] && rec "내 메모: 로그인 안 한 사람 차단" 1 "0건" || rec "내 메모: 로그인 안 한 사람 차단" 0 "$a"
+          mr=$(curl -sS "$URL/rest/v1/memo_reminders?select=todo_id" "${H[@]}")
+          echo "$mr" | jq -e 'type != "array" or length == 0' >/dev/null && rec "메모 알림 예약: 화면에서 못 읽음" 1 "ok" || rec "메모 알림 예약: 화면에서 못 읽음" 0 "$(echo "$mr" | jq 'length')건"
+          yt=$(curl -sS -X POST "$URL/functions/v1/notify" "${H[@]}" -H "Content-Type: application/json" -d '{"action":"youtube","url":"https://www.youtube.com/@SADAKDARITV"}')
+          echo "$yt" | jq -e '.videos | length > 0' >/dev/null && rec "유튜브 최근 영상 가져오기" 1 "$(echo "$yt" | jq '.videos | length')개" || rec "유튜브 최근 영상 가져오기" 0 "$(echo "$yt" | head -c 150)"
+          c=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/notify" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"action":"timed","secret":"wrong"}')
+          [ "$c" = 403 ] && rec "알림 서버: 메모·긴급 다시 알림 비밀값 확인" 1 "틀린 값 거절(403)" || rec "알림 서버: 메모·긴급 다시 알림 비밀값 확인" 0 "HTTP $c"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()

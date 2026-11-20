@@ -23,11 +23,12 @@ export function YouTubePage() {
     if (!settings) return;
     api.youtube.videos(channel).then((v) => { setVideos(v); setCurrent(v[0] ?? null); }).catch((e) => { setVideos([]); setError(e instanceof Error ? e.message : '영상 목록을 불러오지 못했습니다.'); });
   }, [channel, settings]);
-  const canNotice = me.isCeo || (me.isAdmin && false);
+  // 새 영상 알리기는 관리자가 한다
+  const canNotice = me.isAdmin;
   const announce = async (v: YouTubeVideo) => {
     setBusy(true);
     try {
-      await api.talk.notices.save({ title: `[사닥다리 유튜브] ${v.title.replace(/^\[견본\]\s*/, '')}`, body: `새 영상이 올라왔습니다.\nhttps://www.youtube.com/watch?v=${v.id}\n\n사닥다리 유튜브 메뉴에서도 볼 수 있습니다.`, requireAck: false, pinned: false });
+      await api.talk.notices.announceVideo(v.title.replace(/^\[견본\]\s*/, ''), v.id);
       toast('전 직원에게 공지로 알렸습니다.');
     } catch (e) { toast(e instanceof Error ? e.message : '알리지 못했습니다.', 'error'); } finally { setBusy(false); }
   };

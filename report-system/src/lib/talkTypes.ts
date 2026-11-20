@@ -256,6 +256,8 @@ export interface TalkApi {
     ack(id: string): Promise<void>;
     /** 확인 안 한 사람에게 다시 알림. 보낸 사람 수 */
     remind(id: string): Promise<number>;
+    /** 유튜브 새 영상을 전 직원에게 공지로 알린다 (관리자·대표님) */
+    announceVideo(title: string, videoId: string): Promise<void>;
   };
   inquiries: {
     save(i: Inquiry): Promise<Inquiry>;
