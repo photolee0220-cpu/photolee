@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-20T11:10:08Z",
+  "at": "2026-11-22T09:14:56Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -24,7 +24,7 @@
     {
       "check": "보고 칸",
       "ok": true,
-      "detail": "215칸"
+      "detail": "229칸"
     },
     {
       "check": "현장",
@@ -179,7 +179,7 @@
     {
       "check": "백업 만들기",
       "ok": true,
-      "detail": "최신 백업 370037바이트"
+      "detail": "최신 백업 380314바이트"
     },
     {
       "check": "알림 서버: 서명 키",
@@ -460,6 +460,56 @@
       "check": "전체 자료실: 로그인 안 한 사람 차단",
       "ok": true,
       "detail": "거절됨"
+    },
+    {
+      "check": "업무 분석 표: work_analyses",
+      "ok": true,
+      "detail": "admin 읽기 가능"
+    },
+    {
+      "check": "work_analyses: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "업무 분석 표: work_runs",
+      "ok": true,
+      "detail": "admin 읽기 가능"
+    },
+    {
+      "check": "work_runs: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "업무 분석 표: work_ideas",
+      "ok": true,
+      "detail": "admin 읽기 가능"
+    },
+    {
+      "check": "work_ideas: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "개선 목록 저장·지우기(admin)",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "업무 분석: 로그인 안 한 사람 거절",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "check": "업무 분석: admin 통과·형식 검사",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "check": "업무 분석: 지난주 실제 분석",
+      "ok": true,
+      "detail": "2026-11-16 주 · 부서 13곳 중 13곳 저장"
     }
   ]
 }
