@@ -229,6 +229,30 @@ jobs:
           else rec "전체 자료실 파일 열기" 1 "아직 파일 없음(건너뜀)"; fi
           an=$(curl -sS -X POST "$URL/rest/v1/rpc/archive_list" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{}')
           echo "$an" | jq -e 'type == "array"' >/dev/null && rec "전체 자료실: 로그인 안 한 사람 차단" 0 "$(echo "$an" | head -c 100)" || rec "전체 자료실: 로그인 안 한 사람 차단" 1 "거절됨"
+          # 업무 분석 (admin 계정만)
+          for t in work_analyses work_runs work_ideas; do
+            r=$(curl -sS "$URL/rest/v1/$t?select=*&limit=1" "${H[@]}")
+            echo "$r" | jq -e 'type == "array"' >/dev/null && rec "업무 분석 표: $t" 1 "admin 읽기 가능" || rec "업무 분석 표: $t" 0 "$(echo "$r" | head -c 120)"
+            a=$(curl -sS "$URL/rest/v1/$t?select=*" -H "apikey: $ANON" | jq 'if type == "array" then length else 0 end')
+            [ "$a" = 0 ] && rec "$t: 로그인 안 한 사람 차단" 1 "0건" || rec "$t: 로그인 안 한 사람 차단" 0 "$a"
+          done
+          wi=$(curl -sS -X POST "$URL/rest/v1/work_ideas" "${H[@]}" -H "Content-Type: application/json" -H "Prefer: return=representation" -d '{"task":"점검용","note":""}')
+          WID=$(echo "$wi" | jq -r '.[0].id // empty')
+          [ -n "$WID" ] && curl -sS -X DELETE "$URL/rest/v1/work_ideas?id=eq.$WID" "${H[@]}" >/dev/null
+          [ -n "$WID" ] && rec "개선 목록 저장·지우기(admin)" 1 "ok" || rec "개선 목록 저장·지우기(admin)" 0 "$(echo "$wi" | head -c 120)"
+          c=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/functions/v1/weekly-summary" -H "apikey: $ANON" -H "Content-Type: application/json" -d '{"mode":"workmap","weekId":"2026-11-16"}')
+          [ "$c" = 401 ] && rec "업무 분석: 로그인 안 한 사람 거절" 1 "401" || rec "업무 분석: 로그인 안 한 사람 거절" 0 "HTTP $c"
+          b=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d '{"mode":"workmap","weekId":"2026-11-17"}')
+          echo "$b" | grep -q "보고 주" && rec "업무 분석: admin 통과·형식 검사" 1 "ok" || rec "업무 분석: admin 통과·형식 검사" 0 "$(echo "$b" | head -c 150)"
+          dow=$(TZ=Asia/Seoul date +%u); W=$(TZ=Asia/Seoul date -d "-$((dow - 1)) days" +%F)
+          st=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"workmap\",\"weekId\":\"$W\"}")
+          for i in $(seq 1 45); do
+            run=$(curl -sS "$URL/rest/v1/work_runs?week_id=eq.$W&select=status,total,done" "${H[@]}")
+            [ "$(echo "$run" | jq -r '.[0].status // "none"')" != running ] && break
+            sleep 5
+          done
+          n=$(curl -sS "$URL/rest/v1/work_analyses?week_id=eq.$W&select=department_id" "${H[@]}" | jq 'length')
+          echo "$run" | jq -e '.[0].status == "done"' >/dev/null && rec "업무 분석: 지난주 실제 분석" 1 "$W 주 · 부서 $(echo "$run" | jq '.[0].total')곳 중 $n곳 저장" || rec "업무 분석: 지난주 실제 분석" 0 "start=$(echo "$st" | jq -c 'del(.errors)' 2>/dev/null | head -c 80) status=$(echo "$run" | jq -r '.[0].status // "none"') saved=$n"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()

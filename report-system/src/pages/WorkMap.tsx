@@ -42,7 +42,12 @@ export function WorkMapPage() {
   }, [me, toast]);
 
   if (!isOwner(me)) return <Empty title="관리자(admin) 계정만 볼 수 있는 화면입니다" icon={<Lock size={22} />} />;
-  if (!all) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (!all) return (
+    <div className="flex flex-col items-center gap-3 py-20 text-center">
+      <Spinner />
+      <p className="text-[13.5px] text-ink-3">분석을 불러오는 중입니다.<br />처음 여는 때에는 최근 4주 보고를 AI가 분석하느라 1~2분쯤 걸립니다.</p>
+    </div>
+  );
 
   const weeks = [...new Set(all.map((a) => a.weekId))].sort().reverse();
   const recent = weeks.slice(0, 4);
@@ -108,7 +113,7 @@ function WeekView({ all, weeks, week, onWeek, depts, added, busy, onRegenerate, 
           {weeks.map((w) => <option key={w} value={w}>{workWeekLabel(w)}</option>)}
         </Select>
         <span className="text-[13px] text-ink-3">보고 {list.reduce((n, a) => n + a.reportCount, 0)}건 분석 · {list.length}개 부서</span>
-        <Button size="sm" tone="ghost" className="ml-auto" disabled={busy} onClick={() => onRegenerate(week)}>{busy ? <Spinner /> : <RefreshCw size={14} />}이 주 다시 분석</Button>
+        <Button size="sm" tone="ghost" className="ml-auto" disabled={busy} onClick={() => onRegenerate(week)}>{busy ? <Spinner /> : <RefreshCw size={14} />}{busy ? '분석 중… (1분쯤)' : '이 주 다시 분석'}</Button>
       </div>
       <div className="mb-4 flex flex-wrap gap-1">
         {[{ id: '', name: '모든 부서' }, ...list.map((a) => ({ id: a.departmentId, name: name(a.departmentId) }))].map((d) => (
