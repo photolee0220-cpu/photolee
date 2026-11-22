@@ -5,8 +5,8 @@ import { createSupabaseTalk } from './supabaseTalk';
 import { parseSummary } from './summary';
 import { currentWeekId, shiftWeek } from './week';
 import { checkAttachable, extOf, triggerDownload } from './fileTypes';
-import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, MemoData, Member, Photo, QuickLink, Site, SiteSummary, Snapshot, StageDef, WeekId, YouTubeVideo } from './types';
-import type { WorkAnalysis, WorkIdea } from './workmapTypes';
+import type { AiSummary, AppSettings, Attachment, CalendarEvent, Comment, DailyComment, DailyPhoto, DailyReport, DayStatus, Department, Directive, Entry, Grant, MemoData, Member, Photo, QuickLink, Site, SiteSummary, Snapshot, StageDef, YouTubeVideo } from './types';
+import type { WorkAnalysis, WorkIdea, WorkRun } from './workmapTypes';
 
 const BUCKET = 'site-photos';
 const FILES = 'report-files';
@@ -412,62 +412,54 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         return { text: r.text, todos: r.todos ?? [], updatedAt: r.updated_at };
       },
     },
-    // 업무 분석: admin 계정만 (서버가 막는다). 분석은 서버 함수가 뒤에서 만들고, 화면은 끝날 때까지 기다린다
+    // 업무 분석: admin 계정만 (서버가 막는다). 분석은 서버가 AI 배치로 뒤에서 만들고, 화면은 진행 상태를 본다
     workmap: (() => {
       const toAnalysis = (r: Row): WorkAnalysis => ({
-        weekId: r.week_id, departmentId: r.department_id, reportCount: Number(r.report_count ?? 0), createdAt: r.created_at,
+        ...(r.result ?? {}),
+        weekId: r.week_id, departmentId: r.department_id, reportCount: Number(r.report_count ?? 0), createdAt: r.created_at, model: r.model ?? undefined,
         summary: r.result?.summary ?? '', categories: r.result?.categories ?? [], recurring: r.result?.recurring ?? [], ideas: r.result?.ideas ?? [],
       });
       const toIdea = (r: Row): WorkIdea => ({
+        ...(r.extra ?? {}),
         id: r.id, departmentId: r.department_id, task: r.task, level: r.level, how: r.how, system: r.system, effort: r.effort, impact: r.impact,
         status: r.status, note: r.note ?? '', weekId: r.week_id ?? '', createdAt: r.created_at, updatedAt: r.updated_at,
       });
-      const start = async (weekId: WeekId) => {
-        const { data, error } = await sb.functions.invoke('weekly-summary', { body: { mode: 'workmap', weekId } });
+      const call = async (body: Record<string, unknown>) => {
+        const { data, error } = await sb.functions.invoke('weekly-summary', { body });
         if (error) {
-          let msg = '분석을 시작하지 못했습니다.';
+          let msg = '분석 서버에 연결하지 못했습니다.';
           try { const b = await (error as { context?: Response }).context?.json(); if (b?.error) msg = b.error; } catch { /* 기본 문구 */ }
           throw new ApiError(msg);
         }
         if (data?.error) throw new ApiError(data.error);
-      };
-      // 진행 중인 주가 끝날 때까지 (최대 4분)
-      const waitRuns = async (weeks: WeekId[]) => {
-        for (let i = 0; i < 80; i++) {
-          await new Promise((r) => setTimeout(r, 3000));
-          const runs = check(await sb.from('work_runs').select('week_id, status, error').in('week_id', weeks)) as Row[];
-          if (runs.length >= weeks.length && runs.every((r) => r.status !== 'running')) {
-            const bad = runs.filter((r) => r.status === 'error');
-            if (bad.length === weeks.length) throw new ApiError(`분석이 실패했습니다. ${bad[0]?.error ?? ''}`.trim());
-            return;
-          }
-        }
-        throw new ApiError('분석이 오래 걸리고 있습니다. 잠시 뒤 다시 열어 보세요.');
+        return data;
       };
       const lastMonday = () => { const w = currentWeekId(); return new Date().getDay() === 1 ? w : shiftWeek(w, -1); };
-      const read = async () => (check(await sb.from('work_analyses').select('*').order('week_id', { ascending: false })) as Row[]).map(toAnalysis);
+      const readRuns = async () => (check(await sb.from('work_runs').select('week_id, status, total, done, error, started_at').order('week_id', { ascending: false })) as Row[])
+        .map((r): WorkRun => ({ weekId: r.week_id, status: r.status, total: r.total, done: r.done, error: r.error, startedAt: r.started_at }));
       return {
         async list() {
-          // 최근 4주 중 한 번도 분석하지 않은 주가 있으면 먼저 분석 (처음 열 때 4주를 한꺼번에)
-          const weeks = [0, 1, 2, 3].map((i) => shiftWeek(lastMonday(), -i));
-          const runs = check(await sb.from('work_runs').select('week_id, status').in('week_id', weeks)) as Row[];
-          const missing = weeks.filter((w) => !runs.some((r) => r.week_id === w));
-          const running = runs.filter((r) => r.status === 'running').map((r) => r.week_id as string);
-          if (missing.length) await Promise.all(missing.map(start));
-          if (missing.length || running.length) await waitRuns([...missing, ...running]);
-          return read();
+          return (check(await sb.from('work_analyses').select('*').order('week_id', { ascending: false })) as Row[]).map(toAnalysis);
         },
-        async generate(weekId) {
-          await start(weekId);
-          await waitRuns([weekId]);
-          return (await read()).filter((a) => a.weekId === weekId);
+        async ensureRecent() {
+          const weeks = [0, 1, 2, 3].map((i) => shiftWeek(lastMonday(), -i));
+          const have = new Set((await readRuns()).map((r) => r.weekId));
+          for (const w of weeks.filter((x) => !have.has(x))) await call({ mode: 'workmap', weekId: w });
+        },
+        async generate(weekId) { await call({ mode: 'workmap', weekId }); },
+        async runs() {
+          const runs = await readRuns();
+          if (runs.some((r) => r.status === 'running')) { await call({ mode: 'workmap-collect' }).catch(() => undefined); return readRuns(); }
+          return runs;
         },
         async ideas() {
           return (check(await sb.from('work_ideas').select('*').order('updated_at', { ascending: false })) as Row[]).map(toIdea);
         },
         async saveIdea(i) {
+          const { title, approach, asIs, toBe, toolPrompt, steps, hoursSaved, savingsBasis, errorReduction, risks, kpi } = i;
           const row = { department_id: i.departmentId, task: i.task, level: i.level, how: i.how, system: i.system, effort: i.effort, impact: i.impact,
-            status: i.status, note: i.note, week_id: i.weekId || null, updated_at: new Date().toISOString() };
+            status: i.status, note: i.note, week_id: i.weekId || null, updated_at: new Date().toISOString(),
+            extra: { title, approach, asIs, toBe, toolPrompt, steps, hoursSaved, savingsBasis, errorReduction, risks, kpi } };
           const r = i.id && isUuid(i.id)
             ? check(await sb.from('work_ideas').update(row).eq('id', i.id).select().single())
             : check(await sb.from('work_ideas').insert(row).select().single());

@@ -246,13 +246,17 @@ jobs:
           echo "$b" | grep -q "보고 주" && rec "업무 분석: admin 통과·형식 검사" 1 "ok" || rec "업무 분석: admin 통과·형식 검사" 0 "$(echo "$b" | head -c 150)"
           dow=$(TZ=Asia/Seoul date +%u); W=$(TZ=Asia/Seoul date -d "-$((dow - 1)) days" +%F)
           st=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"workmap\",\"weekId\":\"$W\"}")
-          for i in $(seq 1 45); do
+          # 컨설팅 분석은 AI 배치로 돈다: 결과를 모으며 최대 25분 기다린다
+          for i in $(seq 1 50); do
+            curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d '{"mode":"workmap-collect"}' >/dev/null
             run=$(curl -sS "$URL/rest/v1/work_runs?week_id=eq.$W&select=status,total,done" "${H[@]}")
             [ "$(echo "$run" | jq -r '.[0].status // "none"')" != running ] && break
-            sleep 5
+            sleep 30
           done
-          n=$(curl -sS "$URL/rest/v1/work_analyses?week_id=eq.$W&select=department_id" "${H[@]}" | jq 'length')
-          echo "$run" | jq -e '.[0].status == "done"' >/dev/null && rec "업무 분석: 지난주 실제 분석" 1 "$W 주 · 부서 $(echo "$run" | jq '.[0].total')곳 중 $n곳 저장" || rec "업무 분석: 지난주 실제 분석" 0 "start=$(echo "$st" | jq -c 'del(.errors)' 2>/dev/null | head -c 80) status=$(echo "$run" | jq -r '.[0].status // "none"') saved=$n"
+          an=$(curl -sS "$URL/rest/v1/work_analyses?week_id=eq.$W&select=model,result" "${H[@]}")
+          n=$(echo "$an" | jq 'length')
+          shape=$(echo "$an" | jq -c '{opus: ([.[] | select(.model | test("opus"))] | length), tasks: ([.[].result.tasks // [] | length] | add // 0), ideas: ([.[].result.ideas // [] | length] | add // 0), withAsIs: ([.[].result.ideas // [] | .[] | select((.asIs // "") != "")] | length), evidence: ([.[].result.tasks // [] | .[] | select((.evidence // "") != "")] | length)}')
+          echo "$run" | jq -e '.[0].status == "done"' >/dev/null && rec "업무 분석: 지난주 컨설팅 분석(Opus 배치)" 1 "$W 주 · 부서 $(echo "$run" | jq '.[0].total')곳 중 $n곳 저장 · $shape" || rec "업무 분석: 지난주 컨설팅 분석(Opus 배치)" 0 "start=$(echo "$st" | head -c 80) status=$(echo "$run" | jq -r '.[0].status // "none"') saved=$n"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
         if: always()

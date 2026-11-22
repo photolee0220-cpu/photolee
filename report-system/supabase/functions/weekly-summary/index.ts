@@ -6,7 +6,7 @@
 // 배포: supabase functions deploy weekly-summary
 // 비밀값: supabase secrets set ANTHROPIC_API_KEY=...
 import Anthropic from 'npm:@anthropic-ai/sdk@0.133.0';
-import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -81,98 +81,129 @@ const SAFETY_SCHEMA = {
   },
 };
 
-/* ───────────── 업무 분석 (mode 'workmap') ───────────── */
-// 한 번 부르면 한 주(보고일 월요일 W: W-7 ~ W-1 일일보고 + W 주차 주간보고)를 부서마다 나눠 분석해 저장한다.
-// 바로 답하고 분석은 뒤에서 계속한다 (work_runs에 진행 상태). 사람 이름은 AI에 보내지 않는다.
+/* ───────────── 업무 분석 (mode 'workmap' / 'workmap-collect') ───────────── */
+// 경영 컨설턴트 수준의 부서 업무 분석. 한 주(보고일 월요일 W: W-7 ~ W-1 일일보고 + W 주차 주간보고)를
+// 부서마다 한 요청으로 만들어 Message Batches로 보낸다 (시간 제한 없음, 요금 절반).
+// 결과는 'workmap-collect'가 모아 저장한다 (5분마다 예약 작업 + 화면이 기다리는 동안).
+// 사람 이름은 AI에 보내지 않는다. 찐관리자(admin 계정) 또는 예약 작업(비밀값)만 부를 수 있다.
 
-declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
-type Db = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type Db = SupabaseClient<any, 'public', any>;
+const WORKMAP_MODEL = 'claude-opus-5-5';
 
+const S = { type: 'string' };
+const N = { type: 'number' };
+const I = { type: 'integer' };
+const SA = { type: 'array', items: S };
 const GRADE = { type: 'string', enum: ['low', 'mid', 'high'] };
-const WORKMAP_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['summary', 'categories', 'recurring', 'ideas'],
-  properties: {
-    summary: { type: 'string' },
-    categories: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false, required: ['name', 'count', 'examples'],
-        properties: { name: { type: 'string' }, count: { type: 'integer' }, examples: { type: 'array', items: { type: 'string' } } },
-      },
-    },
-    recurring: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false, required: ['task', 'times', 'note'],
-        properties: { task: { type: 'string' }, times: { type: 'integer' }, note: { type: 'string' } },
-      },
-    },
-    ideas: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false, required: ['task', 'level', 'how', 'system', 'effort', 'impact'],
-        properties: {
-          task: { type: 'string' }, level: { type: 'string', enum: ['replace', 'assist', 'human'] }, how: { type: 'string' }, system: { type: 'string' },
-          effort: GRADE, impact: GRADE,
-        },
-      },
-    },
-  },
-};
+const obj = (props: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, required: Object.keys(props), properties: props });
+
+const WORKMAP_SCHEMA = obj({
+  summary: S,
+  replaceRate: I,
+  hoursObserved: N,
+  hoursSavable: N,
+  categories: { type: 'array', items: obj({ name: S, count: I, share: I, examples: SA }) },
+  tasks: { type: 'array', items: obj({
+    task: S, category: S, times: I, evidence: S, tools: SA, output: S, hoursPerWeek: N,
+    replaceability: { type: 'string', enum: ['full', 'partial', 'human'] }, score: I, reason: S,
+  }) },
+  recurring: { type: 'array', items: obj({ task: S, times: I, note: S }) },
+  issues: { type: 'array', items: obj({ finding: S, evidence: S, impact: S }) },
+  ideas: { type: 'array', items: obj({
+    task: S, title: S, level: { type: 'string', enum: ['replace', 'assist', 'human'] },
+    approach: { type: 'string', enum: ['system', 'external', 'process'] },
+    asIs: S, toBe: S, how: S, system: S, toolPrompt: S, steps: SA,
+    hoursSaved: N, savingsBasis: S, errorReduction: S, effort: GRADE, impact: GRADE, risks: S, kpi: S,
+  }) },
+  humanTasks: { type: 'array', items: obj({ task: S, reason: S }) },
+  ceoPoints: SA,
+  questions: SA,
+});
+
+const WORKMAP_SYSTEM = `당신은 건설업 전문 경영 컨설턴트이자 업무 자동화(AI 전환) 설계자입니다.
+고객사는 교회 건축을 전문으로 하는 종합건설사(사닥다리종합건설)입니다. 경영진(관리자)이 부서마다 "실제로 무슨 일을 하는지" 파악하고,
+그중 AI로 대체하거나 자동화할 수 있는 일을 찾아 실제로 바꾸려고 합니다. 당신의 분석은 그대로 경영진 보고서와 시스템 개발 계획에 쓰입니다.
+
+## 고객사 상황
+- 업종 맥락: 종합건설(원도급), 교회 신축·리모델링, 건축주(교회) 상담·설계·견적·시공·감리 대응·기성·준공. 한국 건설 실무(공사일보, 기성 청구·검토, 하도급, 감리 지적, 안전관리계획서, 산업안전보건법, 자재 발주·수급)를 전제로 생각하세요.
+- 직원들이 쓰는 도구: 엑셀·한글·워드(견적, 기성, 공문, 보고서), 카카오톡·문자(현장·협력업체 연락), ERP·회계 프로그램(더존 등), 캐드·설계 프로그램(도면, 3D).
+- 사내 업무보고 시스템(웹·휴대폰 앱, 관리자가 직접 기능을 추가 개발함. Claude API를 이미 연결해 씀)에 있는 것:
+  일일보고(현장 사진 포함), 주간 부서보고·현장별 보고, 대표 지시사항·처리 상태, 캘린더, 소통(부서·현장 채팅방, 전체 공지, 신규 교회건축 문의방과 문의 카드, 안전방),
+  자료실(회의록·공사일보·공정표 PDF 보관과 내용 검색, 전체 사진·파일 모아 보기), AI 기능(대표 질문 검색, 안전 당부 초안, 스캔 PDF 글자 읽기), 내 메모(할 일 알림), 푸시 알림, 예약 작업(정해진 시간 자동 실행).
+  → 시스템 개발안은 이 위에 붙일 수 있는 것으로, 위 기능과 Claude API(문서·사진 읽기, 초안 작성, 분류, 요약, 대조)·예약 작업·알림을 조합해 설계하세요.
+
+## 경영진의 목표 (우선순위 순)
+1. AI로 대체할 수 있는 업무를 최대한 찾아 실제로 대체한다 (대체 가능성 검토가 1순위)
+2. 반복 업무 시간을 줄인다
+3. 실수·누락을 줄인다 (기성·견적·안전처럼 틀리면 손해가 큰 일)
+4. 대표님이 현황과 리스크를 빨리 파악해 결정하도록 돕는다
+
+## 분석 원칙
+- 근거 우선: 모든 판단은 보고에 실제로 적힌 문장에 근거합니다. evidence에는 보고 원문을 짧게 그대로 인용하세요("…"). 보고에 없는 일은 만들어 내지 마세요.
+- 추상어 금지: "효율화", "자동화 검토", "AI 활용", "체계화", "디지털 전환" 같은 말만 쓰지 마세요. 항상 "무엇을(어떤 문서·데이터를), 무엇으로(어떤 도구·기능), 누가, 언제, 결과물이 무엇인지"를 씁니다.
+  나쁜 예: "견적 업무에 AI를 활용해 효율화"
+  좋은 예: "협력업체 3곳의 견적서(PDF·엑셀)를 자료실에 올리면 Claude가 공종·규격·수량·단가를 읽어 항목별 비교표(엑셀)를 만들고, 최저가 대비 15% 이상 차이 나는 항목과 누락 항목을 빨간색으로 표시 → 담당자는 표시된 줄만 확인"
+- 대체 가능성은 냉정하게: 서류 작성·옮겨 적기·대조·정리·요약·분류·일정 계산·반복 안내는 AI가 대신할 수 있는지 먼저 검토하고(full), 판단은 사람이 하되 준비를 AI가 하는 일은 partial, 법적 책임·서명, 현장 지휘와 위험 판단, 건축주·협력업체와의 신뢰·협상, 최종 금액 결정은 human으로 둡니다. human인 이유를 분명히 씁니다.
+- 수치 추정: 시간(hoursPerWeek, hoursSaved)은 보고에 나온 횟수와 그 일의 통상 소요 시간으로 보수적으로 추정하고, savingsBasis에 계산식과 가정을 적습니다(예: "주 4회 × 회당 40분 → AI 초안 후 검토 10분, 주 2시간 절감"). 확실하지 않으면 낮게 잡고 questions에 확인할 점을 적습니다.
+- 실행 가능성: 각 개선안은 다음 주부터 시작할 수 있을 만큼 구체적이어야 합니다. 시스템 개발안(approach: system)은 system에 "화면 위치 / 입력 / AI가 하는 일 / 출력 / 저장·알림"을 한 문단으로 씁니다.
+  외부 도구안(approach: external)은 어떤 도구를 어떻게 쓰는지 쓰고 toolPrompt에 직원이 그대로 복사해 쓸 수 있는 한국어 프롬프트를 적습니다. 업무 방식 개선(approach: process)은 양식·순서·역할을 어떻게 바꾸는지 씁니다.
+  해당 없는 칸은 빈 문자열로 둡니다.
+- 사람 이름, 개인 평가, 특정인 비교는 절대 쓰지 마세요. 부서 단위로만 씁니다.
+- 한국어로, 컨설팅 보고서 문체(간결한 '~함/~임' 또는 '~합니다')로 씁니다. 같은 말을 반복하지 마세요.
+
+## 출력 항목
+- summary: 경영진 요약 2~4문장. 이 부서의 업무 구조, 가장 큰 비효율, 가장 먼저 할 일을 수치와 함께.
+- replaceRate: 이 부서 업무 시간 중 AI로 대체·자동화 가능한 비율(%) 추정.
+- hoursObserved: 보고로 확인되는 이 부서의 주간 업무 시간 추정 합계(보고에 나온 일만). hoursSavable: 개선안을 모두 적용하면 줄일 수 있는 주간 시간 합계.
+- categories: 업무 종류 3~7개. count는 보고에 나온 횟수, share는 시간 비중(%), examples는 실제 일 2개.
+- tasks: 업무 목록 5~12개 (같은 일은 합침). times(이번 주 나온 횟수), evidence(원문 인용), tools(쓰는 도구 추정), output(산출물), hoursPerWeek, replaceability(full/partial/human), score(AI 대체 가능도 0~100), reason(판단 이유 한 문장).
+- recurring: 이번 주 2번 이상 반복된 일 (없으면 빈 배열).
+- issues: 문제점·비효율 2~5개. finding(무엇이 문제인지 구체적으로), evidence(원문 인용), impact(시간·실수·리스크 측면 영향).
+- ideas: 개선안 3~6개, 효과가 큰 순서로. task(대상 업무), title(한 줄 제목), level(replace/assist/human), approach(system/external/process), asIs(지금 방식), toBe(바뀐 뒤 방식),
+  how(구체 방법), system(시스템 설계, 해당 시), toolPrompt(바로 쓰는 프롬프트, 해당 시), steps(실행 단계 3~5개, 첫 단계는 이번 주에 할 수 있는 것), hoursSaved(주간 절감 시간), savingsBasis(계산 근거),
+  errorReduction(줄어드는 실수·누락, 없으면 빈 문자열), effort(만들기 어려움), impact(효과), risks(주의할 점), kpi(성과를 확인할 지표와 목표값).
+- humanTasks: 사람이 계속 해야 하는 일 1~3개와 이유.
+- ceoPoints: 대표님께 보고·결정 요청할 포인트 2~4개 (리스크, 투자 필요, 인력 재배치 가능성 등).
+- questions: 판단에 부족한 정보, 부서에 확인할 질문 0~4개.`;
 
 const plainText = (t: string) => String(t ?? '').replace(/\[\/?(b|red|blue|hl)\]/g, '').trim();
 const addDays = (iso: string, n: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
-function workmapPrompt(dept: string, lines: string[]): string {
-  return `당신은 건설회사(교회 건축 전문 종합건설사)의 업무 분석가입니다.
-아래는 '${dept}' 부서가 한 주 동안 쓴 일일보고와 주간 부서보고입니다. 이 부서가 실제로 어떤 일을 하는지 정리하고,
-AI로 더 효율적으로 하거나 대신할 수 있는 일을 찾아 주세요.
-
-규칙
-- 보고에 적힌 내용만 근거로 합니다. 없는 일을 지어내지 마세요.
-- 사람 이름이나 개인 평가는 쓰지 마세요. 부서 단위로만 씁니다.
-- summary: 이 부서가 이번 주 한 일의 특징을 1~2문장으로.
-- categories: 업무 종류 3~6개 (예: 견적 작성, 서류·결재, 발주·자재, 현장 관리, 회의·보고, 민원·상담). count는 그 종류가 보고에 나온 횟수, examples는 보고에 나온 실제 일 2개 이내(짧게).
-- recurring: 이번 주에 2번 이상 나온 비슷한 일 (없으면 빈 배열). times는 나온 횟수, note는 어떻게 반복되는지 한 줄.
-- ideas: 3~5개. level은 replace(AI가 대신할 수 있음) / assist(AI가 도와줄 수 있음) / human(사람이 꼭 해야 함). human도 1개 넣어 주세요.
-  how: 어떻게 쓰면 되는지 1~2문장. system: 이 회사 업무보고 시스템(일일보고·주간보고·채팅방·자료실·캘린더·공지가 있음)에 기능으로 붙인다면 무엇을 만들지 한 줄 (human이면 빈 문자열).
-  effort: 만들기 어려움, impact: 효과 (low/mid/high).
-- 모든 글은 한국어, 짧고 쉬운 말로.
-
-보고 (${lines.length}건)
-${lines.join('\n---\n')}`;
+async function workmapAuth(service: Db, body: Record<string, unknown>, authHeader: string): Promise<Response | null> {
+  const { data: sec } = await service.from('app_secrets').select('value').eq('key', 'cron_secret').maybeSingle();
+  if (sec?.value && body.secret === sec.value) return null;
+  const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } });
+  const { data: auth } = await caller.auth.getUser();
+  if (!auth.user) return json({ error: '로그인이 필요합니다.' }, 401);
+  const { data: m } = await service.from('members').select('username, is_admin, active').eq('id', auth.user.id).maybeSingle();
+  if (!m?.active || !m.is_admin || m.username !== 'admin') return json({ error: '업무 분석은 관리자(admin) 계정만 쓸 수 있습니다.' }, 403);
+  return null;
 }
 
 async function workmap(service: Db, body: Record<string, unknown>, authHeader: string): Promise<Response> {
-  // 누가 불렀나: 예약 작업(비밀값) 또는 admin 계정
-  const { data: sec } = await service.from('app_secrets').select('value').eq('key', 'cron_secret').maybeSingle();
-  const byCron = !!sec?.value && body.secret === sec.value;
-  if (!byCron) {
-    const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } });
-    const { data: auth } = await caller.auth.getUser();
-    if (!auth.user) return json({ error: '로그인이 필요합니다.' }, 401);
-    const { data: m } = await service.from('members').select('username, is_admin, active').eq('id', auth.user.id).maybeSingle();
-    if (!m?.active || !m.is_admin || m.username !== 'admin') return json({ error: '업무 분석은 관리자(admin) 계정만 쓸 수 있습니다.' }, 403);
-  }
-  const weekId = String(body.weekId ?? '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekId) || new Date(`${weekId}T00:00:00Z`).getUTCDay() !== 1) return json({ error: '보고 주(월요일)가 맞지 않습니다.' }, 400);
-
-  const { data: aiRow } = await service.from('app_settings').select('value').eq('key', 'ai_enabled').maybeSingle();
-  if ((aiRow?.value as Record<string, boolean> | null)?.master === false) return json({ error: '관리자가 AI 기능을 꺼 두었습니다.' }, 403);
+  const denied = await workmapAuth(service, body, authHeader);
+  if (denied) return denied;
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) return json({ error: 'AI용 API 키가 아직 설정되지 않았습니다.' }, 503);
+  const client = new Anthropic({ apiKey });
 
-  // 같은 주를 이미 분석 중이면 (5분 안) 다시 시작하지 않는다
-  const { data: run } = await service.from('work_runs').select('status, started_at').eq('week_id', weekId).maybeSingle();
-  if (run?.status === 'running' && Date.now() - Date.parse(run.started_at) < 5 * 60000) return json({ started: false, running: true });
+  if (body.mode === 'workmap-collect') return json(await workmapCollect(service, client));
+
+  const weekId = String(body.weekId ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekId) || new Date(`${weekId}T00:00:00Z`).getUTCDay() !== 1) return json({ error: '보고 주(월요일)가 맞지 않습니다.' }, 400);
+  const { data: aiRow } = await service.from('app_settings').select('value').eq('key', 'ai_enabled').maybeSingle();
+  if ((aiRow?.value as Record<string, boolean> | null)?.master === false) return json({ error: '관리자가 AI 기능을 꺼 두었습니다.' }, 403);
+
+  // 같은 주를 이미 분석 중이면 다시 보내지 않는다
+  const { data: run } = await service.from('work_runs').select('status, started_at, batch_id').eq('week_id', weekId).maybeSingle();
+  if (run?.status === 'running' && run.batch_id && Date.now() - Date.parse(run.started_at) < 6 * 3600000) return json({ started: false, running: true });
 
   const from = addDays(weekId, -7);
   const to = addDays(weekId, -1);
   const [{ data: depts }, { data: daily }, { data: entries }, { data: sites }] = await Promise.all([
     service.from('departments').select('id, name').eq('active', true).order('sort'),
-    service.from('daily_reports').select('date, department_id, site_id, content').gte('date', from).lte('date', to).neq('content', ''),
+    service.from('daily_reports').select('date, department_id, site_id, content').gte('date', from).lte('date', to).neq('content', '').order('date'),
     service.from('entries').select('kind, department_id, site_id, content').eq('week_id', weekId).neq('content', ''),
     service.from('sites').select('id, name'),
   ]);
@@ -180,57 +211,96 @@ async function workmap(service: Db, body: Record<string, unknown>, authHeader: s
   const jobs = (depts ?? []).map((d) => {
     const lines = [
       ...(daily ?? []).filter((r) => r.department_id === d.id).map((r) => `[일일보고 ${r.date}${r.site_id ? ` · ${siteName.get(r.site_id) ?? '현장'}` : ''}]\n${plainText(r.content)}`),
-      ...(entries ?? []).filter((e) => e.department_id === d.id).map((e) => `[주간보고${e.kind === 'site' && e.site_id ? ` · ${siteName.get(e.site_id) ?? '현장'}` : ''}]\n${plainText(e.content)}`),
-    ].filter((l) => l.split('\n')[1]?.trim());
+      ...(entries ?? []).filter((e) => e.department_id === d.id).map((e) => `[주간보고${e.kind === 'site' && e.site_id ? ` · ${siteName.get(e.site_id) ?? '현장'}` : ' · 부서 업무'}]\n${plainText(e.content)}`),
+    ].filter((l) => l.split('\n').slice(1).join('').trim());
     return { d, lines };
   });
   const todo = jobs.filter((j) => j.lines.length);
-  // 이번 주 보고가 없는 부서의 예전 분석은 지운다
   const empty = jobs.filter((j) => !j.lines.length).map((j) => j.d.id);
   if (empty.length) await service.from('work_analyses').delete().eq('week_id', weekId).in('department_id', empty);
-  await service.from('work_runs').upsert({ week_id: weekId, status: todo.length ? 'running' : 'done', total: todo.length, done: 0, error: null, started_at: new Date().toISOString(), finished_at: todo.length ? null : new Date().toISOString() });
-  if (!todo.length) return json({ started: false, total: 0 });
-
-  const { data: setting } = await service.from('app_settings').select('value').eq('key', 'summary_model').maybeSingle();
-  const model = MODELS.includes(setting?.value) ? (setting!.value as string) : MODELS[0];
-  const client = new Anthropic({ apiKey });
-  let done = 0;
-  const errors: string[] = [];
-  const one = async ({ d, lines }: { d: { id: string; name: string }; lines: string[] }) => {
-    let text = lines.join('\n---\n');
-    const kept = text.length > 120_000 ? lines.slice(0, Math.floor(lines.length * 120_000 / text.length)) : lines;
-    try {
-      // deno-lint-ignore no-explicit-any
-      const request: any = {
-        model, max_tokens: 8000,
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: WORKMAP_SCHEMA } },
-        messages: [{ role: 'user', content: workmapPrompt(d.name, kept) }],
-      };
-      const res = model === 'claude-haiku-5-5'
-        ? await client.messages.create(request)
-        : await client.beta.messages.create({ ...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
-      if (res.stop_reason === 'refusal' || res.stop_reason === 'max_tokens') throw new Error(res.stop_reason);
-      // deno-lint-ignore no-explicit-any
-      text = res.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
-      const r = JSON.parse(text);
-      await service.from('work_analyses').upsert({ week_id: weekId, department_id: d.id, report_count: lines.length, result: r, model: res.model, created_at: new Date().toISOString() });
-    } catch (e) {
-      errors.push(`${d.name}: ${e instanceof Error ? e.message.slice(0, 80) : 'error'}`);
-    }
-    done++;
-    await service.from('work_runs').update({ done }).eq('week_id', weekId);
-  };
-  const task = (async () => {
-    // 6개씩 나눠 동시에
-    for (let i = 0; i < todo.length; i += 6) await Promise.all(todo.slice(i, i + 6).map(one));
-    await service.from('work_runs').update({ status: errors.length === todo.length ? 'error' : 'done', error: errors.length ? errors.join(' / ').slice(0, 500) : null, finished_at: new Date().toISOString() }).eq('week_id', weekId);
-  })();
-  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
-    EdgeRuntime.waitUntil(task);
-    return json({ started: true, total: todo.length });
+  if (!todo.length) {
+    await service.from('work_runs').upsert({ week_id: weekId, status: 'done', total: 0, done: 0, error: null, batch_id: null, meta: {}, started_at: new Date().toISOString(), finished_at: new Date().toISOString() });
+    return json({ started: false, total: 0 });
   }
-  await task;
-  return json({ started: true, total: todo.length, errors });
+
+  const period = `${from} ~ ${addDays(weekId, -2)}`;
+  let batch;
+  try {
+    batch = await client.messages.batches.create({
+      requests: todo.map(({ d, lines }) => {
+        // 아주 긴 주는 앞쪽부터 (부서 하나에 보고 원문 약 15만 자까지)
+        let used = 0;
+        const kept = lines.filter((l) => (used += l.length) <= 150_000);
+        return {
+          custom_id: d.id,
+          params: {
+            model: WORKMAP_MODEL,
+            max_tokens: 32000,
+            system: WORKMAP_SYSTEM,
+            output_config: { effort: 'high', format: { type: 'json_schema', schema: WORKMAP_SCHEMA } },
+            messages: [{
+              role: 'user',
+              content: `## 분석 대상\n- 부서: ${d.name}\n- 기간: ${period} (한 주)\n- 보고 ${kept.length}건${kept.length < lines.length ? ` (전체 ${lines.length}건 중 앞쪽)` : ''}\n\n## 보고 원문\n${kept.join('\n---\n')}`,
+            }],
+          },
+        };
+      }),
+    // deno-lint-ignore no-explicit-any
+    } as any);
+  } catch (e) {
+    if (e instanceof Anthropic.RateLimitError) return json({ error: 'AI 사용량이 많아 잠시 후 다시 시도해 주세요.' }, 429);
+    if (e instanceof Anthropic.APIError) return json({ error: `AI 요청이 실패했습니다 (${e.status ?? '연결 오류'}).` }, 502);
+    throw e;
+  }
+  await service.from('work_runs').upsert({
+    week_id: weekId, status: 'running', total: todo.length, done: 0, error: null, batch_id: batch.id,
+    meta: Object.fromEntries(todo.map(({ d, lines }) => [d.id, lines.length])), started_at: new Date().toISOString(), finished_at: null,
+  });
+  return json({ started: true, total: todo.length });
+}
+
+/** 진행 중인 배치 결과를 모아 저장한다 */
+async function workmapCollect(service: Db, client: Anthropic) {
+  const { data: runs } = await service.from('work_runs').select('week_id, batch_id, total, meta').eq('status', 'running').not('batch_id', 'is', null);
+  const out: { weekId: string; status: string; done: number }[] = [];
+  for (const run of runs ?? []) {
+    try {
+      const b = await client.messages.batches.retrieve(run.batch_id);
+      const c = b.request_counts;
+      const finished = c.succeeded + c.errored + c.canceled + c.expired;
+      if (b.processing_status !== 'ended') {
+        await service.from('work_runs').update({ done: finished }).eq('week_id', run.week_id);
+        out.push({ weekId: run.week_id, status: 'running', done: finished });
+        continue;
+      }
+      const errors: string[] = [];
+      let saved = 0;
+      for await (const r of await client.messages.batches.results(run.batch_id)) {
+        if (r.result.type !== 'succeeded') { errors.push(r.result.type); continue; }
+        const m = r.result.message;
+        if (m.stop_reason !== 'end_turn') { errors.push(String(m.stop_reason)); continue; }
+        // deno-lint-ignore no-explicit-any
+        const text = m.content.filter((x: any) => x.type === 'text').map((x: any) => x.text).join('');
+        try {
+          const result = JSON.parse(text);
+          await service.from('work_analyses').upsert({
+            week_id: run.week_id, department_id: r.custom_id, report_count: Number((run.meta as Record<string, number>)?.[r.custom_id] ?? 0),
+            result, model: m.model, created_at: new Date().toISOString(),
+          });
+          saved++;
+        } catch { errors.push('parse'); }
+      }
+      await service.from('work_runs').update({
+        status: saved ? 'done' : 'error', done: run.total, finished_at: new Date().toISOString(),
+        error: errors.length ? `${errors.length}개 부서 실패 (${[...new Set(errors)].join(', ')})` : null,
+      }).eq('week_id', run.week_id);
+      out.push({ weekId: run.week_id, status: saved ? 'done' : 'error', done: run.total });
+    } catch (e) {
+      out.push({ weekId: run.week_id, status: 'check-failed', done: 0 });
+      console.error('workmap collect', run.week_id, e instanceof Error ? e.message : e);
+    }
+  }
+  return { runs: out };
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -246,7 +316,7 @@ Deno.serve(async (req) => {
   const service = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const body = await req.json().catch(() => ({}));
   // 업무 분석: 예약 작업(비밀값) 또는 찐관리자(admin 계정)
-  if (body.mode === 'workmap') return workmap(service, body, req.headers.get('Authorization') ?? '');
+  if (body.mode === 'workmap' || body.mode === 'workmap-collect') return workmap(service, body, req.headers.get('Authorization') ?? '');
   const caller = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
   });
