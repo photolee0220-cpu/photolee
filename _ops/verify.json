@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-22T09:43:40Z",
+  "at": "2026-11-22T09:58:53Z",
   "checks": [
     {
       "check": "웹사이트 연결 정보",
@@ -24,7 +24,7 @@
     {
       "check": "보고 칸",
       "ok": true,
-      "detail": "234칸"
+      "detail": "235칸"
     },
     {
       "check": "현장",
@@ -179,7 +179,7 @@
     {
       "check": "백업 만들기",
       "ok": true,
-      "detail": "최신 백업 383569바이트"
+      "detail": "최신 백업 384431바이트"
     },
     {
       "check": "알림 서버: 서명 키",
@@ -505,6 +505,21 @@
       "check": "업무 분석: admin 통과·형식 검사",
       "ok": true,
       "detail": "ok"
+    },
+    {
+      "check": "AI 사용량 기록(admin 읽기)",
+      "ok": true,
+      "detail": "1건 · 업무 분석 기록 1건"
+    },
+    {
+      "check": "ai_usage: 로그인 안 한 사람 차단",
+      "ok": true,
+      "detail": "0건"
+    },
+    {
+      "check": "AI 월 예산 설정",
+      "ok": true,
+      "detail": "{\"krwPerUsd\":1400,\"monthlyKrw\":10000}"
     },
     {
       "check": "업무 분석: 지난주 컨설팅 분석(Opus 배치)",
