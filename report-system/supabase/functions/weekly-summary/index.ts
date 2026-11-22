@@ -17,6 +17,37 @@ const json = (body: unknown, status = 200) =>
 
 const MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'];
 
+/* ───────────── AI 월 예산 ───────────── */
+// 100만 토큰당 달러 (입력, 출력). 배치는 절반. 생각(thinking) 토큰은 출력에 포함되어 청구된다
+const PRICES: Record<string, [number, number]> = {
+  'claude-haiku-5-5': [0.10, 0.50], 'claude-sonnet-5-5': [2, 10], 'claude-sonnet-5': [2, 10], 'claude-opus-5-5': [4, 20], 'claude-opus-5': [5, 25], 'claude-opus-4-8': [5, 25],
+};
+const priceOf = (model: string) => PRICES[model] ?? PRICES[Object.keys(PRICES).find((k) => model.startsWith(k)) ?? ''] ?? [5, 25];
+function costUsd(model: string, input: number, output: number, batch = false): number {
+  let [pi, po] = priceOf(model);
+  if (model.startsWith('claude-haiku-5-5') && input > 100_000) { pi = 0.5; po = 2.5; }
+  return ((input * pi + output * po) / 1e6) * (batch ? 0.5 : 1);
+}
+// deno-lint-ignore no-explicit-any
+async function budgetState(service: any): Promise<{ capUsd: number; spentUsd: number; krwPerUsd: number }> {
+  const { data: b } = await service.from('app_settings').select('value').eq('key', 'ai_budget').maybeSingle();
+  const krwPerUsd = Number(b?.value?.krwPerUsd) > 0 ? Number(b.value.krwPerUsd) : 1400;
+  const capUsd = (Number(b?.value?.monthlyKrw) >= 0 && b?.value?.monthlyKrw != null ? Number(b.value.monthlyKrw) : 10000) / krwPerUsd;
+  // 이번 달 (한국 시간 1일 0시부터)
+  const kst = new Date(Date.now() + 9 * 3600000);
+  const monthStart = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), 1) - 9 * 3600000).toISOString();
+  const { data: rows } = await service.from('ai_usage').select('cost_usd').gte('at', monthStart);
+  const spentUsd = (rows ?? []).reduce((n: number, r: { cost_usd: number }) => n + Number(r.cost_usd), 0);
+  return { capUsd, spentUsd, krwPerUsd };
+}
+// deno-lint-ignore no-explicit-any
+async function recordUsage(service: any, feature: string, model: string, usage: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | undefined, batch = false, units = 1, ref: string | null = null) {
+  const input = Number(usage?.input_tokens ?? 0) + Number(usage?.cache_creation_input_tokens ?? 0) + Number(usage?.cache_read_input_tokens ?? 0) * 0.1;
+  const output = Number(usage?.output_tokens ?? 0);
+  await service.from('ai_usage').insert({ feature, model, input_tokens: Math.round(input), output_tokens: output, batch, units, cost_usd: costUsd(model, input, output, batch), ref });
+}
+const won = (usd: number, rate: number) => `${Math.round(usd * rate).toLocaleString('ko-KR')}원`;
+
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -224,6 +255,19 @@ async function workmap(service: Db, body: Record<string, unknown>, authHeader: s
   }
 
   const period = `${from} ~ ${addDays(weekId, -2)}`;
+  // 예산으로 모델 고르기: Opus로 해도 예산의 90% 안이면 Opus, 아니면 Sonnet(95% 안), 그래도 넘치면 이번 주는 쉰다
+  const budget = await budgetState(service);
+  const { data: past } = await service.from('ai_usage').select('output_tokens, units').eq('feature', 'workmap').order('at', { ascending: false }).limit(5);
+  const outPerDept = past?.length ? past.reduce((n: number, r: { output_tokens: number; units: number }) => n + r.output_tokens / Math.max(1, r.units), 0) / past.length : 15000;
+  const inTokens = todo.reduce((n, j) => n + Math.min(150_000, j.lines.join('\n').length) / 1.2 + 3500, 0);
+  const est = (m: string) => costUsd(m, inTokens, outPerDept * todo.length * 1.2, true);
+  const model = budget.spentUsd + est(WORKMAP_MODEL) <= budget.capUsd * 0.9 ? WORKMAP_MODEL
+    : budget.spentUsd + est('claude-sonnet-5-5') <= budget.capUsd * 0.95 ? 'claude-sonnet-5-5' : null;
+  if (!model) {
+    const msg = `이번 달 AI 예산이 부족해 분석을 쉬었습니다 (사용 ${won(budget.spentUsd, budget.krwPerUsd)} / 예산 ${won(budget.capUsd, budget.krwPerUsd)}, 이 주 분석 예상 ${won(est('claude-sonnet-5-5'), budget.krwPerUsd)} 이상). 다음 달에 다시 분석하거나 예산을 늘려 주세요.`;
+    await service.from('work_runs').upsert({ week_id: weekId, status: 'error', total: todo.length, done: 0, error: msg, batch_id: null, meta: {}, started_at: new Date().toISOString(), finished_at: new Date().toISOString() });
+    return json({ error: msg }, 402);
+  }
   let batch;
   try {
     batch = await client.messages.batches.create({
@@ -234,7 +278,7 @@ async function workmap(service: Db, body: Record<string, unknown>, authHeader: s
         return {
           custom_id: d.id,
           params: {
-            model: WORKMAP_MODEL,
+            model,
             max_tokens: 32000,
             system: WORKMAP_SYSTEM,
             output_config: { effort: 'high', format: { type: 'json_schema', schema: WORKMAP_SCHEMA } },
@@ -254,9 +298,9 @@ async function workmap(service: Db, body: Record<string, unknown>, authHeader: s
   }
   await service.from('work_runs').upsert({
     week_id: weekId, status: 'running', total: todo.length, done: 0, error: null, batch_id: batch.id,
-    meta: Object.fromEntries(todo.map(({ d, lines }) => [d.id, lines.length])), started_at: new Date().toISOString(), finished_at: null,
+    meta: { ...Object.fromEntries(todo.map(({ d, lines }) => [d.id, lines.length])), model, estimateUsd: est(model) }, started_at: new Date().toISOString(), finished_at: null,
   });
-  return json({ started: true, total: todo.length });
+  return json({ started: true, total: todo.length, model });
 }
 
 /** 진행 중인 배치 결과를 모아 저장한다 */
@@ -275,9 +319,12 @@ async function workmapCollect(service: Db, client: Anthropic) {
       }
       const errors: string[] = [];
       let saved = 0;
+      const use = { input_tokens: 0, output_tokens: 0 };
+      let usedModel = '';
       for await (const r of await client.messages.batches.results(run.batch_id)) {
         if (r.result.type !== 'succeeded') { errors.push(r.result.type); continue; }
         const m = r.result.message;
+        use.input_tokens += m.usage.input_tokens + (m.usage.cache_creation_input_tokens ?? 0); use.output_tokens += m.usage.output_tokens; usedModel = m.model;
         if (m.stop_reason !== 'end_turn') { errors.push(String(m.stop_reason)); continue; }
         // deno-lint-ignore no-explicit-any
         const text = m.content.filter((x: any) => x.type === 'text').map((x: any) => x.text).join('');
@@ -290,7 +337,9 @@ async function workmapCollect(service: Db, client: Anthropic) {
           saved++;
         } catch { errors.push('parse'); }
       }
+      if (usedModel) await recordUsage(service, 'workmap', usedModel, use, true, Math.max(1, saved), run.batch_id);
       await service.from('work_runs').update({
+        meta: { ...(run.meta as Record<string, unknown>), usageRecorded: true },
         status: saved ? 'done' : 'error', done: run.total, finished_at: new Date().toISOString(),
         error: errors.length ? `${errors.length}개 부서 실패 (${[...new Set(errors)].join(', ')})` : null,
       }).eq('week_id', run.week_id);
@@ -299,6 +348,22 @@ async function workmapCollect(service: Db, client: Anthropic) {
       out.push({ weekId: run.week_id, status: 'check-failed', done: 0 });
       console.error('workmap collect', run.week_id, e instanceof Error ? e.message : e);
     }
+  }
+  // 예산 기록이 생기기 전에 끝난 분석의 사용량을 채운다
+  const { data: old } = await service.from('work_runs').select('week_id, batch_id, meta').neq('status', 'running').not('batch_id', 'is', null).limit(10);
+  for (const run of (old ?? []).filter((r: { meta: Record<string, unknown> }) => !r.meta?.usageRecorded).slice(0, 3)) {
+    try {
+      const use = { input_tokens: 0, output_tokens: 0 };
+      let usedModel = '';
+      let n = 0;
+      for await (const r of await client.messages.batches.results(run.batch_id)) {
+        if (r.result.type !== 'succeeded') continue;
+        const m = r.result.message;
+        use.input_tokens += m.usage.input_tokens + (m.usage.cache_creation_input_tokens ?? 0); use.output_tokens += m.usage.output_tokens; usedModel = m.model; n++;
+      }
+      if (usedModel) await recordUsage(service, 'workmap', usedModel, use, true, Math.max(1, n), run.batch_id);
+      await service.from('work_runs').update({ meta: { ...(run.meta ?? {}), usageRecorded: true } }).eq('week_id', run.week_id);
+    } catch (e) { console.error('workmap usage backfill', e instanceof Error ? e.message : e); }
   }
   return { runs: out };
 }
@@ -382,6 +447,9 @@ Deno.serve(async (req) => {
     output_config: { effort: 'medium' as const, format: { type: 'json_schema' as const, schema: askMode ? ASK_SCHEMA : safetyMode ? SAFETY_SCHEMA : siteMode ? SITE_SCHEMA : SCHEMA } },
     messages: [{ role: 'user' as const, content: prompt }],
   };
+  // 한 달 AI 예산을 다 썼으면 요청하지 않는다
+  const budget = await budgetState(service);
+  if (budget.spentUsd >= budget.capUsd) return json({ error: `이번 달 AI 예산(${won(budget.capUsd, budget.krwPerUsd)})을 모두 썼습니다. 다음 달 1일에 다시 쓸 수 있습니다.` }, 402);
   let response;
   try {
     // Haiku 5.5는 서버 쪽 거절 대체 모델이 없어 일반 요청으로 보낸다
@@ -394,6 +462,7 @@ Deno.serve(async (req) => {
     throw e;
   }
 
+  await recordUsage(service, ocrMode ? 'ocr' : askMode ? 'ask' : safetyMode ? 'safety' : siteMode ? 'site' : 'summary', response.model, response.usage).catch(() => undefined);
   if (response.stop_reason === 'refusal') return json({ error: askMode ? 'AI가 이 질문에 답하지 않았습니다. 질문을 바꿔 보세요.' : 'AI가 이 보고의 요약을 거절했습니다. 원문을 확인해 주세요.' }, 422);
   if (response.stop_reason === 'max_tokens') return json({ error: askMode ? '답이 너무 길어 끊겼습니다. 질문을 좁혀 주세요.' : '보고가 너무 길어 요약이 끊겼습니다.' }, 422);
   const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');

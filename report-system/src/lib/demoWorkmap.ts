@@ -194,6 +194,12 @@ export function createDemoWorkmap(ctx: { me(): Member; departments(): Department
       }
       return delay(runsOf().sort((a, b) => b.weekId.localeCompare(a.weekId)));
     },
+    async budget() {
+      guard();
+      const monthlyKrw = read<number>(`${ctx.key}-aibudget`, 10000);
+      return delay({ monthlyKrw, krwPerUsd: 1400, spentKrw: 6840, byFeature: [{ feature: 'workmap', krw: 6310 }, { feature: 'ask', krw: 420 }, { feature: 'safety', krw: 110 }] });
+    },
+    async setBudget(monthlyKrw) { guard(); write(`${ctx.key}-aibudget`, Math.max(0, Math.round(monthlyKrw))); return this.budget(); },
     async ideas() { guard(); return delay(read<WorkIdea[]>(I, []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))); },
     async saveIdea(i) {
       guard();

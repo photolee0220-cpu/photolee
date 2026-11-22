@@ -80,6 +80,9 @@ export interface WorkAnalysis {
   model?: string;
 }
 
+/** AI 월 예산 (원). 사용액은 서버가 기록한 토큰으로 계산한 추정치 */
+export interface AiBudget { monthlyKrw: number; spentKrw: number; krwPerUsd: number; byFeature: { feature: string; krw: number }[] }
+
 /** 한 주 분석 진행 상태 */
 export interface WorkRun { weekId: WeekId; status: 'running' | 'done' | 'error'; total: number; done: number; error: string | null; startedAt: string }
 
@@ -115,6 +118,9 @@ export interface WorkmapApi {
   generate(weekId: WeekId): Promise<void>;
   /** 진행 상태 (진행 중이면 결과를 모으러 간다) */
   runs(): Promise<WorkRun[]>;
+  /** 이번 달 AI 사용액과 예산 (원) */
+  budget(): Promise<AiBudget>;
+  setBudget(monthlyKrw: number): Promise<AiBudget>;
   ideas(): Promise<WorkIdea[]>;
   saveIdea(i: WorkIdea): Promise<WorkIdea>;
   removeIdea(id: string): Promise<void>;

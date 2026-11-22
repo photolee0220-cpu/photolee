@@ -8,7 +8,7 @@ import type { Department, WeekId } from '../lib/types';
 import { parseIsoDate, shiftDay } from '../lib/week';
 import {
   APPROACH_LABEL, GRADE_LABEL, IDEA_STATUS, LEVEL_LABEL, REPLACE_LABEL, ideaScore, isOwner,
-  type IdeaLevel, type IdeaStatus, type WorkAnalysis, type WorkIdea, type WorkIdeaSuggestion, type WorkRun,
+  type AiBudget, type IdeaLevel, type IdeaStatus, type WorkAnalysis, type WorkIdea, type WorkIdeaSuggestion, type WorkRun,
 } from '../lib/workmapTypes';
 import { useStore } from '../state/store';
 
@@ -33,6 +33,7 @@ export function WorkMapPage() {
   const [ideas, setIdeas] = useState<WorkIdea[]>([]);
   const [week, setWeek] = useState<WeekId | null>(null);
   const [report, setReport] = useState(false);
+  const [budget, setBudget] = useState<AiBudget | null>(null);
   const depts = useMemo(() => (snap ? activeDepartments(snap) : []), [snap]);
   const running = runs.filter((r) => r.status === 'running');
 
@@ -48,6 +49,7 @@ export function WorkMapPage() {
     api.workmap.ensureRecent().catch((e) => toast(e instanceof Error ? e.message : '분석을 시작하지 못했습니다.', 'error'))
       .finally(() => void reload().catch((e) => { setAll([]); toast(e instanceof Error ? e.message : '분석을 불러오지 못했습니다.', 'error'); }));
     api.workmap.ideas().then(setIdeas).catch(() => undefined);
+    api.workmap.budget().then(setBudget).catch(() => undefined);
   }, [me, toast, reload]);
 
   // 진행 중인 분석이 있으면 15초마다 확인 (끝나면 바로 화면에 나온다)
@@ -56,7 +58,7 @@ export function WorkMapPage() {
     const t = setInterval(() => {
       api.workmap.runs().then(async (r) => {
         setRuns(r);
-        if (r.filter((x) => x.status === 'running').length < running.length) { setAll(await api.workmap.list()); toast('분석이 끝났습니다.'); }
+        if (r.filter((x) => x.status === 'running').length < running.length) { setAll(await api.workmap.list()); api.workmap.budget().then(setBudget).catch(() => undefined); toast('분석이 끝났습니다.'); }
       }).catch(() => undefined);
     }, api.mode === 'demo' ? 2000 : 15000);
     return () => clearInterval(t);
@@ -96,6 +98,7 @@ export function WorkMapPage() {
         <span className="flex items-center gap-1.5 text-[13px] text-ink-3"><Lock size={13} />관리자(admin) 계정만 보는 화면 · 매주 월요일 아침 지난주 일일보고·부서보고를 AI 컨설턴트가 부서별로 분석합니다</span>
       </PageHeader>
       {api.mode === 'demo' && <p className="-mt-4 mb-4 rounded-lg bg-sunken px-3 py-2 text-[12.5px] text-ink-3">체험판은 정해진 견본 분석을 보여 줍니다 (공무 부서는 실제 사이트 수준의 컨설팅 분석 견본). 실제 사이트에서는 AI가 그 주에 올라온 보고를 읽고 만듭니다.</p>}
+      {budget && <BudgetBar b={budget} onChange={setBudget} />}
       {running.length > 0 && (
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3">
           <Spinner className="mt-0.5" />
@@ -118,6 +121,41 @@ export function WorkMapPage() {
         <IdeasView ideas={ideas} depts={depts} onChange={(i) => setIdeas((cur) => cur.map((x) => (x.id === i.id ? i : x)))} onRemove={(id) => setIdeas((cur) => cur.filter((x) => x.id !== id))} />
       )}
       {report && <ReportModal all={all.filter((a) => recent.includes(a.weekId))} weeks={recent} depts={depts} ideas={ideas} onClose={() => setReport(false)} />}
+    </div>
+  );
+}
+
+const FEATURE_LABEL: Record<string, string> = { workmap: '업무 분석', ask: '대표 AI 질문', safety: '안전 당부 초안', ocr: 'PDF 글자 읽기', site: '현장 요약', summary: '주간 요약' };
+
+/** 이번 달 AI 사용액 / 예산 */
+function BudgetBar({ b, onChange }: { b: AiBudget; onChange(b: AiBudget): void }) {
+  const { toast } = useStore();
+  const [edit, setEdit] = useState(false);
+  const [v, setV] = useState(String(b.monthlyKrw));
+  const pct = b.monthlyKrw ? Math.min(100, (b.spentKrw / b.monthlyKrw) * 100) : 100;
+  const save = async () => {
+    const n = Number(v.replace(/[^0-9]/g, ''));
+    if (!Number.isFinite(n)) return;
+    try { onChange(await api.workmap.setBudget(n)); setEdit(false); toast('예산을 바꿨습니다.'); } catch (e) { toast(e instanceof Error ? e.message : '저장하지 못했습니다.', 'error'); }
+  };
+  return (
+    <div className="mb-4 rounded-xl border border-line bg-surface px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
+        <span className="font-bold">이번 달 AI 사용</span>
+        <span className={cx('font-bold', pct >= 90 ? 'text-danger' : pct >= 70 ? 'text-warn' : 'text-ink')}>약 {Math.round(b.spentKrw).toLocaleString('ko-KR')}원</span>
+        <span className="text-ink-3">/ 예산 {b.monthlyKrw.toLocaleString('ko-KR')}원</span>
+        {edit ? (
+          <span className="ml-auto flex items-center gap-1.5">
+            <Input value={v} onChange={(e) => setV(e.target.value)} inputMode="numeric" className="!h-8 !w-28 text-right text-[13px]" aria-label="한 달 예산(원)" />원
+            <Button size="sm" tone="primary" onClick={() => void save()}>저장</Button><Button size="sm" onClick={() => setEdit(false)}>취소</Button>
+          </span>
+        ) : <Button size="sm" tone="ghost" className="ml-auto" onClick={() => { setV(String(b.monthlyKrw)); setEdit(true); }}>예산 바꾸기</Button>}
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-sunken"><div className={cx('h-full rounded-full', pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warn' : 'bg-brand')} style={{ width: `${pct}%` }} /></div>
+      <p className="mt-1.5 text-[12px] text-ink-3">
+        {b.byFeature.length ? `${b.byFeature.map((f) => `${FEATURE_LABEL[f.feature] ?? f.feature} ${Math.round(f.krw).toLocaleString('ko-KR')}원`).join(' · ')} · ` : ''}
+        예산을 넘지 않게 서버가 막습니다. 업무 분석은 Opus로 하면 예산에 가까워질 때 Sonnet으로 바꾸고, 그래도 넘치면 그 주는 쉽니다. 금액은 토큰으로 계산한 추정치(1달러 {b.krwPerUsd.toLocaleString('ko-KR')}원)이며 실제 청구액은 Anthropic Console에서 확인하세요.
+      </p>
     </div>
   );
 }
@@ -177,6 +215,7 @@ function DeptCard({ a, name, added, onAdd }: { a: WorkAnalysis; name: string; ad
         <h3 className="text-[17px] font-bold">{name}</h3>
         <Badge>보고 {a.reportCount}건</Badge>
         {a.replaceRate != null && <Badge tone="brand">AI 대체 가능 약 {a.replaceRate}%</Badge>}
+        {a.model && /sonnet/.test(a.model) && <Badge tone="warn">예산 때문에 Sonnet으로 분석</Badge>}
         {a.hoursSavable != null && <Badge tone="ok">절감 가능 주 {hours(a.hoursSavable)}{a.hoursObserved ? ` / 확인된 업무 ${hours(a.hoursObserved)}` : ''}</Badge>}
       </div>
       <p className="mt-2 text-[14px] leading-relaxed text-ink-2">{a.summary}</p>

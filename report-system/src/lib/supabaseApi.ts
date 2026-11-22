@@ -452,6 +452,23 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
           if (runs.some((r) => r.status === 'running')) { await call({ mode: 'workmap-collect' }).catch(() => undefined); return readRuns(); }
           return runs;
         },
+        async budget() {
+          await call({ mode: 'workmap-collect' }).catch(() => undefined);
+          const b = check(await sb.from('app_settings').select('value').eq('key', 'ai_budget').maybeSingle()) as Row | null;
+          const krwPerUsd = Number(b?.value?.krwPerUsd) > 0 ? Number(b!.value.krwPerUsd) : 1400;
+          const kst = new Date(Date.now() + 9 * 3600000);
+          const monthStart = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), 1) - 9 * 3600000).toISOString();
+          const rows = check(await sb.from('ai_usage').select('feature, cost_usd').gte('at', monthStart)) as Row[];
+          const by = new Map<string, number>();
+          rows.forEach((r) => by.set(r.feature, (by.get(r.feature) ?? 0) + Number(r.cost_usd) * krwPerUsd));
+          return { monthlyKrw: b?.value?.monthlyKrw != null ? Number(b.value.monthlyKrw) : 10000, krwPerUsd, spentKrw: [...by.values()].reduce((n, v) => n + v, 0),
+            byFeature: [...by.entries()].map(([feature, krw]) => ({ feature, krw })).sort((x, y) => y.krw - x.krw) };
+        },
+        async setBudget(monthlyKrw) {
+          const cur = check(await sb.from('app_settings').select('value').eq('key', 'ai_budget').maybeSingle()) as Row | null;
+          check(await sb.from('app_settings').upsert({ key: 'ai_budget', value: { krwPerUsd: 1400, ...(cur?.value ?? {}), monthlyKrw: Math.max(0, Math.round(monthlyKrw)) }, updated_at: new Date().toISOString() }));
+          return this.budget();
+        },
         async ideas() {
           return (check(await sb.from('work_ideas').select('*').order('updated_at', { ascending: false })) as Row[]).map(toIdea);
         },

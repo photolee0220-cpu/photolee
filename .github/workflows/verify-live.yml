@@ -245,7 +245,10 @@ jobs:
           b=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d '{"mode":"workmap","weekId":"2026-11-17"}')
           echo "$b" | grep -q "보고 주" && rec "업무 분석: admin 통과·형식 검사" 1 "ok" || rec "업무 분석: admin 통과·형식 검사" 0 "$(echo "$b" | head -c 150)"
           dow=$(TZ=Asia/Seoul date +%u); W=$(TZ=Asia/Seoul date -d "-$((dow - 1)) days" +%F)
-          st=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"workmap\",\"weekId\":\"$W\"}")
+          # 이미 분석한 주는 다시 돌리지 않는다 (점검 때마다 AI 비용이 나가지 않게)
+          have=$(curl -sS "$URL/rest/v1/work_runs?week_id=eq.$W&select=status" "${H[@]}" | jq 'length')
+          st="skip"
+          [ "$have" = 0 ] && st=$(curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d "{\"mode\":\"workmap\",\"weekId\":\"$W\"}")
           # 컨설팅 분석은 AI 배치로 돈다: 결과를 모으며 최대 25분 기다린다
           for i in $(seq 1 50); do
             curl -sS -X POST "$URL/functions/v1/weekly-summary" "${H[@]}" -H "Content-Type: application/json" -d '{"mode":"workmap-collect"}' >/dev/null
@@ -256,6 +259,13 @@ jobs:
           an=$(curl -sS "$URL/rest/v1/work_analyses?week_id=eq.$W&select=model,result" "${H[@]}")
           n=$(echo "$an" | jq 'length')
           shape=$(echo "$an" | jq -c '{opus: ([.[] | select(.model | test("opus"))] | length), tasks: ([.[].result.tasks // [] | length] | add // 0), ideas: ([.[].result.ideas // [] | length] | add // 0), withAsIs: ([.[].result.ideas // [] | .[] | select((.asIs // "") != "")] | length), evidence: ([.[].result.tasks // [] | .[] | select((.evidence // "") != "")] | length)}')
+          # AI 예산
+          r=$(curl -sS "$URL/rest/v1/ai_usage?select=feature,cost_usd" "${H[@]}")
+          echo "$r" | jq -e 'type == "array"' >/dev/null && rec "AI 사용량 기록(admin 읽기)" 1 "$(echo "$r" | jq 'length')건 · 업무 분석 기록 $(echo "$r" | jq '[.[] | select(.feature == "workmap")] | length')건" || rec "AI 사용량 기록(admin 읽기)" 0 "$(echo "$r" | head -c 120)"
+          a=$(curl -sS "$URL/rest/v1/ai_usage?select=id" -H "apikey: $ANON" | jq 'if type == "array" then length else 0 end')
+          [ "$a" = 0 ] && rec "ai_usage: 로그인 안 한 사람 차단" 1 "0건" || rec "ai_usage: 로그인 안 한 사람 차단" 0 "$a"
+          r=$(curl -sS "$URL/rest/v1/app_settings?key=eq.ai_budget&select=value" "${H[@]}")
+          echo "$r" | jq -e '.[0].value.monthlyKrw >= 0' >/dev/null && rec "AI 월 예산 설정" 1 "$(echo "$r" | jq -c '.[0].value')" || rec "AI 월 예산 설정" 0 "$(echo "$r" | head -c 120)"
           echo "$run" | jq -e '.[0].status == "done"' >/dev/null && rec "업무 분석: 지난주 컨설팅 분석(Opus 배치)" 1 "$W 주 · 부서 $(echo "$run" | jq '.[0].total')곳 중 $n곳 저장 · $shape" || rec "업무 분석: 지난주 컨설팅 분석(Opus 배치)" 0 "start=$(echo "$st" | head -c 80) status=$(echo "$run" | jq -r '.[0].status // "none"') saved=$n"
           cat "$RUNNER_TEMP/r.json"
       - name: Publish result
