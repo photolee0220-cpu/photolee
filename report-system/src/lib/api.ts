@@ -3,6 +3,7 @@ import type {
   CalendarEvent, DailyComment, DailyPhoto, DailyReport, DailySnapshot, SaveDailyInput, DayStatus, SearchDoc, AskAnswer, MemoData, YouTubeVideo,
 } from './types';
 import type { TalkApi } from './talkTypes';
+import type { WorkmapApi } from './workmapTypes';
 
 export interface WeekSummary {
   weekId: WeekId;
@@ -97,6 +98,8 @@ export interface Api {
     load(): Promise<MemoData>;
     save(m: MemoData): Promise<MemoData>;
   };
+  /** 업무 분석 (찐관리자 admin 계정만) */
+  workmap: WorkmapApi;
   /** 사닥다리 유튜브 최근 영상 */
   youtube: {
     videos(channelUrl: string): Promise<YouTubeVideo[]>;

@@ -6,6 +6,7 @@ import { DEFAULT_SUMMARY_MODEL, summaryModel } from './models';
 import { shiftDay } from './week';
 import { wroteEntry } from './derive';
 import { createDemoTalk, resetDemoTalk } from './demoTalk';
+import { createDemoWorkmap } from './demoWorkmap';
 import type { ArchiveItem } from './talkTypes';
 import { askClaudeForSummary, askClaudeJson, parseSiteSummary } from './summary';
 import { checkAttachable, triggerDownload } from './fileTypes';
@@ -499,6 +500,8 @@ export const demoApi: Api = {
       return delay(next);
     },
   },
+
+  workmap: createDemoWorkmap({ me: () => me(), departments: () => state.departments, reportWeek: demoReportWeek, key: KEY }),
 
   youtube: {
     async videos() {

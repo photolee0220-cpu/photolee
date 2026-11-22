@@ -17,6 +17,7 @@ import { People } from './pages/People';
 import { Shared } from './pages/Shared';
 import { StoreProvider, useStore } from './state/store';
 import { TalkPage } from './pages/talk/TalkPage';
+import { WorkMapPage } from './pages/WorkMap';
 import { YouTubePage } from './pages/YouTube';
 import { clearTalk } from './pages/talk/useTalk';
 
@@ -66,6 +67,7 @@ function Routes() {
       {view === 'calendar' && <CalendarPage />}
       {view === 'talk' && <TalkPage />}
       {view === 'youtube' && <YouTubePage />}
+      {view === 'workmap' && <WorkMapPage />}
       {view === 'people' && <People />}
       {view === 'mine' && <MyWeek />}
       {view === 'shared' && <Shared />}

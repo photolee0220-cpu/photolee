@@ -1,5 +1,5 @@
 import {
-  BookOpen, MessagesSquare, Tv, Link2, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
+  BookOpen, MessagesSquare, Tv, ScanSearch, Link2, CalendarDays, ExternalLink, UsersRound, CalendarRange, ClipboardList, MoreHorizontal, ChevronLeft, ChevronRight, FileText, ListChecks, History, LayoutDashboard, LogOut, Moon, PenLine, Search, Settings, Sun, Users, Eye,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import logoDiscUrl from '../assets/logo-disc.png';
@@ -14,7 +14,8 @@ import { NotificationButton, NotificationGate } from './Notifications';
 import { NoticeAckGate } from './ReportNotice';
 import { talkAvailable, talkBadge, useTalk } from '../pages/talk/useTalk';
 import { UrgentGate } from '../pages/talk/Extras';
-import { previewOn } from '../lib/preview';
+import { previewOn, workmapOn } from '../lib/preview';
+import { isOwner } from '../lib/workmapTypes';
 import { useAppSettings } from '../lib/settings';
 import { Avatar, Badge, cx, IconButton } from './ui';
 
@@ -25,6 +26,8 @@ export function navItems(me: ReturnType<typeof useStore>['me'], hasShared: boole
   // 소통은 모두에게, 앞쪽에 (휴대폰 아래 메뉴에서 바로 보이게)
   if (talkAvailable()) items.splice(Math.min(1, items.length), 0, { id: 'talk', label: '소통', icon: <MessagesSquare size={18} /> });
   if (previewOn()) items.push({ id: 'youtube', label: '사닥다리 유튜브', icon: <Tv size={18} /> });
+  // 업무 분석: 찐관리자(admin 계정)만
+  if (workmapOn() && isOwner(me)) items.push({ id: 'workmap', label: '업무 분석', icon: <ScanSearch size={18} /> });
   return items;
 }
 

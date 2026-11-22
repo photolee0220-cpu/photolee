@@ -410,6 +410,14 @@ export function createSupabaseApi(url: string, anonKey: string, emailDomain: str
         return { text: r.text, todos: r.todos ?? [], updatedAt: r.updated_at };
       },
     },
+    // 업무 분석: 체험판 확인 뒤 서버에 붙인다
+    workmap: {
+      async list() { throw new ApiError('준비 중인 기능입니다.'); },
+      async generate() { throw new ApiError('준비 중인 기능입니다.'); },
+      async ideas() { return []; },
+      async saveIdea() { throw new ApiError('준비 중인 기능입니다.'); },
+      async removeIdea() { throw new ApiError('준비 중인 기능입니다.'); },
+    },
     youtube: {
       async videos(channelUrl) {
         const { data, error } = await sb.functions.invoke('notify', { body: { action: 'youtube', url: channelUrl } });
