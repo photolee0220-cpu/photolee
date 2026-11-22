@@ -1,82 +1,82 @@
 {
   "result": "success",
   "project_ref": "hwpkxybtglkbxpaihfzl",
-  "run": "44725023654",
+  "run": "45006336083",
   "steps": [
     {
       "step": "secrets",
       "message": "ok",
-      "at": "2026-11-20T11:07:54Z"
+      "at": "2026-11-22T09:11:46Z"
     },
     {
       "step": "organization",
       "message": "using keugwxbvqwqbihrskrfi (사닥다리종합건설)",
-      "at": "2026-11-20T11:07:54Z"
+      "at": "2026-11-22T09:11:46Z"
     },
     {
       "step": "project",
       "message": "using existing hwpkxybtglkbxpaihfzl",
-      "at": "2026-11-20T11:07:55Z"
+      "at": "2026-11-22T09:11:46Z"
     },
     {
       "step": "project",
       "message": "status ACTIVE_HEALTHY",
-      "at": "2026-11-20T11:07:55Z"
+      "at": "2026-11-22T09:11:47Z"
     },
     {
       "step": "database",
       "message": "already set up, skipped",
-      "at": "2026-11-20T11:08:16Z"
+      "at": "2026-11-22T09:12:08Z"
     },
     {
-      "step": "migration:0018_archive.sql",
+      "step": "migration:0019_workmap.sql",
       "message": "applied",
-      "at": "2026-11-20T11:08:20Z"
+      "at": "2026-11-22T09:12:12Z"
     },
     {
       "step": "migrations",
       "message": "1 applied",
-      "at": "2026-11-20T11:08:20Z"
+      "at": "2026-11-22T09:12:12Z"
     },
     {
       "step": "function:admin-users",
       "message": "deployed",
-      "at": "2026-11-20T11:08:34Z"
+      "at": "2026-11-22T09:12:43Z"
     },
     {
       "step": "function:weekly-summary",
       "message": "deployed",
-      "at": "2026-11-20T11:08:37Z"
+      "at": "2026-11-22T09:12:46Z"
     },
     {
       "step": "function:notify",
       "message": "deployed",
-      "at": "2026-11-20T11:08:38Z"
+      "at": "2026-11-22T09:12:49Z"
     },
     {
       "step": "secrets:anthropic",
       "message": "set",
-      "at": "2026-11-20T11:08:40Z"
+      "at": "2026-11-22T09:12:50Z"
     },
     {
       "step": "keys",
       "message": "public key ready",
-      "at": "2026-11-20T11:08:41Z"
+      "at": "2026-11-22T09:12:52Z"
     },
     {
       "step": "notifications",
       "message": "settings saved",
-      "at": "2026-11-20T11:08:42Z"
+      "at": "2026-11-22T09:12:54Z"
     },
     {
       "step": "schedule",
-      "message": "[\"daily-deadline 0 9 * * 1-5\",\"deadline-reminder-fri 0 6 * * 5\",\"deadline-reminder-sat 30 23 * * 5\",\"inquiry-stale 0 0 * * *\",\"timed-notify */5 * * * *\",\"weekly-backup 0 23 * * 0\"]",
-      "at": "2026-11-20T11:08:44Z"
+      "message": "[\"daily-deadline 0 9 * * 1-5\",\"deadline-reminder-fri 0 6 * * 5\",\"deadline-reminder-sat 30 23 * * 5\",\"inquiry-stale 0 0 * * *\",\"timed-notify */5 * * * *\",\"weekly-backup 0 23 * * 0\",\"workmap-weekly 0 22 * * 0\"]",
+      "at": "2026-11-22T09:12:56Z"
     },
     {
       "step": "website",
       "message": "connected to https://hwpkxybtglkbxpaihfzl.supabase.co",
-      "at": "2026-11-20T11:08:46Z"
+      "at": "2026-11-22T09:12:57Z"
     }
   ]
 }
